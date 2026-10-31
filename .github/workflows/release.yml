@@ -1,7 +1,10 @@
 name: Release
 
 # Push a tag `vX.Y.Z` (or `vX.Y.Z-rc.N`) to build the macOS app and publish it on a GitHub release
-# and on dl.pdfxray.app (Cloudflare R2).
+# and on dl.pdfxray.app (Cloudflare R2). Two jobs: `macos` builds, signs, notarizes and makes the
+# GitHub release; `publish` copies that release's files to R2 and writes the update feed. When
+# only publishing fails, "Re-run failed jobs" repeats just `publish`, with the same bytes; Actions ›
+# Release › Run workflow publishes an existing release by tag.
 # The tag's version must match `[workspace.package].version` in Cargo.toml (xtask checks).
 # See docs/releasing.md for the secrets and variables this uses; without them the workflow still
 # runs, with an ad-hoc signed build (which has no updater) and no Cloudflare upload.
@@ -9,6 +12,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release to publish to dl.pdfxray.app (e.g. v0.1.0)"
+        required: true
 
 permissions:
   contents: write
@@ -25,7 +33,10 @@ env:
 jobs:
   macos:
     name: macOS bundle (Apple Silicon)
+    if: github.event_name == 'push'
     runs-on: macos-latest
+    outputs:
+      signed: ${{ steps.creds.outputs.sign }}
     steps:
       - uses: actions/checkout@v4
       # rustup reads rust-toolchain.toml (1.99.1 + clippy + rustfmt)
@@ -46,8 +57,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           missing() { for name in "$@"; do [ -n "${!name}" ] || printf ' %s' "$name"; done; }
           sign_missing="$(missing MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD MACOS_SIGN_IDENTITY)"
@@ -62,13 +71,6 @@ jobs:
             echo "sign=false" >> "$GITHUB_OUTPUT"
             [ "$notary" = none ] && sign_missing="$sign_missing notarization (APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER)"
             echo "::warning::Missing:$sign_missing. Building an ad-hoc signed (not notarized) bundle."
-          fi
-          # Only notarized builds go to the public download host.
-          if [ -z "$sign_missing" ] && [ "$notary" != none ] && [ -z "$(missing CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID)" ]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Not uploading to Cloudflare: needs a notarized build and CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID."
           fi
 
       - name: Import the signing certificate into a temporary keychain
@@ -194,16 +196,55 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           fail_on_unmatched_files: true
 
-      - name: Upload to dl.pdfxray.app (Cloudflare R2)
-        if: steps.creds.outputs.publish == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          R2_BUCKET: ${{ vars.R2_BUCKET || 'pdfxray-releases' }}
-          STABLE: ${{ !contains(github.ref_name, '-') }}
+      - name: Remove the temporary keychain and API key
+        if: always() && steps.creds.outputs.sign == 'true'
+        run: |
+          if [ -n "$KEYCHAIN_PATH" ]; then security delete-keychain "$KEYCHAIN_PATH" || true; fi
+          rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/AuthKey.p8"
+
+  publish:
+    name: publish to dl.pdfxray.app
+    needs: macos
+    # After a signed build, or by hand for an existing release.
+    if: >-
+      always() && ((needs.macos.result == 'success' && needs.macos.outputs.signed == 'true')
+      || github.event_name == 'workflow_dispatch')
+    runs-on: macos-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_BUCKET: ${{ vars.R2_BUCKET || 'pdfxray-releases' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Download the release's files
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Publishing needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID."
+            exit 1
+          fi
+          mkdir -p target/bundle && cd target/bundle
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" \
+            --pattern 'pdfxray-*-macos-aarch64.*' --pattern SHA256SUMS
+          shasum -a 256 -c SHA256SUMS
+
+      - name: Only a notarized build goes to the download host
         run: |
           cd target/bundle
-          version="${GITHUB_REF_NAME#v}"
+          dmg="$(ls pdfxray-*-macos-aarch64.dmg)"
+          spctl -a -vv -t open --context context:primary-signature "$dmg"
+          xcrun stapler validate "$dmg"
+
+      - name: Upload to dl.pdfxray.app (Cloudflare R2)
+        run: |
+          cd target/bundle
+          version="${TAG#v}"
           put() { # key, file, content type, cache control
             npx --yes wrangler@4.156.0 r2 object put "$R2_BUCKET/$1" --remote \
               --file "$2" --content-type "$3" --cache-control "$4"
@@ -213,24 +254,22 @@ jobs:
           for f in pdfxray-*-macos-aarch64.zip; do put "releases/$version/$f" "$f" application/zip "$immutable"; done
           put "releases/$version/SHA256SUMS" SHA256SUMS "text/plain; charset=utf-8" "$immutable"
           # Release candidates stay under releases/<version>/; only a stable release moves latest/.
-          if [ "$STABLE" = "true" ]; then
+          case "$TAG" in
+            *-*) ;;
             # An architecture-neutral name, so the site link survives build changes.
-            put latest/pdfxray-macos.dmg pdfxray-*-macos-aarch64.dmg application/x-apple-diskimage "public, max-age=300"
-          fi
+            *) put latest/pdfxray-macos.dmg pdfxray-*-macos-aarch64.dmg application/x-apple-diskimage "public, max-age=300" ;;
+          esac
 
       - name: Publish the update feed (stable releases only)
-        if: steps.creds.outputs.publish == 'true' && !contains(github.ref_name, '-')
+        if: ${{ !contains(inputs.tag || github.ref_name, '-') }}
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          R2_BUCKET: ${{ vars.R2_BUCKET || 'pdfxray-releases' }}
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           if [ -z "$SPARKLE_ED_PRIVATE_KEY" ]; then
             echo "::warning::SPARKLE_ED_PRIVATE_KEY is not set: installed copies will not be offered this release."
             exit 0
           fi
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           dmg="pdfxray-$version-macos-aarch64.dmg"
           # The DMG was uploaded by the previous step, so the feed never points at a missing file.
           cargo xtask sparkle appcast --version "$version" \
@@ -240,9 +279,3 @@ jobs:
           npx --yes wrangler@4.156.0 r2 object put "$R2_BUCKET/appcast.xml" --remote \
             --file target/bundle/appcast.xml --content-type "application/xml; charset=utf-8" \
             --cache-control "public, max-age=300"
-
-      - name: Remove the temporary keychain and API key
-        if: always() && steps.creds.outputs.sign == 'true'
-        run: |
-          if [ -n "$KEYCHAIN_PATH" ]; then security delete-keychain "$KEYCHAIN_PATH" || true; fi
-          rm -f "$RUNNER_TEMP/certificate.p12" "$RUNNER_TEMP/AuthKey.p8"

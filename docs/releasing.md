@@ -31,7 +31,11 @@ by hand once, is `docs/spec/distribution-plan.md`.
    `releases/<version>/` gets the DMG, the zip and `SHA256SUMS`. A stable release (no suffix)
    also replaces `latest/pdfxray-macos.dmg`, the site's download link (a name without the
    architecture, so the link survives build changes); a release
-   candidate never touches `latest/`.
+   candidate never touches `latest/`. This is a second job, `publish`: it downloads the GitHub
+   release's files, refuses a DMG that is not notarized, uploads, and writes the update feed.
+   If only it fails (a Cloudflare token problem, say), use "Re-run failed jobs": it repeats just
+   `publish`, with the same bytes, without rebuilding. Actions › Release › Run workflow, with a
+   tag, publishes an existing release the same way.
 
 Nothing in the repository creates tags or releases except that workflow. The site (`site/`) is
 deployed separately by `.github/workflows/site.yml` whenever it changes on `main`.
