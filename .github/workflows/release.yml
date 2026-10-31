@@ -24,13 +24,14 @@ env:
 
 jobs:
   macos:
-    name: universal macOS bundle
+    name: macOS bundle (Apple Silicon)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       # rustup reads rust-toolchain.toml (1.99.1 + clippy + rustfmt)
       - run: rustup show active-toolchain || rustup toolchain install
-      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      # Apple Silicon only: Intel Macs are being phased out, so releases are not universal.
+      - run: rustup target add aarch64-apple-darwin
       - uses: Swatinem/rust-cache@v2
 
       - name: Which credentials are configured?
@@ -118,26 +119,24 @@ jobs:
           else
             unset APPLE_API_KEY_ID APPLE_API_ISSUER
           fi
-          cargo xtask bundle --target universal --version "${GITHUB_REF_NAME#v}" \
+          cargo xtask bundle --target aarch64-apple-darwin --version "${GITHUB_REF_NAME#v}" \
             --sign "$MACOS_SIGN_IDENTITY" --notarize --dmg
 
       - name: Bundle (ad-hoc signed)
         if: steps.creds.outputs.sign != 'true'
-        run: cargo xtask bundle --target universal --version "${GITHUB_REF_NAME#v}" --dmg
+        run: cargo xtask bundle --target aarch64-apple-darwin --version "${GITHUB_REF_NAME#v}" --dmg
 
       - name: Verify the bundle
         env:
           SIGNED: ${{ steps.creds.outputs.sign }}
         run: |
           cd target/bundle
-          zip="$(ls pdfxray-*-macos-universal.zip)"
+          zip="$(ls pdfxray-*-macos-aarch64.zip)"
           rm -rf verify && mkdir verify
           ditto -x -k "$zip" verify
           top="verify/${zip%.zip}"
-          lipo -archs "$top/pdfxray" | grep -q 'x86_64'
-          lipo -archs "$top/pdfxray" | grep -q 'arm64'
-          lipo -archs "$top/pdfxray.app/Contents/MacOS/pdfxray-app" | grep -q 'x86_64'
-          lipo -archs "$top/pdfxray.app/Contents/MacOS/pdfxray-app" | grep -q 'arm64'
+          test "$(lipo -archs "$top/pdfxray")" = arm64
+          test "$(lipo -archs "$top/pdfxray.app/Contents/MacOS/pdfxray-app")" = arm64
           codesign --verify --strict --verbose=2 "$top/pdfxray"
           codesign --verify --strict --verbose=2 "$top/pdfxray.app"
           codesign -dv --verbose=4 "$top/pdfxray.app" 2>&1 | grep -E 'Authority|TeamIdentifier|Signature|flags'
@@ -149,7 +148,7 @@ jobs:
           fi
           rm -rf verify
 
-          dmg="$(ls pdfxray-*-macos-universal.dmg)"
+          dmg="$(ls pdfxray-*-macos-aarch64.dmg)"
           hdiutil verify "$dmg"
           mnt="$(mktemp -d)"
           hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg"
@@ -171,12 +170,12 @@ jobs:
           SIGNED: ${{ steps.creds.outputs.sign }}
         run: |
           cd target/bundle
-          shasum -a 256 pdfxray-*-macos-universal.dmg pdfxray-*-macos-universal.zip | tee SHA256SUMS
+          shasum -a 256 pdfxray-*-macos-aarch64.dmg pdfxray-*-macos-aarch64.zip | tee SHA256SUMS
           {
             if [ "$SIGNED" = "true" ]; then
-              echo "macOS universal build (Apple Silicon and Intel, macOS 11+), signed with a Developer ID and notarized by Apple."
+              echo "macOS build for Apple Silicon (macOS 11+), signed with a Developer ID and notarized by Apple."
             else
-              echo "macOS universal build (Apple Silicon and Intel, macOS 11+), **ad-hoc signed, not notarized**."
+              echo "macOS build for Apple Silicon (macOS 11+), **ad-hoc signed, not notarized**."
               echo "Gatekeeper blocks it after download: see \"Gatekeeper and ad-hoc builds\" in docs/releasing.md."
             fi
             echo
@@ -187,8 +186,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/bundle/pdfxray-*-macos-universal.dmg
-            target/bundle/pdfxray-*-macos-universal.zip
+            target/bundle/pdfxray-*-macos-aarch64.dmg
+            target/bundle/pdfxray-*-macos-aarch64.zip
             target/bundle/SHA256SUMS
           body_path: target/bundle/RELEASE_NOTES.md
           generate_release_notes: true
@@ -210,12 +209,13 @@ jobs:
               --file "$2" --content-type "$3" --cache-control "$4"
           }
           immutable="public, max-age=31536000, immutable"
-          for f in pdfxray-*-macos-universal.dmg; do put "releases/$version/$f" "$f" application/x-apple-diskimage "$immutable"; done
-          for f in pdfxray-*-macos-universal.zip; do put "releases/$version/$f" "$f" application/zip "$immutable"; done
+          for f in pdfxray-*-macos-aarch64.dmg; do put "releases/$version/$f" "$f" application/x-apple-diskimage "$immutable"; done
+          for f in pdfxray-*-macos-aarch64.zip; do put "releases/$version/$f" "$f" application/zip "$immutable"; done
           put "releases/$version/SHA256SUMS" SHA256SUMS "text/plain; charset=utf-8" "$immutable"
           # Release candidates stay under releases/<version>/; only a stable release moves latest/.
           if [ "$STABLE" = "true" ]; then
-            put latest/pdfxray-macos-universal.dmg pdfxray-*-macos-universal.dmg application/x-apple-diskimage "public, max-age=300"
+            # An architecture-neutral name, so the site link survives build changes.
+            put latest/pdfxray-macos.dmg pdfxray-*-macos-aarch64.dmg application/x-apple-diskimage "public, max-age=300"
           fi
 
       - name: Publish the update feed (stable releases only)
@@ -231,7 +231,7 @@ jobs:
             exit 0
           fi
           version="${GITHUB_REF_NAME#v}"
-          dmg="pdfxray-$version-macos-universal.dmg"
+          dmg="pdfxray-$version-macos-aarch64.dmg"
           # The DMG was uploaded by the previous step, so the feed never points at a missing file.
           cargo xtask sparkle appcast --version "$version" \
             --archive "target/bundle/$dmg" \

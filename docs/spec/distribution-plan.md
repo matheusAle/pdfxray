@@ -1,6 +1,6 @@
 # Distribution plan: notarized macOS releases on pdfxray.app
 
-Goal: a tag `vX.Y.Z` on GitHub builds a universal, Developer ID signed and notarized app on a
+Goal: a tag `vX.Y.Z` on GitHub builds an Apple Silicon, Developer ID signed and notarized app on a
 GitHub-hosted macOS runner, publishes it to Cloudflare (R2 for the files, a static-assets Worker for the site), and
 installed copies update themselves.
 
@@ -20,10 +20,10 @@ R2 layout:
 
 ```
 dl.pdfxray.app/
-  releases/<version>/pdfxray-<version>-macos-universal.dmg
-  releases/<version>/pdfxray-<version>-macos-universal.zip
+  releases/<version>/pdfxray-<version>-macos-aarch64.dmg
+  releases/<version>/pdfxray-<version>-macos-aarch64.zip
   releases/<version>/SHA256SUMS
-  latest/pdfxray-macos-universal.dmg     copy of the newest stable DMG (short cache)
+  latest/pdfxray-macos.dmg               copy of the newest stable DMG (short cache)
   appcast.xml                            Sparkle feed (short cache)
 ```
 

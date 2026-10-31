@@ -12,7 +12,8 @@ The app also carries the CLI as `pdfxray.app/Contents/MacOS/pdfxray`, so it is u
 app; link it into the `PATH` with
 `ln -s /Applications/pdfxray.app/Contents/MacOS/pdfxray /usr/local/bin/pdfxray`.
 
-Releases are universal (Apple Silicon and Intel), require macOS 11 or later, and are built by
+Releases are for Apple Silicon only (Intel Macs are being phased out, so a universal build is
+not worth twice the build time and size), require macOS 11 or later, and are built by
 `.github/workflows/release.yml` on a tag. The plan behind this setup, with what has to be done
 by hand once, is `docs/spec/distribution-plan.md`.
 
@@ -28,7 +29,8 @@ by hand once, is `docs/spec/distribution-plan.md`.
    `SHA256SUMS` to the release.
 5. A notarized build is uploaded to the R2 bucket behind `dl.pdfxray.app`:
    `releases/<version>/` gets the DMG, the zip and `SHA256SUMS`. A stable release (no suffix)
-   also replaces `latest/pdfxray-macos-universal.dmg`, the site's download link; a release
+   also replaces `latest/pdfxray-macos.dmg`, the site's download link (a name without the
+   architecture, so the link survives build changes); a release
    candidate never touches `latest/`.
 
 Nothing in the repository creates tags or releases except that workflow. The site (`site/`) is
@@ -92,7 +94,7 @@ the custom domain in the dashboard.
 
 ```sh
 cargo xtask bundle                                  # host architecture, ad-hoc signed
-cargo xtask bundle --target universal               # needs: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+cargo xtask bundle --target universal               # not used for releases; needs: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 cargo xtask bundle --target x86_64-apple-darwin --version 0.2.0-rc.1
 
 # Developer ID signed
@@ -103,10 +105,10 @@ cargo xtask bundle --dmg
 
 # signed and notarized, credentials from the environment: an API key ...
 APPLE_API_KEY=~/keys/AuthKey_ABC123.p8 APPLE_API_KEY_ID=ABC123 APPLE_API_ISSUER=69a6de7e-... \
-  cargo xtask bundle --target universal --sign "Developer ID Application: ..." --notarize --dmg
+  cargo xtask bundle --target aarch64-apple-darwin --sign "Developer ID Application: ..." --notarize --dmg
 # ... or an Apple ID
 APPLE_ID=you@example.com APPLE_TEAM_ID=ABCDE12345 APPLE_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx \
-  cargo xtask bundle --target universal --sign "Developer ID Application: ..." --notarize
+  cargo xtask bundle --target aarch64-apple-darwin --sign "Developer ID Application: ..." --notarize
 # ... or from a notarytool keychain profile (`xcrun notarytool store-credentials pdfxray-notary`)
 cargo xtask bundle --sign "Developer ID Application: ..." --notarize --keychain-profile pdfxray-notary
 ```
@@ -227,8 +229,8 @@ the download host. By hand:
 
 ```sh
 SPARKLE_ED_PRIVATE_KEY=… cargo xtask sparkle appcast --version 0.2.0 \
-  --archive target/bundle/pdfxray-0.2.0-macos-universal.dmg \
-  --url https://dl.pdfxray.app/releases/0.2.0/pdfxray-0.2.0-macos-universal.dmg \
+  --archive target/bundle/pdfxray-0.2.0-macos-aarch64.dmg \
+  --url https://dl.pdfxray.app/releases/0.2.0/pdfxray-0.2.0-macos-aarch64.dmg \
   --out target/bundle/appcast.xml
 ```
 
@@ -252,13 +254,13 @@ repaints.
 ```sh
 codesign --verify --strict --verbose=2 pdfxray.app
 codesign -dv --verbose=4 pdfxray.app          # Authority=Developer ID ..., TeamIdentifier, flags=...(runtime)
-lipo -archs pdfxray.app/Contents/MacOS/pdfxray-app     # x86_64 arm64 for universal builds
+lipo -archs pdfxray.app/Contents/MacOS/pdfxray-app     # arm64 for releases
 spctl -a -vv --type exec pdfxray.app          # "accepted  source=Notarized Developer ID" when notarized
 xcrun stapler validate pdfxray.app            # the ticket is attached (works offline)
 shasum -a 256 -c SHA256SUMS                   # the downloaded zip and DMG
-codesign --verify --strict --verbose=2 pdfxray-<version>-macos-universal.dmg
-spctl -a -vv -t open --context context:primary-signature pdfxray-<version>-macos-universal.dmg
-xcrun stapler validate pdfxray-<version>-macos-universal.dmg
+codesign --verify --strict --verbose=2 pdfxray-<version>-macos-aarch64.dmg
+spctl -a -vv -t open --context context:primary-signature pdfxray-<version>-macos-aarch64.dmg
+xcrun stapler validate pdfxray-<version>-macos-aarch64.dmg
 ```
 
 For an ad-hoc build `codesign -dv` shows `Signature=adhoc` and `spctl` says `rejected`; that is
