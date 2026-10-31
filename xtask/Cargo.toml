@@ -1,0 +1,37 @@
+[package]
+name = "xtask"
+description = "pdfxray dev tasks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+# Reads the pixel sizes of the iconset in `icon`; xtask only.
+image.workspace = true
+ureq.workspace = true
+# MIT. Reads the PDF/UA reference suite archive in `corpus fetch`; xtask only.
+zip = { workspace = true, features = ["deflate-flate2-zlib-rs"] }
+
+# MIT / MIT-or-Apache-2.0. Read the PDFium `.tgz` in `pdfium fetch`; xtask only.
+flate2.workspace = true
+tar.workspace = true
+
+# Ed25519 signing of Sparkle updates (`sparkle keygen | appcast`); xtask only.
+ring.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true
