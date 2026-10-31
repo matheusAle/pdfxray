@@ -1,7 +1,7 @@
 name: Release
 
 # Push a tag `vX.Y.Z` (or `vX.Y.Z-rc.N`) to build the macOS app and publish it on a GitHub release
-# and on dl.pdf-xray.app (Cloudflare R2).
+# and on dl.pdfxray.app (Cloudflare R2).
 # The tag's version must match `[workspace.package].version` in Cargo.toml (xtask checks).
 # See docs/releasing.md for the secrets and variables this uses; without them the workflow still
 # runs, with an ad-hoc signed build and no Cloudflare upload.
@@ -195,7 +195,7 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           fail_on_unmatched_files: true
 
-      - name: Upload to dl.pdf-xray.app (Cloudflare R2)
+      - name: Upload to dl.pdfxray.app (Cloudflare R2)
         if: steps.creds.outputs.publish == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

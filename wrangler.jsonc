@@ -1,0 +1,15 @@
+// The site (pdfxray.app): a Cloudflare Worker that serves `site/` as static assets.
+// Deployed by .github/workflows/site.yml with `wrangler deploy`; see docs/releasing.md.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pdfxray",
+  "compatibility_date": "2026-10-23",
+  "assets": {
+    "directory": "./site"
+  },
+  // Cloudflare creates the DNS records and the certificate for these.
+  "routes": [
+    { "pattern": "pdfxray.app", "custom_domain": true },
+    { "pattern": "www.pdfxray.app", "custom_domain": true }
+  ]
+}

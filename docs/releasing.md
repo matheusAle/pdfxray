@@ -1,6 +1,6 @@
 # Releasing pdfxray
 
-pdfxray ships two macOS assets, on a GitHub release and on `https://dl.pdf-xray.app`:
+pdfxray ships two macOS assets, on a GitHub release and on `https://dl.pdfxray.app`:
 
 * `pdfxray-<version>-macos-<arch>.dmg`, the installer: `pdfxray.app` next to a link to
   `/Applications`. This is what the site's download button points to.
@@ -26,14 +26,13 @@ by hand once, is `docs/spec/distribution-plan.md`.
 4. The workflow builds both architectures, merges them with `lipo`, signs (and notarizes if
    configured), builds the DMG, verifies everything, and attaches the DMG, the zip and
    `SHA256SUMS` to the release.
-5. A notarized build is uploaded to the R2 bucket behind `dl.pdf-xray.app`:
+5. A notarized build is uploaded to the R2 bucket behind `dl.pdfxray.app`:
    `releases/<version>/` gets the DMG, the zip and `SHA256SUMS`. A stable release (no suffix)
    also replaces `latest/pdfxray-macos-universal.dmg`, the site's download link; a release
    candidate never touches `latest/`.
 
 Nothing in the repository creates tags or releases except that workflow. The site (`site/`) is
-deployed separately by `.github/workflows/site.yml` to Cloudflare Pages whenever it changes on
-`main`.
+deployed separately by `.github/workflows/site.yml` whenever it changes on `main`.
 
 ## Secrets and variables
 
@@ -49,7 +48,7 @@ build, a warning, and no Cloudflare upload (only notarized builds are published 
 | `APPLE_API_KEY` | Base64 of the App Store Connect API key `AuthKey_<KEYID>.p8` (`base64 -i AuthKey_X.p8 \| pbcopy`); access *Developer* is enough |
 | `APPLE_API_KEY_ID` | The key's ID |
 | `APPLE_API_ISSUER` | The issuer ID (a UUID, on the same App Store Connect page) |
-| `CLOUDFLARE_API_TOKEN` | Token with Account › Workers R2 Storage › Edit and Account › Cloudflare Pages › Edit |
+| `CLOUDFLARE_API_TOKEN` | Token with Account › Workers R2 Storage › Edit, Account › Workers Scripts › Edit and, for the site's custom domain, Zone › Workers Routes › Edit on the site's zone |
 | `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account ID |
 
 Instead of the API key, notarization also works with an Apple ID: `APPLE_ID`, `APPLE_TEAM_ID`
@@ -57,8 +56,7 @@ Instead of the API key, notarization also works with an Apple ID: `APPLE_ID`, `A
 API key wins when both are set; it does not depend on a person's password or two-factor login,
 which is why CI should use it.
 
-Variables (not secret), with their defaults: `R2_BUCKET` (`pdfxray-releases`) and
-`PAGES_PROJECT` (`pdfxray`).
+Variable (not secret), with its default: `R2_BUCKET` (`pdfxray-releases`).
 
 The certificate goes into a temporary keychain and the API key into a temporary file, both
 deleted at the end of the job. `notarytool` gets the key as a file path and an app-specific
@@ -67,20 +65,16 @@ not repeat command lines.
 
 ## Cloudflare, set up once
 
-* R2 bucket `pdfxray-releases`, with the custom domain `dl.pdf-xray.app` (R2 › the bucket ›
+* R2 bucket `pdfxray-releases`, with the custom domain `dl.pdfxray.app` (R2 › the bucket ›
   Settings › Custom Domains). Objects under `releases/` are served with a one-year immutable
   cache; `latest/` with five minutes.
-* Pages project `pdfxray` (direct upload), with the custom domain `pdf-xray.app` (Pages › the
-  project › Custom domains).
+* The site is the Worker `pdfxray`, which serves `site/` as static assets (what Cloudflare
+  Pages has become). Its configuration, custom domain included, is `wrangler.jsonc` at the
+  root; `npx wrangler deploy` from the root deploys it by hand.
 
-With wrangler logged in (`npx wrangler login`), the first two parts are:
-
-```sh
-npx wrangler r2 bucket create pdfxray-releases
-npx wrangler pages project create pdfxray --production-branch main
-```
-
-The custom domains are attached in the dashboard.
+R2 must be enabled once in the dashboard (it asks to accept its terms). Then, with wrangler
+logged in (`npx wrangler login`): `npx wrangler r2 bucket create pdfxray-releases`, and attach
+the custom domain in the dashboard.
 
 ## Building locally
 
