@@ -1,0 +1,31 @@
+[package]
+name = "pdfxray-render"
+description = "pdfxray page rendering, overlays and debug render modes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+pdfxray-core.workspace = true
+pdfxray-raw.workspace = true
+hayro.workspace = true
+kurbo.workspace = true
+image.workspace = true
+thiserror.workspace = true
+# Optional reference renderer (BSD-3/Apache-2.0). Loaded dynamically at run time, never linked.
+pdfium-render = { workspace = true, optional = true, default-features = false, features = ["pdfium_latest", "thread_safe"] }
+
+[features]
+default = []
+# PDFium reference renderer (`pdfxray_render::pdfium`). Needs `cargo xtask pdfium fetch`.
+pdfium = ["dep:pdfium-render"]
+
+[dev-dependencies]
+pdfxray-fixtures.workspace = true
+pretty_assertions.workspace = true
+
+[lints]
+workspace = true
