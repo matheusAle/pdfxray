@@ -1,0 +1,43 @@
+[package]
+name = "pdfxray-app"
+description = "pdfxray desktop app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "pdfxray-app"
+path = "src/main.rs"
+
+[dependencies]
+egui.workspace = true
+eframe.workspace = true
+egui-lucide.workspace = true
+egui_extras = { workspace = true, features = ["svg"] }
+# Decodes the logo mark (PNG) for the empty state and the About panel.
+image.workspace = true
+pdfxray-core.workspace = true
+pdfxray-macos.workspace = true
+pdfxray-render.workspace = true
+pdfxray-verapdf.workspace = true
+rfd.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# The event loop is built here so the macOS open handler is in place before it runs.
+winit.workspace = true
+
+# Apache-2.0 OR MIT. The native menu bar; macOS only, so Linux builds do not pull in GTK.
+[target.'cfg(target_os = "macos")'.dependencies]
+muda.workspace = true
+
+[dev-dependencies]
+egui_kittest = { workspace = true, features = ["wgpu", "snapshot", "eframe"] }
+pretty_assertions.workspace = true
+pdfxray-fixtures.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=pdfxray
+GenericName=PDF Debugger
+Comment=See what is actually in a PDF: tags, layout boxes, drawing instructions and raw objects
+Exec=pdfxray-app %F
+Icon=pdfxray
+Terminal=false
+MimeType=application/pdf;
+Categories=Development;Graphics;Viewer;
+Keywords=PDF;accessibility;tags;debugger;
+StartupWMClass=pdfxray

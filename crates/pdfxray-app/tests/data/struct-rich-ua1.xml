@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Hand-edited copy of orphan-mcid-ua1.xml for the app's multi-page validation tests. It is NOT
+  output of a real veraPDF run: it points veraPDF's PDF/UA-1 failures at objects of the
+  struct-rich fixture (two pages) so that one rule has more nodes than the navigator lists, on
+  more than one page:
+    - 7.3-1 (Figure without alternative text) on 12, 13, 14 (page 1) and 23, 24 (page 2). The
+      fixture's real Figure (14 0 R) has /Alt and 12 0 R, an H1, has none: the report lies about
+      the role so that the example-fix path has an element without /Alt to show.
+    - 7.1-3 (content neither tagged nor artifact) on the marked content MCID 2 of page 2.
+    - 7.1-10 (DisplayDocTitle) on the document.
+-->
+<report>
+  <buildInformation>
+    <releaseDetails id="core" version="1.30.3" buildDate="2026-10-07T10:02:00-03:00"></releaseDetails>
+  </buildInformation>
+  <jobs>
+    <job>
+      <item size="3528">
+        <name>/data/struct-rich.pdf</name>
+      </item>
+      <validationReport jobEndStatus="normal" profileName="PDF/UA-1 validation profile" statement="PDF file is not compliant with Validation Profile requirements." isCompliant="false">
+        <details passedRules="100" failedRules="3" passedChecks="300" failedChecks="7">
+          <rule specification="ISO 14289-1:2014" clause="7.3" testNumber="1" status="failed" failedChecks="5" tags="structure,alt-text">
+            <description>Figure tags shall include an alternative representation or replacement text that represents the contents marked with the Figure tag as noted in ISO 32000-1:2008, 14.7.2, Table 323</description>
+            <object>SEFigure</object>
+            <test>(Alt != null &amp;&amp; Alt != '') || ActualText != null</test>
+            <check status="failed">
+              <context>root/document[0]/StructTreeRoot[0](8 0 obj PDStructTreeRoot)/K[0](10 0 obj SEDocument Document)/K[0](11 0 obj SESect Sect)/K[0](12 0 obj SEFigure Figure)</context>
+              <errorMessage>Figure tag is missing an alternative description or replacement text</errorMessage>
+            </check>
+            <check status="failed">
+              <context>root/document[0]/StructTreeRoot[0](8 0 obj PDStructTreeRoot)/K[0](10 0 obj SEDocument Document)/K[0](11 0 obj SESect Sect)/K[1](13 0 obj SEFigure Figure)</context>
+              <errorMessage>Figure tag is missing an alternative description or replacement text</errorMessage>
+            </check>
+            <check status="failed">
+              <context>root/document[0]/StructTreeRoot[0](8 0 obj PDStructTreeRoot)/K[0](10 0 obj SEDocument Document)/K[0](11 0 obj SESect Sect)/K[2](14 0 obj SEFigure Figure)</context>
+              <errorMessage>Figure tag is missing an alternative description or replacement text</errorMessage>
+            </check>
+            <check status="failed">
+              <context>root/document[0]/StructTreeRoot[0](8 0 obj PDStructTreeRoot)/K[0](10 0 obj SEDocument Document)/K[0](11 0 obj SESect Sect)/K[3](23 0 obj SEFigure Figure)</context>
+              <errorMessage>Figure tag is missing an alternative description or replacement text</errorMessage>
+            </check>
+            <check status="failed">
+              <context>root/document[0]/StructTreeRoot[0](8 0 obj PDStructTreeRoot)/K[0](10 0 obj SEDocument Document)/K[0](11 0 obj SESect Sect)/K[4](24 0 obj SEFigure Figure)</context>
+              <errorMessage>Figure tag is missing an alternative description or replacement text</errorMessage>
+            </check>
+          </rule>
+          <rule specification="ISO 14289-1:2014" clause="7.1" testNumber="3" status="failed" failedChecks="1" tags="artifact">
+            <description>Content shall be marked as Artifact or tagged as real content</description>
+            <object>SESimpleContentItem</object>
+            <test>isTaggedContent == true || parentsTags.contains('Artifact') == true</test>
+            <check status="failed">
+              <context>root/document[0]/pages[1](4 0 obj PDPage)/contentStream[0](7 0 obj PDSemanticContentStream)/content[2]{mcid:2}/contentItem[0]{mcid:2}</context>
+              <errorMessage>Content is neither marked as Artifact nor tagged as real content</errorMessage>
+            </check>
+          </rule>
+          <rule specification="ISO 14289-1:2014" clause="7.1" testNumber="10" status="failed" failedChecks="1" tags="syntax">
+            <description>The document catalog dictionary shall include a ViewerPreferences dictionary containing a DisplayDocTitle key, whose value shall be true</description>
+            <object>CosDocument</object>
+            <test>DisplayDocTitle == true</test>
+            <check status="failed">
+              <context>root</context>
+              <errorMessage>ViewerPreferences dictionary is not present in the document Catalog, or DisplayDocTitle key is set to false or is not present in the ViewerPreferences dictionary (ViewerPreferences = null, DisplayDocTitle = null)</errorMessage>
+            </check>
+          </rule>
+        </details>
+      </validationReport>
+      <duration start="1793271762529" finish="1793271762645">00:00:00.116</duration>
+    </job>
+  </jobs>
+  <batchSummary totalJobs="1" failedToParse="0" encrypted="0" outOfMemory="0" veraExceptions="0">
+    <validationReports compliant="0" nonCompliant="1" failedJobs="0">1</validationReports>
+  </batchSummary>
+</report>
