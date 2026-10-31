@@ -72,6 +72,18 @@ not repeat command lines.
   Pages has become). Its configuration, custom domain included, is `wrangler.jsonc` at the
   root; `npx wrangler deploy` from the root deploys it by hand.
 
+* Protection and analytics: `packaging/cloudflare/protect-downloads.sh` sets the zone's
+  firewall rules (`dl.pdfxray.app` answers only GET/HEAD, only for `/releases/`, `/latest/` and
+  `/appcast.xml`, never to an empty user agent), a rate limit (30 requests per 10 s per IP, then
+  a 10 s block; the Free plan's limits), edge caching that follows the objects' `Cache-Control`,
+  and the Web Analytics site of `pdfxray.app`. It replaces those rule sets on every run, so edit
+  the script rather than the dashboard. Because files under `releases/` are cached as immutable,
+  never upload different bytes under a published version (for example by re-running a release
+  for the same tag): the edge would keep serving the old file while the update feed describes
+  the new one. Tag the next `-rc.N` instead. Bot Fight Mode stays off: on the Free plan it covers the
+  whole zone with no exceptions, and its challenges would break Sparkle's update checks and
+  `curl` downloads.
+
 R2 must be enabled once in the dashboard (it asks to accept its terms). Then, with wrangler
 logged in (`npx wrangler login`): `npx wrangler r2 bucket create pdfxray-releases`, and attach
 the custom domain in the dashboard.
