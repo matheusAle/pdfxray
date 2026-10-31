@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>pdfxray: see what's really inside your PDF</title>
-  <meta name="description" content="pdfxray is an open-source PDF debugger for layout and logical structure. Navigate tags, artifacts, resources and raw objects, and click anything on the page to inspect it. It never repairs the file.">
+  <meta name="description" content="pdfxray is an open-source PDF debugger for macOS. Navigate tags, reading order, glyphs and raw objects, and click anything on the page to inspect it. A free, notarized download that keeps itself up to date. It never repairs the file.">
   <meta property="og:title" content="pdfxray: see what's really inside your PDF">
-  <meta property="og:description" content="An open-source PDF debugger for layout and logical structure. Tags, reading order, glyphs, raw objects and veraPDF findings, all linked. It never repairs the file.">
+  <meta property="og:description" content="An open-source PDF debugger for macOS: tags, reading order, glyphs, raw objects and veraPDF findings, all linked. Free download, signed and notarized. It never repairs the file.">
   <meta property="og:image" content="img/brand/icon-512.png?v=10">
   <meta name="theme-color" content="#0A0C0F">
   <link rel="icon" type="image/png" sizes="32x32" href="img/brand/favicon-32.png?v=10">
@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="img/brand/apple-touch-icon.png?v=10">
   <link rel="preload" href="fonts/Inter-Regular.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="preload" href="fonts/Inter-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <div class="progress" aria-hidden="true"></div>
@@ -26,9 +26,12 @@
       <a href="#features">Features</a>
       <a href="#details">Details</a>
       <a href="#cli">CLI</a>
-      <a href="#source">Open source</a>
+      <a href="#download">Install</a>
     </nav>
-    <a class="btn btn-ghost btn-sm" href="https://dl.pdfxray.app/latest/pdfxray-macos-universal.dmg">Download for macOS</a>
+    <div class="nav-actions">
+      <a class="gh" href="https://github.com/matheusAle/pdfxray" aria-label="pdfxray on GitHub" title="pdfxray on GitHub"><svg class="ico" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+      <a class="btn btn-primary btn-sm" href="https://dl.pdfxray.app/latest/pdfxray-macos-universal.dmg"><svg class="ico" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5v8.2m0 0L4.6 6.3M8 9.7l3.4-3.4M2.5 11.5v1.2c0 .7.6 1.3 1.3 1.3h8.4c.7 0 1.3-.6 1.3-1.3v-1.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Download</span></a>
+    </div>
   </header>
 
   <main id="top">
@@ -144,9 +147,10 @@
             <h1>Put your PDF on the couch.</h1>
             <p class="lede">pdfxray listens to every layer of the file (tags, glyphs, operators and objects) and tells you, in plain words, what’s really bothering it.</p>
             <div class="cta">
-              <a class="btn btn-primary" href="https://dl.pdfxray.app/latest/pdfxray-macos-universal.dmg">Start a session</a>
+              <a class="btn btn-primary" href="https://dl.pdfxray.app/latest/pdfxray-macos-universal.dmg"><svg class="ico" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5v8.2m0 0L4.6 6.3M8 9.7l3.4-3.4M2.5 11.5v1.2c0 .7.6 1.3 1.3 1.3h8.4c.7 0 1.3-.6 1.3-1.3v-1.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Download for macOS</a>
               <a class="btn btn-ghost" href="#features">Take the tour <span aria-hidden="true">↓</span></a>
             </div>
+            <p class="dl-meta">v0.1.0 · macOS 11+ · Apple Silicon &amp; Intel · notarized</p>
           </div>
           <div class="hcopy c-a m">
             <p class="kicker">X-ray</p>
@@ -501,7 +505,7 @@
       <div class="section-head reveal">
         <p class="eyebrow">For scripts, CI and agents</p>
         <h2>The same answers, as JSON.</h2>
-        <p class="sub">The CLI exposes the queries the app uses. Below: real values from a test fixture, trimmed to the key fields.</p>
+        <p class="sub">The command-line tool ships inside the app and exposes the same queries. Below: real values from a test fixture, trimmed to the key fields.</p>
       </div>
       <div class="term reveal" role="img" aria-label="Terminal running pdfxray reading-order on reading-order.pdf, showing one backtrack at step 4">
         <div class="term-bar"><i></i><i></i><i></i><span>zsh</span></div>
@@ -521,22 +525,32 @@
       <ul class="cmds reveal">
         <li>info</li><li>tree</li><li>node</li><li>breadcrumb</li><li>hit</li><li>reading-order</li><li>speech</li><li>table</li><li>tag-boxes</li><li>render</li><li>compare</li><li>validate</li>
       </ul>
+      <div class="path-note reveal">
+        <p>Put it on your PATH:</p>
+<pre class="snippet"><code><span class="p">$</span> ln -s /Applications/pdfxray.app/Contents/MacOS/pdfxray /usr/local/bin/pdfxray
+<span class="p">$</span> pdfxray info file.pdf --pretty</code></pre>
+        <p class="fine">Only need the CLI? A zip with the bare binary is on <a href="https://github.com/matheusAle/pdfxray/releases">GitHub releases</a>.</p>
+      </div>
     </section>
 
-    <!-- SOURCE -->
-    <section id="source" class="source">
+    <!-- DOWNLOAD -->
+    <section id="download" class="source">
       <div class="source-card reveal">
         <img class="app-icon" src="img/brand/mark-144@2x.png?v=10" alt="pdfxray app icon" width="144" height="144" loading="lazy">
-        <p class="eyebrow">MIT licensed · written in Rust</p>
+        <p class="eyebrow">Free · MIT licensed · written in Rust</p>
         <h2>Open the file. See everything.</h2>
-        <p>pdfxray v1 is for macOS 11 or later, on Apple Silicon and Intel. Download the notarized app, which keeps itself up to date, or build it from source with the pinned toolchain.</p>
-<pre class="snippet"><code><span class="p">$</span> cargo run -p pdfxray-app -- file.pdf
-<span class="p">$</span> cargo run -p pdfxray-cli -- info file.pdf --pretty</code></pre>
+        <p>One universal download for Apple Silicon and Intel Macs. Signed with a Developer ID and notarized by Apple, so it opens without warnings, and it keeps itself up to date.</p>
         <div class="cta">
-          <a class="btn btn-primary" href="https://dl.pdfxray.app/latest/pdfxray-macos-universal.dmg">Download for macOS</a>
-          <a class="btn btn-ghost" href="https://github.com/matheusAle/pdfxray#readme">Read the README</a>
-          <a class="btn btn-ghost" href="https://github.com/matheusAle/pdfxray/blob/main/docs/user-guide.md">User guide</a>
+          <a class="btn btn-primary btn-lg" href="https://dl.pdfxray.app/latest/pdfxray-macos-universal.dmg"><svg class="ico" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5v8.2m0 0L4.6 6.3M8 9.7l3.4-3.4M2.5 11.5v1.2c0 .7.6 1.3 1.3 1.3h8.4c.7 0 1.3-.6 1.3-1.3v-1.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Download for macOS</a>
+          <a class="btn btn-ghost btn-lg" href="https://github.com/matheusAle/pdfxray"><svg class="ico" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>View on GitHub</a>
         </div>
+        <p class="dl-meta">v0.1.0 · macOS 11+ · Apple Silicon &amp; Intel · notarized</p>
+        <ol class="install">
+          <li><b>1</b>Open the DMG</li>
+          <li><b>2</b>Drag pdfxray to Applications</li>
+          <li><b>3</b>Open a PDF</li>
+        </ol>
+        <p class="fine">Updates arrive by themselves: pdfxray checks daily, or use “Check for Updates…” in the app menu. Prefer to build it? <code>cargo run -p pdfxray-app -- file.pdf</code>, see the <a href="https://github.com/matheusAle/pdfxray#readme">README</a> and the <a href="https://github.com/matheusAle/pdfxray/blob/main/docs/user-guide.md">user guide</a>.</p>
         <p class="fine">Not in v1: decrypting encrypted files (their structure is still shown) and the annotation, form and outline panels, which are planned for v1.1.</p>
       </div>
     </section>
@@ -545,8 +559,9 @@
   <footer class="foot">
     <span class="brand small"><img class="brand-mark" src="img/brand/mark-small-56.png?v=10" alt="" width="22" height="22"><span class="brand-pdf">pdf</span><span class="brand-x">xray</span></span>
     <span>Built from ISO 32000-2 and PDF/UA. MIT licence.</span>
+    <span class="foot-links"><a href="https://dl.pdfxray.app/latest/pdfxray-macos-universal.dmg">Download for macOS</a><a href="https://github.com/matheusAle/pdfxray">GitHub</a></span>
   </footer>
 
-  <script src="main.js?v=11" defer></script>
+  <script src="main.js?v=12" defer></script>
 </body>
 </html>
