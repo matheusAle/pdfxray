@@ -1,0 +1,37 @@
+name: Site
+
+# Deploys `site/` to Cloudflare Pages (pdf-xray.app) when it changes on `main`.
+# Needs the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; the project name comes from the
+# variable PAGES_PROJECT (default `pdfxray`). See docs/releasing.md.
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/site.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ vars.PAGES_PROJECT || 'pdfxray' }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set; not deploying."
+            exit 0
+          fi
+          npx --yes wrangler@4.156.0 pages deploy site --project-name "$PAGES_PROJECT" \
+            --branch main --commit-hash "$GITHUB_SHA" --commit-message "$(git log -1 --format=%s)"

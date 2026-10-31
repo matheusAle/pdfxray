@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: fmt · clippy · test (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      # rustup reads rust-toolchain.toml (1.99.1 + clippy + rustfmt)
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            target/pdfium
+            target/verapdf-test-install
+          key: tools-${{ runner.os }}-${{ hashFiles('xtask/src/pdfium/manifest.rs', 'crates/pdfxray-verapdf/src/install.rs') }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy -p pdfxray-render --all-targets --features pdfium -- -D warnings
+      - name: Docs (rustdoc warnings are errors)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps
+      - name: Fetch PDFium reference renderer (pinned, sha256-checked)
+        run: cargo xtask pdfium fetch
+      - name: Tests (veraPDF and PDFium required, not skipped)
+        env:
+          PDFXRAY_VERAPDF: required
+          PDFXRAY_PDFIUM: required
+        run: |
+          cargo test --workspace --all-targets
+          cargo test -p pdfxray-render --features pdfium
+      - run: cargo test --workspace --doc
+      - name: Vendored corpus integrity
+        run: cargo xtask vendored verify
+      - name: Upload snapshot diffs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-diffs
+          path: |
+            **/tests/snapshots/**/*.diff.png
+            **/tests/snapshots/**/*.new.png
+            **/*.snap.new
+          if-no-files-found: ignore
+
+  hygiene:
+    name: licenses · advisories · unused deps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+      - uses: bnjbvr/cargo-machete@main
+
+  corpus:
+    name: fetched corpus (nightly)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: fixtures/cache
+          key: corpus-${{ hashFiles('fixtures/corpus.toml') }}
+      - run: cargo xtask corpus fetch
+      - run: cargo xtask corpus verify

@@ -1,0 +1,19 @@
+/target
+/fixtures/cache/
+**/*.pending-snap
+**/*.snap.new
+**/tests/snapshots/**/*.diff.png
+**/tests/snapshots/**/*.new.png
+**/tests/snapshots/**/*.old.png
+.DS_Store
+node_modules/
+
+# local tooling (REA/Ghidra/jadx, machine-specific MCP config)
+/.tools/
+/.mcp.json
+
+# machine-local Claude Code settings
+/.claude/settings.local.json
+
+# partial downloads
+*.pending

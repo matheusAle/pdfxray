@@ -1,0 +1,122 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+default-members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+repository = "https://github.com/OWNER/pdfxray"
+authors = ["pdfxray contributors"]
+
+[workspace.dependencies]
+# internal
+pdfxray-raw = { path = "crates/pdfxray-raw", version = "0.1.0" }
+pdfxray-core = { path = "crates/pdfxray-core", version = "0.1.0" }
+pdfxray-render = { path = "crates/pdfxray-render", version = "0.1.0" }
+pdfxray-verapdf = { path = "crates/pdfxray-verapdf", version = "0.1.0" }
+pdfxray-fixtures = { path = "crates/pdfxray-fixtures", version = "0.1.0" }
+pdfxray-macos = { path = "crates/pdfxray-macos", version = "0.1.0" }
+
+# pdf
+hayro = "0.8"
+hayro-syntax = "0.8"
+hayro-interpret = "0.8"
+pdfium-render = "0.9"
+
+# ui
+egui = "0.37"
+eframe = "0.37"
+egui-lucide = "0.2"
+egui_kittest = "0.37"
+winit = { version = "0.30", default-features = false }
+muda = { version = "0.17", default-features = false }
+
+# general
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+clap = { version = "4.6", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+rstar = "0.13"
+flate2 = "1"
+weezl = "0.2"
+memchr = "2"
+kurbo = "0.13"
+rfd = "0.17"
+sha2 = "0.11"
+ureq = "3"
+rayon = "1.12"
+# MIT. Only pdfxray-verapdf parses XML.
+quick-xml = "0.42.0"
+egui_extras = "0.37"
+# MIT OR Apache-2.0 / Zlib. The Objective-C runtime bindings; macOS only (pdfxray-macos).
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false }
+objc2-app-kit = { version = "0.3", default-features = false }
+# Apache-2.0 AND ISC / MIT OR Apache-2.0. Ed25519 keys and signatures for Sparkle updates, xtask
+# only; both are already in the graph through ureq's rustls.
+ring = "0.17"
+base64 = "0.22"
+# MIT / MIT-or-Apache-2.0. Archive readers for xtask only.
+zip = { version = "9.1.3", default-features = false }
+tar = { version = "0.4.45", default-features = false }
+
+# test
+insta = { version = "1.49", features = ["json", "yaml"] }
+proptest = "1"
+assert_cmd = "2"
+predicates = "3"
+pretty_assertions = "1"
+criterion = { version = "0.8.2", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[workspace.lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# pedantic noise we opt out of
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+too_many_lines = "allow"
+struct_excessive_bools = "allow"
+# restriction picks
+unwrap_used = "deny"
+expect_used = "warn"
+panic = "deny"
+dbg_macro = "warn"
+todo = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+
+# Shipped binaries (`cargo xtask bundle` builds with `--release`): one fat-LTO codegen unit,
+# symbols stripped. The single source of truth for release build settings.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.package.insta]
+opt-level = 3
+[profile.dev.package.similar]
+opt-level = 3

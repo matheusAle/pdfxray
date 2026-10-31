@@ -1,0 +1,10 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+
+# The rendering engine is reached only by `pdfxray-render` (one `#[expect]`ed call site). The UI,
+# the CLI and the rest of the workspace go through the query API of `pdfxray_core::Document`.
+disallowed-methods = [
+  { path = "pdfxray_core::Document::engine_page", reason = "the engine is for pdfxray-render only; use the Document query API" },
+]
