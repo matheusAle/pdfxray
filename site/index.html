@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pdfxray: see what's really inside your PDF</title>
+  <meta name="description" content="pdfxray is an open-source PDF debugger for layout and logical structure. Navigate tags, artifacts, resources and raw objects, and click anything on the page to inspect it. It never repairs the file.">
+  <meta property="og:title" content="pdfxray: see what's really inside your PDF">
+  <meta property="og:description" content="An open-source PDF debugger for layout and logical structure. Tags, reading order, glyphs, raw objects and veraPDF findings, all linked. It never repairs the file.">
+  <meta property="og:image" content="img/brand/icon-512.png?v=10">
+  <meta name="theme-color" content="#0A0C0F">
+  <link rel="icon" type="image/png" sizes="32x32" href="img/brand/favicon-32.png?v=10">
+  <link rel="icon" type="image/png" sizes="16x16" href="img/brand/favicon-16.png?v=10">
+  <link rel="apple-touch-icon" href="img/brand/apple-touch-icon.png?v=10">
+  <link rel="preload" href="fonts/Inter-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="fonts/Inter-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="styles.css?v=11">
+</head>
+<body>
+  <div class="progress" aria-hidden="true"></div>
+  <div class="progress-head" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="pdfxray home"><img class="brand-mark" src="img/brand/mark-small-56.png?v=10" alt="" width="28" height="28"><span class="brand-pdf">pdf</span><span class="brand-x">xray</span></a>
+    <nav aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#details">Details</a>
+      <a href="#cli">CLI</a>
+      <a href="#source">Open source</a>
+    </nav>
+    <a class="btn btn-ghost btn-sm" href="https://dl.pdf-xray.app/latest/pdfxray-macos-universal.dmg">Download for macOS</a>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <!-- HERO SEQUENCE (design 6.3): one page travels couch → X-ray → layers → glyph as you scroll.
+         Everything sits on a 1440×900 artboard scaled to the viewport; positions match the pen frames. -->
+    <section class="seq" aria-label="Introduction">
+      <div class="seq-pin">
+        <div class="scene-box">
+        <div class="art scene m" aria-hidden="true">
+          <svg class="couch m" viewBox="0 0 1440 900" width="1440" height="900">
+            <defs><pattern id="g28" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0H0V28" fill="none" stroke="#3DD6F50A"/></pattern></defs>
+            <rect x="700" y="110" width="700" height="760" fill="url(#g28)"/>
+            <line x1="720" y1="792" x2="1380" y2="792" class="floor"/>
+            <path d="M782 700 L766 606 Q760 562 800 552 L850 540 Q878 534 884 562 L902 672" class="cl"/>
+            <rect x="790" y="670" width="520" height="64" rx="14" class="cl fillc"/>
+            <rect x="810" y="734" width="480" height="22" rx="6" class="cl"/>
+            <rect x="824" y="756" width="10" height="36" rx="3" class="cl"/><rect x="1266" y="756" width="10" height="36" rx="3" class="cl"/>
+            <!-- Blueprint annotations (design 6.4): dimensions, angle, callouts, crop marks, title block -->
+            <path d="M790 816H1310M790 809v14M1310 809v14M1332 670V792M1325 670h14M1325 792h14" class="dim"/>
+            <text x="1050" y="836" class="dimt">612 × 792 pt patient</text>
+            <text x="1340" y="735" class="dimt start">h 122</text>
+            <path d="M884 562A60 60 0 0 1 930 596" class="ang"/><text x="936" y="590" class="dimt start amber">14°</text>
+            <path d="M760 510L790 570M1320 622L1280 672" class="dim"/>
+            <circle cx="760" cy="510" r="9" class="bub"/><text x="760" y="514" class="dimt bubt">A</text><text x="774" y="514" class="dimt start">headrest</text>
+            <circle cx="1320" cy="622" r="9" class="bub"/><text x="1320" y="626" class="dimt bubt">B</text><text x="1306" y="626" class="dimt end">seat · 520</text>
+            <path d="M736 384h16M744 376v16M1328 384h16M1336 376v16M736 816h16M744 808v16M1328 816h16M1336 808v16" class="dim"/>
+            <rect x="1170" y="846" width="180" height="44" class="dim"/>
+            <text x="1180" y="864" class="dimt start sm">pdfxray · couch, patient</text><text x="1180" y="880" class="dimt start sm">SHEET 1/1 · SCALE 1:1</text>
+          </svg>
+          <div class="notes m">
+            <p class="notes-head"><b>Session notes</b><span>annual-report-2025.pdf</span></p>
+            <p class="note">“Says it’s 1,200 bytes long. It’s 1,204.”<em class="w">stream-length-mismatch</em></p>
+            <p class="note">“Reads its caption before its figure.”<em class="w">reading-order-backtrack</em></p>
+            <p class="note">“Won’t describe its figure to anyone.”<em class="e">UA 7.3-1 · /Alt missing</em></p>
+            <p class="note">“Carries a “DRAFT” it never tagged.”<em class="e">untagged content</em></p>
+            <p class="notes-dx">Diagnosis: treatable. pdfxray never changes your file.</p>
+          </div>
+          <p class="layer-label m l1" style="left:78px">01 · Rendered page</p>
+          <i class="thread m"></i>
+          <div class="layer m c2" style="left:406px">
+            <p class="layer-label">02 · Structure tree</p>
+            <div class="layer-card"><p class="lr">Document › Sect</p><p class="lr hit">  H1  Annual Report 2025</p><p class="lr">  P   Our revenue grew 14% …</p><p class="lr">  Figure  ⚠ Alt</p><p class="lr">  Caption  ⚠ order</p><p class="lr">  Table  Quarterly results</p></div>
+          </div>
+          <div class="layer m c3" style="left:734px">
+            <p class="layer-label">03 · Content stream</p>
+            <div class="layer-card"><p class="lr">/H1 &lt;&lt;/MCID 0&gt;&gt; BDC</p><p class="lr hit">[&lt;41&gt;-12&lt;6E6E…&gt;] TJ</p><p class="lr">ET  EMC</p><p class="lr">/P &lt;&lt;/MCID 4&gt;&gt; BDC</p><p class="lr">BT  /F2 11 Tf</p><p class="lr">(Our revenue grew 14%…) Tj</p></div>
+          </div>
+          <div class="layer m c4" style="left:1062px">
+            <p class="layer-label">04 · Objects</p>
+            <div class="layer-card"><p class="lr">15 0 obj  &lt;&lt; /Type /StructElem</p><p class="lr hit">   /S /H1</p><p class="lr">   /P 14 0 R</p><p class="lr">   /K 0  /Pg 3 0 R</p><p class="lr">&gt;&gt;</p><p class="lr">endobj</p></div>
+          </div>
+          <i class="tdot m d1" style="left:367px"></i><i class="tdot m d2" style="left:695px"></i><i class="tdot m d3" style="left:1023px"></i><i class="tdot m d4" style="left:1351px"></i>
+          <i class="spec-grid m"></i>
+          <div class="page m">
+            <div class="pg">
+              <i class="pg-logo"></i>
+              <p class="pg-title">Annual Report 2025</p>
+              <i class="pg-line" style="top:160px"></i><i class="pg-line" style="top:176px"></i><i class="pg-line" style="top:192px"></i><i class="pg-line" style="top:208px;width:260px"></i>
+              <i class="pg-fig"></i>
+              <p class="pg-draft">DRAFT</p>
+              <p class="pg-cap">Figure 1 · Revenue by quarter, 2025</p>
+              <i class="pg-line" style="top:446px"></i><i class="pg-line" style="top:462px"></i><i class="pg-line" style="top:478px"></i><i class="pg-line" style="top:494px;width:220px"></i>
+              <i class="pg-line" style="top:580px;width:140px;height:6px"></i><i class="pg-line" style="top:580px;left:420px;width:20px;height:6px"></i>
+            </div>
+            <i class="pg-hit m"></i>
+            <div class="xray m"><div class="xray-in m">
+              <div class="pg pg-x">
+                <i class="pg-logo"></i>
+                <p class="pg-title">Annual Report 2025</p>
+                <i class="pg-line" style="top:160px"></i><i class="pg-line" style="top:176px"></i><i class="pg-line" style="top:192px"></i><i class="pg-line" style="top:208px;width:260px"></i>
+                <i class="pg-fig"></i>
+                <p class="pg-cap">Figure 1 · Revenue by quarter, 2025</p>
+                <i class="pg-line" style="top:446px"></i><i class="pg-line" style="top:462px"></i><i class="pg-line" style="top:478px"></i><i class="pg-line" style="top:494px;width:220px"></i>
+                <i class="xb" style="left:34px;top:86px;width:346px;height:50px;--c:#B48CFF"></i>
+                <i class="xb" style="left:34px;top:154px;width:412px;height:68px;--c:#5AA9FF"></i>
+                <i class="xb" style="left:34px;top:240px;width:412px;height:174px;--c:#FF8A4C"></i>
+                <i class="xb" style="left:34px;top:414px;width:200px;height:20px;--c:#F472B6"></i>
+                <i class="xb" style="left:34px;top:440px;width:412px;height:66px;--c:#5AA9FF"></i>
+                <i class="xb" style="left:34px;top:30px;width:48px;height:48px;--c:#8A93A3"></i>
+                <i class="xb" style="left:34px;top:574px;width:152px;height:18px;--c:#8A93A3"></i>
+                <i class="xb" style="left:96px;top:262px;width:236px;height:96px;--c:#F87171"></i>
+                <b class="xc" style="left:34px;top:70px;--c:#B48CFF">H1</b>
+                <b class="xc" style="left:34px;top:138px;--c:#5AA9FF">P</b>
+                <b class="xc" style="left:34px;top:224px;--c:#FF8A4C">Figure</b>
+                <b class="xc" style="left:250px;top:398px;--c:#F472B6">Caption</b>
+                <b class="xc" style="left:96px;top:246px;--c:#F87171">untagged</b>
+                <b class="xc warnchip" style="left:300px;top:250px">⚠ /Alt missing</b>
+                <i class="xo-path"></i>
+                <b class="xo" style="top:104px">1</b>
+                <b class="xo" style="top:180px">2</b>
+                <b class="xo" style="top:416px">3</b>
+                <b class="xo warn" style="top:318px">4</b>
+                <b class="xo" style="top:466px">5</b>
+              </div>
+            </div></div>
+            <div class="scan m"><span>◀ X-RAY ▶</span></div>
+          </div>
+          <div class="hint m"><b>Figure · 22 0 R</b><span>No alternative text · UA 7.3-1</span></div>
+          <div class="glyph m"><svg viewBox="180 330 460 470" width="460" height="470"><path transform="translate(208 782) scale(0.619 -0.619)" d="M9.577771481126547 0V44.119593255221844L102.66134686395526 57.619654290378094H120.53750653192401L211.3911172747612 44.119593255221844V0ZM65.7780547812581 0 286.52357069402933 658.9800613261759H381.5378687493503L602.0214344635606 0H437.1398228444159L269.99567049741745 535.39872841537H288.19217674806714L283.4921645410359 521.3695123977959L117.16485282033682 0ZM164.15977421030402 198.6799530312419V247.55887753516436H452.62884364649653V198.6799530312419ZM344.8551263548434 0V42.632879097014666L457.3845626972616 57.58241728320718H530.6220917031169L645.5960083007812 42.632879097014666V0Z"/></svg></div>
+          <i class="metric m k1" style="top:367.3px"></i><span class="mlabel m k1" style="top:349.3px">cap height · 670</span>
+          <i class="metric base m k2" style="top:782px"></i><span class="mlabel base m k2" style="top:764px">baseline · y 676</span>
+          <i class="bbox m k3" style="left:213.9px;top:374.1px;width:393.7px;height:407.9px"></i><span class="mlabel bb m k3" style="left:213.9px;top:352.1px">bbox [10 0 646 659]</span>
+          <i class="adv m k4" style="left:208px;width:407.9px"></i><span class="mlabel adv-l m k4" style="left:627.9px">advance 659 · 17.13 pt</span>
+          <i class="origin m k2" style="left:203px;top:777px"></i>
+          <b class="gchip m k3" style="left:213.9px;top:322.1px">'A' U+0041 · /F1 26 pt · w 659</b>
+          <div class="crumbs m"><span class="crumb m r1">glyph 0</span><span class="crumb-arrow">→</span><span class="crumb m r2">TJ #10</span><span class="crumb-arrow">→</span><span class="crumb m r3">MCID 0</span><span class="crumb-arrow">→</span><span class="crumb m r4">H1 15 0 R</span><span class="crumb-arrow">→</span><span class="crumb m r5">page 1</span></div>
+        </div>
+        </div>
+        <div class="art copies">
+          <div class="hcopy c-d m">
+            <p class="eyebrow"><span class="dot"></span>Open source · PDF debugger for macOS</p>
+            <h1>Put your PDF on the couch.</h1>
+            <p class="lede">pdfxray listens to every layer of the file (tags, glyphs, operators and objects) and tells you, in plain words, what’s really bothering it.</p>
+            <div class="cta">
+              <a class="btn btn-primary" href="https://dl.pdf-xray.app/latest/pdfxray-macos-universal.dmg">Start a session</a>
+              <a class="btn btn-ghost" href="#features">Take the tour <span aria-hidden="true">↓</span></a>
+            </div>
+          </div>
+          <div class="hcopy c-a m">
+            <p class="kicker">X-ray</p>
+            <h2>Look under the surface.</h2>
+            <p class="lede">One side of the line is what your readers see. The other is what’s really there: tags, reading order and the problems underneath.</p>
+          </div>
+          <div class="hcopy c-b m">
+            <p class="kicker">Linked layers</p>
+            <h2>Every layer, linked.</h2>
+            <p class="lede">One click connects the pixel to its operator, its tag and its object.</p>
+          </div>
+          <div class="hcopy c-c m">
+            <p class="kicker">Glyphs</p>
+            <h2>Down to a single glyph.</h2>
+            <p class="lede">Char code, Unicode, width and advance, and the full chain from the glyph up to its page.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MANIFESTO -->
+    <section class="manifesto" aria-label="Principle">
+      <p class="words" data-words>pdfxray never repairs, re-tags or optimises anything. Broken cross-reference tables, wrong offsets, orphaned marked content and role-map cycles are reported where they are, with the exact bytes involved.</p>
+    </section>
+
+    <!-- FEATURE SHOWCASE: chapters stack vertically, slides inside a chapter pan across the screenshot -->
+    <section id="features" class="show" aria-label="Features">
+      <div class="show-head">
+        <p class="eyebrow">Every layer of the file, linked</p>
+        <h2>One click on the page.<br>Every answer about it.</h2>
+      </div>
+
+      <article class="chapter">
+        <div class="pin"><div class="ch-inner m">
+          <header class="ch-head">
+            <div>
+              <p class="ch-num">01 &middot; Tags &amp; reading order</p>
+              <h3>Watch the path a screen reader takes.</h3>
+            </div>
+            <ol class="ticks" aria-hidden="true"><li><i class="m k1"></i></li><li><i class="m k2"></i></li><li><i class="m k3"></i></li></ol>
+          </header>
+          <div class="stage">
+          <div class="window">
+            <div class="track m">
+              <img src="img/hd/tags-overlay.webp?v=10" alt="" width="4320" height="2700" loading="lazy" decoding="async">
+              <span class="spot m k1" style="--l:4%;--t:14%;--w:20%;--h:42%"></span>
+              <span class="spot m k2" style="--l:47%;--t:39%;--w:28%;--h:13%"></span>
+              <span class="spot m k3" style="--l:76%;--t:19.5%;--w:23.4%;--h:28%"></span>
+              <svg class="trace" viewBox="0 0 1440 900" preserveAspectRatio="none" aria-hidden="true">
+                <path class="m t1" pathLength="1" d="M797 179L899 241L691 458"/>
+                <path class="m t2 back" pathLength="1" d="M691 458L899 371"/>
+                <path class="m t3" pathLength="1" d="M899 371L899 493"/>
+                <circle class="m p1" cx="797" cy="179" r="15"/><circle class="m p2" cx="899" cy="241" r="15"/><circle class="m p3" cx="691" cy="458" r="15"/>
+                <circle class="m p4 back" cx="899" cy="371" r="15"/><circle class="m p5" cx="899" cy="493" r="15"/>
+              </svg>
+            </div>
+          </div>
+          <div class="caps">
+            <p class="cap m k0">Tag boxes, a numbered reading path and the order listed in the inspector, from one structure tree.</p>
+            <p class="cap m k1"><span class="cap-step">1 / 3</span><b>Every tag in its role colour.</b> The tree, the page and the legend share one colour per role, and problems are flagged right in the tree.</p>
+            <p class="cap m k2"><span class="cap-step">2 / 3</span><b>A backtrack turns amber.</b> The Caption is read before its Figure, so pdfxray raises a <code>reading-order-backtrack</code> diagnostic.</p>
+            <p class="cap m k3"><span class="cap-step">3 / 3</span><b>The order, listed and compared.</b> Read from the structure tree, then checked against paint order to show where the two disagree.</p>
+            <span class="ptr m" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l15 10.5-6.6 1.2 3.9 7.3-2.7 1.4-3.9-7.3L4 19z"/></svg><i class="ring m"></i></span>
+          </div>
+          </div>
+        </div></div>
+      </article>
+
+      <article class="chapter">
+        <div class="pin"><div class="ch-inner m">
+          <header class="ch-head">
+            <div>
+              <p class="ch-num">02 &middot; Speech</p>
+              <h3>Hear the page before your readers do.</h3>
+            </div>
+            <ol class="ticks" aria-hidden="true"><li><i class="m k1"></i></li><li><i class="m k2"></i></li><li><i class="m k3"></i></li></ol>
+          </header>
+          <div class="stage">
+          <div class="window">
+            <div class="track m">
+              <img src="img/hd/speech.webp?v=10" alt="" width="4320" height="2700" loading="lazy" decoding="async">
+              <span class="spot m k1" style="--l:25%;--t:76.5%;--w:36%;--h:3.8%"></span>
+              <span class="spot m k2" style="--l:25%;--t:79.5%;--w:51%;--h:15%"></span>
+              <span class="spot m k3" style="--l:38%;--t:21%;--w:25%;--h:10%"></span>
+
+            </div>
+          </div>
+          <div class="caps">
+            <p class="cap m k0">What a screen reader announces, item by item, using each reader&rsquo;s substitution and skip rules.</p>
+            <p class="cap m k1"><span class="cap-step">1 / 3</span><b>Pick a reader.</b> Structure (spec), Acrobat with NVDA/JAWS, Firefox, Chrome/Edge. Everything but the spec is labelled an approximation.</p>
+            <p class="cap m k2"><span class="cap-step">2 / 3</span><b>Hear it item by item.</b> Alt replaces the Figure, the DRAFT artifact is skipped, and a footnote is flagged 6 items away from its note.</p>
+            <p class="cap m k3"><span class="cap-step">3 / 3</span><b>Follow along on the page.</b> The item being spoken is outlined on the page, in reading order.</p>
+            <span class="ptr m" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l15 10.5-6.6 1.2 3.9 7.3-2.7 1.4-3.9-7.3L4 19z"/></svg><i class="ring m"></i></span>
+          </div>
+          </div>
+        </div></div>
+      </article>
+
+      <article class="chapter">
+        <div class="pin"><div class="ch-inner m">
+          <header class="ch-head">
+            <div>
+              <p class="ch-num">03 &middot; Content &amp; glyphs</p>
+              <h3>Click a glyph. Climb to its tag.</h3>
+            </div>
+            <ol class="ticks" aria-hidden="true"><li><i class="m k1"></i></li><li><i class="m k2"></i></li><li><i class="m k3"></i></li></ol>
+          </header>
+          <div class="stage">
+          <div class="window">
+            <div class="track m">
+              <img src="img/hd/content-glyph.webp?v=10" alt="" width="4320" height="2700" loading="lazy" decoding="async">
+              <span class="spot m k1" style="--l:4%;--t:34%;--w:20%;--h:4%"></span>
+              <span class="spot m k2" style="--l:38%;--t:15.5%;--w:23%;--h:6.5%"></span>
+              <span class="spot m k3" style="--l:76%;--t:17%;--w:23.4%;--h:28%"></span>
+              <div class="ghint m" aria-hidden="true"><b>Char code</b><span>The bytes in the content stream that pick this glyph: &lt;41&gt;, one byte.</span></div>
+            </div>
+          </div>
+          <div class="caps">
+            <p class="cap m k0">Every operator of the content stream, every glyph on the page, and the chain that connects them.</p>
+            <p class="cap m k1"><span class="cap-step">1 / 3</span><b>The content stream, as a tree.</b> Every operator in order, with untagged text like the DRAFT watermark flagged in red.</p>
+            <p class="cap m k2"><span class="cap-step">2 / 3</span><b>Click a single glyph.</b> &lsquo;A&rsquo; U+0041 in /F1 at 26 pt, boxed with its baseline and advance.</p>
+            <p class="cap m k3"><span class="cap-step">3 / 3</span><b>Every metric of that glyph.</b> Char code, Unicode source, width, advance, ascent and descent, with the font it came from.</p>
+            <span class="ptr m" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l15 10.5-6.6 1.2 3.9 7.3-2.7 1.4-3.9-7.3L4 19z"/></svg><i class="ring m"></i></span>
+          </div>
+          </div>
+        </div></div>
+      </article>
+
+      <article class="chapter">
+        <div class="pin"><div class="ch-inner m">
+          <header class="ch-head">
+            <div>
+              <p class="ch-num">04 &middot; Objects</p>
+              <h3>Raw objects, explained in plain words.</h3>
+            </div>
+            <ol class="ticks" aria-hidden="true"><li><i class="m k1"></i></li><li><i class="m k2"></i></li><li><i class="m k3"></i></li></ol>
+          </header>
+          <div class="stage">
+          <div class="window">
+            <div class="track m">
+              <img src="img/hd/objects-stream.webp?v=10" alt="" width="4320" height="2700" loading="lazy" decoding="async">
+              <span class="spot m k1" style="--l:4%;--t:31.5%;--w:20%;--h:9.5%"></span>
+              <span class="spot m k2" style="--l:25%;--t:27%;--w:51%;--h:24%"></span>
+              <span class="spot m k3" style="--l:77%;--t:19%;--w:22.4%;--h:13%"></span>
+
+            </div>
+          </div>
+          <div class="caps">
+            <p class="cap m k0">The decoded drawing instructions come first. The raw bytes are one tab away.</p>
+            <p class="cap m k1"><span class="cap-step">1 / 3</span><b>Problems surface in the list.</b> Fonts that are not embedded and streams with the wrong length are flagged before you open them.</p>
+            <p class="cap m k2"><span class="cap-step">2 / 3</span><b>Instructions, explained.</b> Every operator gets a plain note: <em>start tagged content: H1, MCID 0</em>, <em>draw &ldquo;Annual Report 2025&rdquo;</em>.</p>
+            <p class="cap m k3"><span class="cap-step">3 / 3</span><b>Diagnostics in plain words.</b> Declared 1,200 B, actual 1,204 B. Acrobat silently fixes this; other readers may drop the last command.</p>
+            <span class="ptr m" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l15 10.5-6.6 1.2 3.9 7.3-2.7 1.4-3.9-7.3L4 19z"/></svg><i class="ring m"></i></span>
+          </div>
+          </div>
+        </div></div>
+      </article>
+
+      <article class="chapter">
+        <div class="pin"><div class="ch-inner m">
+          <header class="ch-head">
+            <div>
+              <p class="ch-num">05 &middot; Measure &amp; page boxes</p>
+              <h3>Measure in pt, mm, in or px.</h3>
+            </div>
+            <ol class="ticks" aria-hidden="true"><li><i class="m k1"></i></li><li><i class="m k2"></i></li><li><i class="m k3"></i></li></ol>
+          </header>
+          <div class="stage">
+          <div class="window">
+            <div class="track m">
+              <img src="img/hd/measure-boxes.webp?v=10" alt="" width="4320" height="2700" loading="lazy" decoding="async">
+              <span class="spot m k1" style="--l:4%;--t:26%;--w:20%;--h:24%"></span>
+              <span class="spot m k2" style="--l:31%;--t:20%;--w:31%;--h:14%"></span>
+              <span class="spot m k3" style="--l:77%;--t:10%;--w:22.4%;--h:36%"></span>
+
+            </div>
+          </div>
+          <div class="caps">
+            <p class="cap m k0">All five page boxes with where each comes from, and distances between anything on the page.</p>
+            <p class="cap m k1"><span class="cap-step">1 / 3</span><b>Where every box comes from.</b> MediaBox, CropBox, BleedBox, TrimBox and ArtBox: set on the page, inherited or defaulted.</p>
+            <p class="cap m k2"><span class="cap-step">2 / 3</span><b>Measure anything.</b> Drag for a distance, Shift-click a second item for the gap. Hold Shift to snap to 45&deg;.</p>
+            <p class="cap m k3"><span class="cap-step">3 / 3</span><b>Gap and alignment, in numbers.</b> 29.1 pt apart, left edges aligned, in every unit at once, plus trim and bleed for print.</p>
+            <span class="ptr m" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l15 10.5-6.6 1.2 3.9 7.3-2.7 1.4-3.9-7.3L4 19z"/></svg><i class="ring m"></i></span>
+          </div>
+          </div>
+        </div></div>
+      </article>
+
+      <article class="chapter">
+        <div class="pin"><div class="ch-inner m">
+          <header class="ch-head">
+            <div>
+              <p class="ch-num">06 &middot; Validation</p>
+              <h3>veraPDF findings, on the exact node.</h3>
+            </div>
+            <ol class="ticks" aria-hidden="true"><li><i class="m k1"></i></li><li><i class="m k2"></i></li><li><i class="m k3"></i></li></ol>
+          </header>
+          <div class="stage">
+          <div class="window">
+            <div class="track m">
+              <img src="img/hd/validation.webp?v=10" alt="" width="4320" height="2700" loading="lazy" decoding="async">
+              <span class="spot m k1" style="--l:4%;--t:15%;--w:20%;--h:36%"></span>
+              <span class="spot m k2" style="--l:38%;--t:30%;--w:25%;--h:20%"></span>
+              <span class="spot m k3" style="--l:77%;--t:17%;--w:22.4%;--h:29%"></span>
+
+            </div>
+          </div>
+          <div class="caps">
+            <p class="cap m k0">veraPDF runs as a separate process. Every failure lands on the element it is about.</p>
+            <p class="cap m k1"><span class="cap-step">1 / 3</span><b>Grouped by rule.</b> 9 failed, 3 rules, 1,284 passed, with each finding listed under its rule.</p>
+            <p class="cap m k2"><span class="cap-step">2 / 3</span><b>On the exact node.</b> Badges sit on the element, operator or font that failed.</p>
+            <p class="cap m k3"><span class="cap-step">3 / 3</span><b>Why it matters, how to fix it.</b> In plain words, with an example fix. pdfxray never changes your file.</p>
+            <span class="ptr m" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l15 10.5-6.6 1.2 3.9 7.3-2.7 1.4-3.9-7.3L4 19z"/></svg><i class="ring m"></i></span>
+          </div>
+          </div>
+        </div></div>
+      </article>
+
+      <article class="chapter">
+        <div class="pin"><div class="ch-inner m">
+          <header class="ch-head">
+            <div>
+              <p class="ch-num">07 &middot; Paint order</p>
+              <h3>Replay the page, one operator at a time.</h3>
+            </div>
+            <ol class="ticks" aria-hidden="true"><li><i class="m k1"></i></li><li><i class="m k2"></i></li><li><i class="m k3"></i></li></ol>
+          </header>
+          <div class="stage">
+          <div class="window">
+            <div class="track m">
+              <img src="img/hd/paint-order.webp?v=10" alt="" width="4320" height="2700" loading="lazy" decoding="async">
+              <span class="spot m k1" style="--l:25%;--t:75%;--w:51%;--h:15%"></span>
+              <span class="spot m k2" style="--l:38%;--t:27%;--w:25%;--h:29%"></span>
+              <span class="spot m k3" style="--l:77%;--t:20%;--w:22.4%;--h:24%"></span>
+
+            </div>
+          </div>
+          <div class="caps">
+            <p class="cap m k0">Step through the content stream and watch each item land on the page.</p>
+            <p class="cap m k1"><span class="cap-step">1 / 3</span><b>Step through the stream.</b> Step 211 of 377. Arrow keys step, Shift jumps to the next visible change.</p>
+            <p class="cap m k2"><span class="cap-step">2 / 3</span><b>Watch it land.</b> The current item is outlined. Whatever is painted later is ghosted.</p>
+            <p class="cap m k3"><span class="cap-step">3 / 3</span><b>Know what covers it.</b> 82% visible, 18% under the watermark: covered later by op #355 &ldquo;DRAFT&rdquo;.</p>
+            <span class="ptr m" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l15 10.5-6.6 1.2 3.9 7.3-2.7 1.4-3.9-7.3L4 19z"/></svg><i class="ring m"></i></span>
+          </div>
+          </div>
+        </div></div>
+      </article>
+    </section>
+
+    <!-- DETAILS -->
+    <section id="details" class="details">
+      <div class="section-head reveal">
+        <p class="eyebrow">Small things we cared about</p>
+        <h2>The details are the product.</h2>
+      </div>
+
+      <div class="bento">
+        <article class="card card-wide reveal">
+          <div class="mini hints-demo" aria-hidden="true">
+            <div class="prow"><span class="k">CTM</span><code>[100 0 0 100 50 150]</code></div>
+            <div class="prow hov"><span class="k">Tz · TL</span><code>100% · 31.2</code>
+              <span class="tipbox"><b>Tz</b> horizontal scaling · <b>TL</b> leading, the line spacing used by T*</span>
+            </div>
+            <div class="prow"><span class="k">Clip</span><code>W n · rect 36 30 540 732</code></div>
+          </div>
+          <div class="card-copy">
+            <h3>Every label explains itself</h3>
+            <p>Hover a property name to see what it means in plain words. No manual needed for Tz, TL, W n or a CTM.</p>
+          </div>
+        </article>
+
+        <article class="card reveal">
+          <div class="mini mcid" aria-hidden="true">
+            <div class="row"><span class="chev">⌄</span><i style="background:#B48CFF"></i><b>Figure</b><em>14 0 R</em></div>
+            <div class="row ref"><span class="arr">↳</span><code>MCID 2</code><em>p1</em></div>
+            <div class="row"><span class="chev">›</span><i style="background:#B48CFF"></i><b>Table</b><em>15 0 R</em></div>
+          </div>
+          <div class="card-copy">
+            <h3>References look like references</h3>
+            <p>Marked-content rows stay visible but dimmed and can't be selected: they point to content, they aren't tags.</p>
+          </div>
+        </article>
+
+        <article class="card reveal">
+          <div class="mini copyrow" aria-hidden="true" tabindex="-1">
+            <span class="k">Page bbox</span><code>[40.0 222.0 380.0 372.0]</code><span class="copy">⧉</span>
+          </div>
+          <div class="card-copy">
+            <h3>Quiet until you need it</h3>
+            <p>Copy buttons appear on hover. Default values fold into one line. Problems come first.</p>
+          </div>
+        </article>
+
+        <article class="card reveal">
+          <div class="mini units" aria-hidden="true">
+            <span class="on">pt</span><span>mm</span><span>in</span><span>px</span>
+          </div>
+          <div class="card-copy">
+            <h3>One units switch</h3>
+            <p>Set it once in the status bar and every value in the app follows.</p>
+          </div>
+        </article>
+
+        <article class="card reveal">
+          <div class="crop" style="--src:url(img/pick_menu.webp);--x:662;--y:78;--w:238;--h:172"></div>
+          <div class="card-copy">
+            <h3>Pick what a click selects</h3>
+            <p>All, Tags, Content, Boxes or Artifacts, with keys 1–6. The page looks the same; only the click changes.</p>
+          </div>
+        </article>
+
+        <article class="card reveal">
+          <div class="mini keys" aria-hidden="true">
+            <span class="tip"><b>X-ray</b><kbd>X</kbd></span>
+            <span class="snap"><kbd>⇧</kbd> snap 45°</span>
+          </div>
+          <div class="card-copy">
+            <h3>Keys, shown as keys</h3>
+            <p>Every icon-only tool says its name and shortcut. Shift snaps the measure line to 45°.</p>
+          </div>
+        </article>
+
+        <article class="card card-wide reveal">
+          <div class="crop" style="--src:url(img/rev_popover.webp);--x:270;--y:34;--w:338;--h:420"></div>
+          <div class="card-copy">
+            <h3>Every revision, still there</h3>
+            <p>Incremental updates keep old objects in the file. The revision chip lists them, and changed objects are badged.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- NEVER REPAIRS -->
+    <section class="truth">
+      <div class="truth-copy reveal">
+        <p class="eyebrow">Built for broken files</p>
+        <h2>Other viewers quietly fix.<br>pdfxray shows the damage.</h2>
+        <p>A lossless syntax layer keeps every byte span. When the index points to the wrong offset or a stream lies about its length, you see where, and why other readers may behave differently.</p>
+        <ul class="facts">
+          <li><b>12</b><span>CLI commands over the same query API</span></li>
+          <li><b>1,167</b><span>tests: unit, property, fixture, visual and end-to-end</span></li>
+          <li><b>0</b><span>GPL or AGPL dependencies</span></li>
+        </ul>
+      </div>
+      <figure class="truth-shot reveal">
+        <img src="img/state_broken.webp" alt="pdfxray reporting a damaged cross-reference table" width="1440" height="900" loading="lazy">
+      </figure>
+    </section>
+
+    <!-- CLI -->
+    <section id="cli" class="cli">
+      <div class="section-head reveal">
+        <p class="eyebrow">For scripts, CI and agents</p>
+        <h2>The same answers, as JSON.</h2>
+        <p class="sub">The CLI exposes the queries the app uses. Below: real values from a test fixture, trimmed to the key fields.</p>
+      </div>
+      <div class="term reveal" role="img" aria-label="Terminal running pdfxray reading-order on reading-order.pdf, showing one backtrack at step 4">
+        <div class="term-bar"><i></i><i></i><i></i><span>zsh</span></div>
+<pre class="term-body"><span class="l"><span class="p">$</span> pdfxray reading-order reading-order.pdf 0</span>
+<span class="l">{</span>
+<span class="l">  <span class="key">"from"</span>: <span class="str">"structure"</span>,</span>
+<span class="l">  <span class="key">"backtracks"</span>: <span class="num">1</span>,</span>
+<span class="l">  <span class="key">"steps"</span>: [</span>
+<span class="l">    { <span class="key">"index"</span>: <span class="num">1</span>, <span class="key">"role"</span>: <span class="str">"Heading1"</span>, <span class="key">"kind"</span>: <span class="str">"first"</span>,     <span class="key">"preview"</span>: <span class="str">"Quarterly report"</span> },</span>
+<span class="l">    { <span class="key">"index"</span>: <span class="num">2</span>, <span class="key">"role"</span>: <span class="str">"P"</span>,        <span class="key">"kind"</span>: <span class="str">"forward"</span>,   <span class="key">"preview"</span>: <span class="str">"Revenue grew in every region."</span> },</span>
+<span class="l">    { <span class="key">"index"</span>: <span class="num">3</span>, <span class="key">"role"</span>: <span class="str">"Caption"</span>,  <span class="key">"kind"</span>: <span class="str">"forward"</span>,   <span class="key">"preview"</span>: <span class="str">"Figure 1: Revenue by region"</span> },</span>
+<span class="l hot">    { <span class="key">"index"</span>: <span class="num">4</span>, <span class="key">"role"</span>: <span class="str">"Figure"</span>,   <span class="key">"kind"</span>: <span class="warn">"backtrack"</span>, <span class="key">"preview"</span>: <span class="str">"Grey square"</span> },</span>
+<span class="l">    { <span class="key">"index"</span>: <span class="num">5</span>, <span class="key">"role"</span>: <span class="str">"P"</span>,        <span class="key">"kind"</span>: <span class="str">"forward"</span>,   <span class="key">"preview"</span>: <span class="str">"Closing remarks follow."</span> }</span>
+<span class="l">  ]</span>
+<span class="l">}</span></pre>
+      </div>
+      <ul class="cmds reveal">
+        <li>info</li><li>tree</li><li>node</li><li>breadcrumb</li><li>hit</li><li>reading-order</li><li>speech</li><li>table</li><li>tag-boxes</li><li>render</li><li>compare</li><li>validate</li>
+      </ul>
+    </section>
+
+    <!-- SOURCE -->
+    <section id="source" class="source">
+      <div class="source-card reveal">
+        <img class="app-icon" src="img/brand/mark-144@2x.png?v=10" alt="pdfxray app icon" width="144" height="144" loading="lazy">
+        <p class="eyebrow">MIT licensed · written in Rust</p>
+        <h2>Open the file. See everything.</h2>
+        <p>pdfxray v1 is for macOS 11 or later, on Apple Silicon and Intel. Download the notarized app, which keeps itself up to date, or build it from source with the pinned toolchain.</p>
+<pre class="snippet"><code><span class="p">$</span> cargo run -p pdfxray-app -- file.pdf
+<span class="p">$</span> cargo run -p pdfxray-cli -- info file.pdf --pretty</code></pre>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://dl.pdf-xray.app/latest/pdfxray-macos-universal.dmg">Download for macOS</a>
+          <a class="btn btn-ghost" href="https://github.com/OWNER/pdfxray#readme">Read the README</a>
+          <a class="btn btn-ghost" href="https://github.com/OWNER/pdfxray/blob/main/docs/user-guide.md">User guide</a>
+        </div>
+        <p class="fine">Not in v1: decrypting encrypted files (their structure is still shown) and the annotation, form and outline panels, which are planned for v1.1.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span class="brand small"><img class="brand-mark" src="img/brand/mark-small-56.png?v=10" alt="" width="22" height="22"><span class="brand-pdf">pdf</span><span class="brand-x">xray</span></span>
+    <span>Built from ISO 32000-2 and PDF/UA. MIT licence.</span>
+  </footer>
+
+  <script src="main.js?v=11" defer></script>
+</body>
+</html>
