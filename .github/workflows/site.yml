@@ -20,7 +20,7 @@ concurrency:
 jobs:
   deploy:
     name: deploy to Cloudflare
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Deploy

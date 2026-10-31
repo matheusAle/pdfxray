@@ -1,7 +1,7 @@
 # Distribution plan: notarized macOS releases on pdfxray.app
 
 Goal: a tag `vX.Y.Z` on GitHub builds a universal, Developer ID signed and notarized app on a
-macOS runner (Blacksmith, `blacksmith-6vcpu-macos-latest`; Linux jobs on `blacksmith-2vcpu-ubuntu-2404`), publishes it to Cloudflare (R2 for the files, a static-assets Worker for the site), and
+GitHub-hosted macOS runner, publishes it to Cloudflare (R2 for the files, a static-assets Worker for the site), and
 installed copies update themselves.
 
 ## Decisions (defaults; say so to change them)
@@ -45,7 +45,7 @@ dl.pdfxray.app/
 ### GitHub
 
 4. Repository: `github.com/matheusAle/pdfxray`, created private on 2026-10-31. Public gives
-   free GitHub-hosted minutes (no longer used: CI runs on Blacksmith) and makes the site's
+   free GitHub-hosted runner minutes (private repositories pay for them) and makes the site's
    README and user-guide links work for visitors.
 
 ### Cloudflare
