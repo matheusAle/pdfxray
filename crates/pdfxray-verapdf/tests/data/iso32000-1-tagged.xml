@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<report>
+  <buildInformation>
+    <releaseDetails id="core" version="1.30.3" buildDate="2026-10-07T10:02:00-03:00"></releaseDetails>
+    <releaseDetails id="validation-model" version="1.30.3" buildDate="2026-10-07T13:44:00-03:00"></releaseDetails>
+    <releaseDetails id="apps" version="1.30.3" buildDate="2026-10-07T13:52:00-03:00"></releaseDetails>
+  </buildInformation>
+  <jobs>
+    <job>
+      <item size="10301">
+        <name>/data/veraPDF test suite 6-8-3-3-t01-fail-b.pdf</name>
+      </item>
+      <validationReport jobEndStatus="normal" profileName="Tagged pdf profile for PDF 1.7 specification" statement="PDF file is not compliant with Validation Profile requirements." isCompliant="false">
+        <details passedRules="1281" failedRules="1" passedChecks="98" failedChecks="1">
+          <rule specification="ISO 19005-2:2011" clause="Annex_L" testNumber="16" status="failed" failedChecks="1">
+            <description>StructTreeRoot elem should not contain Span kid</description>
+            <object>PDStructTreeRoot</object>
+            <test>kidsStandardTypes.split('&amp;').filter(elem =&gt; elem == 'Span').length == 0</test>
+            <check status="failed">
+              <context>root/document[0]/StructTreeRoot[0](6 0 obj PDStructTreeRoot)</context>
+              <errorMessage>StructTreeRoot elem contains Span kid</errorMessage>
+            </check>
+          </rule>
+        </details>
+      </validationReport>
+      <duration start="1793271775211" finish="1793271775348">00:00:00.137</duration>
+    </job>
+  </jobs>
+  <batchSummary totalJobs="1" failedToParse="0" encrypted="0" outOfMemory="0" veraExceptions="0">
+    <validationReports compliant="0" nonCompliant="1" failedJobs="0">1</validationReports>
+    <featureReports failedJobs="0">0</featureReports>
+    <repairReports failedJobs="0">0</repairReports>
+    <duration start="1793271775193" finish="1793271775356">00:00:00.163</duration>
+  </batchSummary>
+</report>
