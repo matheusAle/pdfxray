@@ -97,5 +97,5 @@ everything is in place.
 | W1 | xtask: notarytool API-key auth; CLI inside the app; signed, notarized, stapled DMG | done (ad-hoc path tested locally; the signed path needs the Apple secrets) |
 | W2 | Release workflow: API key, DMG, verification, GitHub release, upload to R2; `site.yml`; site download button; `docs/releasing.md` | done (actionlint clean; runs for real after W4) |
 | W3 | Sparkle auto-update: pinned framework fetch, embed + sign in the bundle, runtime loading, "Check for Updates…" menu item, one updater across the per-window processes, appcast generation + EdDSA signing in CI, key generation | done (ad-hoc e2e update A→B passed with a test-only re-sign; Developer ID path untested; production key pending) |
-| W4 | GitHub repo and first push (done, private); `OWNER` placeholder (done); site on pdfxray.app (done); R2 bucket + `dl.pdfxray.app` (waits for R2 to be enabled); secrets | in progress |
-| W5 | First release candidate `v0.1.0-rc.1` end to end | after W1-W4 |
+| W4 | GitHub repo, secrets, site on pdfxray.app, R2 bucket on `dl.pdfxray.app`, Cloudflare protection | done |
+| W5 | First release | done: `v0.1.0-rc.1` (universal, pre-release) and `v0.1.0` (Apple Silicon), notarized, on GitHub and `dl.pdfxray.app`, with a verified update feed (2026-10-31) |
