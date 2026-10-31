@@ -1,0 +1,73 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 8 0 R /MarkInfo << /Marked true >> /Lang (en-US) >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /StructParents 0 /Resources << /Font << /F1 5 0 R >> /XObject << /FmA 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 73 >>
+stream
+/P << /MCID 0 >> BDC BT /F1 14 Tf 10 280 Td (Page text) Tj ET EMC
+/FmA Do
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 250 250] /Matrix [0.8 0 0 0.8 20 20] /StructParents 1 /Resources << /Font << /F1 5 0 R >> /XObject << /FmB 7 0 R >> >> /Length 70 >>
+stream
+/P << /MCID 0 >> BDC BT /F1 12 Tf 10 220 Td (Form A) Tj ET EMC
+/FmB Do
+endstream
+endobj
+7 0 obj
+<< /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Matrix [1 0 0 1 10 10] /StructParents 2 /Resources << /Font << /F1 5 0 R >> >> /Length 93 >>
+stream
+/P << /MCID 0 >> BDC 0.8 1 0.8 rg 0 0 100 40 re f BT 0 g /F1 10 Tf 5 15 Td (Form B) Tj ET EMC
+endstream
+endobj
+8 0 obj
+<< /Type /StructTreeRoot /K 9 0 R /ParentTree 13 0 R /ParentTreeNextKey 3 >>
+endobj
+9 0 obj
+<< /Type /StructElem /S /Document /P 8 0 R /K [10 0 R 11 0 R 12 0 R] >>
+endobj
+10 0 obj
+<< /Type /StructElem /S /P /P 9 0 R /Pg 3 0 R /K 0 >>
+endobj
+11 0 obj
+<< /Type /StructElem /S /P /P 9 0 R /Pg 3 0 R /K << /Type /MCR /Pg 3 0 R /Stm 6 0 R /MCID 0 >> >>
+endobj
+12 0 obj
+<< /Type /StructElem /S /P /P 9 0 R /Pg 3 0 R /K << /Type /MCR /Pg 3 0 R /Stm 7 0 R /MCID 0 >> >>
+endobj
+13 0 obj
+<< /Nums [0 [10 0 R] 1 [11 0 R] 2 [12 0 R]] >>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000015 00000 n 
+0000000129 00000 n 
+0000000186 00000 n 
+0000000355 00000 n 
+0000000478 00000 n 
+0000000548 00000 n 
+0000000828 00000 n 
+0000001101 00000 n 
+0000001193 00000 n 
+0000001280 00000 n 
+0000001350 00000 n 
+0000001464 00000 n 
+0000001578 00000 n 
+trailer
+<< /Size 14 /Root 1 0 R /ID [<70646678726179000000000000000001> <70646678726179000000000000000001>] >>
+startxref
+1641
+%%EOF

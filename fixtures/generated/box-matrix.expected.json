@@ -1,0 +1,253 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 1503,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    }
+  ],
+  "page_count": 4,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          -50.0,
+          -50.0,
+          650.0,
+          842.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "crop_box": {
+        "value": [
+          0.0,
+          0.0,
+          600.0,
+          792.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "bleed_box": {
+        "value": [
+          10.0,
+          10.0,
+          590.0,
+          782.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "trim_box": {
+        "value": [
+          20.0,
+          20.0,
+          580.0,
+          772.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "art_box": {
+        "value": [
+          30.0,
+          30.0,
+          570.0,
+          762.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": []
+    },
+    {
+      "index": 1,
+      "object": 4,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          400.0,
+          300.0
+        ],
+        "node": 4,
+        "inherited": false
+      },
+      "crop_box": {
+        "value": [
+          20.0,
+          20.0,
+          380.0,
+          280.0
+        ],
+        "node": 4,
+        "inherited": false
+      },
+      "rotate": {
+        "value": 180,
+        "node": 4,
+        "inherited": false
+      },
+      "mcids": []
+    },
+    {
+      "index": 2,
+      "object": 5,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          300.0,
+          400.0
+        ],
+        "node": 2,
+        "inherited": true
+      },
+      "crop_box": {
+        "value": [
+          10.0,
+          10.0,
+          240.0,
+          290.0
+        ],
+        "node": 2,
+        "inherited": true
+      },
+      "rotate": {
+        "value": 270,
+        "node": 5,
+        "inherited": false
+      },
+      "mcids": []
+    },
+    {
+      "index": 3,
+      "object": 6,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          250.0,
+          300.0
+        ],
+        "node": 6,
+        "inherited": false
+      },
+      "crop_box": {
+        "value": [
+          10.0,
+          10.0,
+          240.0,
+          290.0
+        ],
+        "node": 2,
+        "inherited": true
+      },
+      "user_unit": {
+        "value": 3.0,
+        "node": 6,
+        "inherited": false
+      },
+      "mcids": []
+    }
+  ],
+  "catalog": {
+    "object": 1
+  },
+  "page_geometry": [
+    {
+      "page": 0,
+      "visible_box": [
+        0.0,
+        0.0,
+        600.0,
+        792.0
+      ],
+      "rotate": 0,
+      "user_unit": 1.0,
+      "render_size": [
+        600.0,
+        792.0
+      ],
+      "physical_size": [
+        600.0,
+        792.0
+      ]
+    },
+    {
+      "page": 1,
+      "visible_box": [
+        20.0,
+        20.0,
+        380.0,
+        280.0
+      ],
+      "rotate": 180,
+      "user_unit": 1.0,
+      "render_size": [
+        360.0,
+        260.0
+      ],
+      "physical_size": [
+        360.0,
+        260.0
+      ]
+    },
+    {
+      "page": 2,
+      "visible_box": [
+        10.0,
+        10.0,
+        240.0,
+        290.0
+      ],
+      "rotate": 270,
+      "user_unit": 1.0,
+      "render_size": [
+        280.0,
+        230.0
+      ],
+      "physical_size": [
+        280.0,
+        230.0
+      ]
+    },
+    {
+      "page": 3,
+      "visible_box": [
+        10.0,
+        10.0,
+        240.0,
+        290.0
+      ],
+      "rotate": 0,
+      "user_unit": 3.0,
+      "render_size": [
+        230.0,
+        280.0
+      ],
+      "physical_size": [
+        690.0,
+        840.0
+      ]
+    }
+  ]
+}

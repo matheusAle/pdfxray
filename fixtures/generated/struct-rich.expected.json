@@ -1,0 +1,449 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 3528,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28
+      ]
+    }
+  ],
+  "page_count": 2,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          400.0,
+          400.0
+        ],
+        "node": 2,
+        "inherited": true
+      },
+      "mcids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "index": 1,
+      "object": 4,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          400.0,
+          400.0
+        ],
+        "node": 2,
+        "inherited": true
+      },
+      "mcids": [
+        0,
+        1,
+        2
+      ]
+    }
+  ],
+  "catalog": {
+    "object": 1,
+    "marked": true,
+    "lang": "en-US"
+  },
+  "struct_outline": {
+    "root": 8,
+    "role_map": {
+      "Callout": "Remark",
+      "Cell": "TD",
+      "Remark": "Span"
+    },
+    "class_map": {
+      "Body": [
+        {
+          "owner": "Layout",
+          "entries": {
+            "TextAlign": "/Justify"
+          }
+        }
+      ],
+      "Wide": [
+        {
+          "owner": "Layout",
+          "entries": {
+            "Placement": "/Block"
+          }
+        },
+        {
+          "owner": "Layout",
+          "entries": {
+            "Width": "120"
+          }
+        }
+      ]
+    },
+    "id_tree": {
+      "fig-1": 14,
+      "tbl-1": 15,
+      "th-1": 17
+    },
+    "children": [
+      {
+        "object": 10,
+        "role": "Document",
+        "standard_role": "Document",
+        "kids": [
+          {
+            "kind": "elem",
+            "object": 11,
+            "role": "Sect",
+            "standard_role": "Sect",
+            "kids": [
+              {
+                "kind": "elem",
+                "object": 12,
+                "role": "H1",
+                "standard_role": "H1",
+                "page": 0,
+                "kids": [
+                  {
+                    "kind": "mcr",
+                    "page": 0,
+                    "mcid": 0
+                  }
+                ]
+              },
+              {
+                "kind": "elem",
+                "object": 13,
+                "role": "P",
+                "standard_role": "P",
+                "lang": "fr-FR",
+                "attributes": [
+                  {
+                    "source": {
+                      "kind": "class",
+                      "name": "Body"
+                    },
+                    "set": {
+                      "owner": "Layout",
+                      "entries": {
+                        "TextAlign": "/Justify"
+                      }
+                    }
+                  }
+                ],
+                "classes": [
+                  "Body"
+                ],
+                "kids": [
+                  {
+                    "kind": "mcr",
+                    "page": 0,
+                    "mcid": 1
+                  },
+                  {
+                    "kind": "mcr",
+                    "page": 1,
+                    "mcid": 0
+                  }
+                ]
+              },
+              {
+                "kind": "elem",
+                "object": 14,
+                "role": "Figure",
+                "standard_role": "Figure",
+                "page": 0,
+                "id": "fig-1",
+                "alt": "A pale blue rectangle",
+                "attributes": [
+                  {
+                    "source": {
+                      "kind": "direct"
+                    },
+                    "set": {
+                      "owner": "Layout",
+                      "entries": {
+                        "BBox": "[20 230 140 310]"
+                      }
+                    }
+                  },
+                  {
+                    "source": {
+                      "kind": "class",
+                      "name": "Wide"
+                    },
+                    "set": {
+                      "owner": "Layout",
+                      "entries": {
+                        "Placement": "/Block"
+                      }
+                    }
+                  },
+                  {
+                    "source": {
+                      "kind": "class",
+                      "name": "Wide"
+                    },
+                    "set": {
+                      "owner": "Layout",
+                      "entries": {
+                        "Width": "120"
+                      }
+                    }
+                  }
+                ],
+                "classes": [
+                  "Wide"
+                ],
+                "kids": [
+                  {
+                    "kind": "mcr",
+                    "page": 0,
+                    "mcid": 2
+                  }
+                ]
+              },
+              {
+                "kind": "elem",
+                "object": 15,
+                "role": "Table",
+                "standard_role": "Table",
+                "id": "tbl-1",
+                "kids": [
+                  {
+                    "kind": "elem",
+                    "object": 16,
+                    "role": "TR",
+                    "standard_role": "TR",
+                    "kids": [
+                      {
+                        "kind": "elem",
+                        "object": 17,
+                        "role": "TH",
+                        "standard_role": "TH",
+                        "page": 0,
+                        "id": "th-1",
+                        "attributes": [
+                          {
+                            "source": {
+                              "kind": "direct"
+                            },
+                            "set": {
+                              "owner": "Table",
+                              "entries": {
+                                "Scope": "/Column"
+                              }
+                            }
+                          }
+                        ],
+                        "kids": [
+                          {
+                            "kind": "mcr",
+                            "page": 0,
+                            "mcid": 3
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "elem",
+                        "object": 18,
+                        "role": "Cell",
+                        "standard_role": "TD",
+                        "page": 0,
+                        "kids": [
+                          {
+                            "kind": "mcr",
+                            "page": 0,
+                            "mcid": 4
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "elem",
+                "object": 19,
+                "role": "L",
+                "standard_role": "L",
+                "kids": [
+                  {
+                    "kind": "elem",
+                    "object": 20,
+                    "role": "LI",
+                    "standard_role": "LI",
+                    "kids": [
+                      {
+                        "kind": "elem",
+                        "object": 21,
+                        "role": "Lbl",
+                        "standard_role": "Lbl",
+                        "page": 0,
+                        "kids": [
+                          {
+                            "kind": "mcr",
+                            "page": 0,
+                            "mcid": 5
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "elem",
+                        "object": 22,
+                        "role": "LBody",
+                        "standard_role": "LBody",
+                        "page": 0,
+                        "kids": [
+                          {
+                            "kind": "mcr",
+                            "page": 0,
+                            "mcid": 6
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "elem",
+                "object": 23,
+                "role": "Link",
+                "standard_role": "Link",
+                "page": 1,
+                "kids": [
+                  {
+                    "kind": "mcr",
+                    "page": 1,
+                    "mcid": 1
+                  },
+                  {
+                    "kind": "objr",
+                    "page": 1,
+                    "object": 9
+                  }
+                ]
+              },
+              {
+                "kind": "elem",
+                "object": 24,
+                "role": "Callout",
+                "standard_role": "Span",
+                "page": 1,
+                "actual_text": "World Wide Web Consortium",
+                "kids": [
+                  {
+                    "kind": "mcr",
+                    "page": 1,
+                    "mcid": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "page_keys": [
+      {
+        "page": 0,
+        "key": 0
+      },
+      {
+        "page": 1,
+        "key": 1
+      }
+    ],
+    "parent_tree": [
+      {
+        "key": 0,
+        "parents": [
+          12,
+          13,
+          14,
+          17,
+          18,
+          21,
+          22
+        ]
+      },
+      {
+        "key": 1,
+        "parents": [
+          13,
+          23,
+          24
+        ]
+      }
+    ],
+    "parent_tree_objects": [
+      {
+        "key": 2,
+        "parent": 23
+      }
+    ],
+    "parent_tree_nodes": [
+      26,
+      27,
+      28
+    ],
+    "parent_tree_next_key": 3
+  },
+  "annotations": [
+    {
+      "page": 1,
+      "object": 9,
+      "subtype": "Link",
+      "rect": [
+        20.0,
+        325.0,
+        70.0,
+        345.0
+      ],
+      "flags": 4,
+      "struct_parent": 2,
+      "uri": "https://example.com/",
+      "has_appearance": false
+    }
+  ]
+}

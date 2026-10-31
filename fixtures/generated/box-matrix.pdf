@@ -1,0 +1,74 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R 6 0 R] /Count 4 /MediaBox [0 0 300 400] /CropBox [10 10 240 290] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [-50 -50 650 842] /CropBox [0 0 600 792] /BleedBox [10 10 590 782] /TrimBox [20 20 580 772] /ArtBox [30 30 570 762] /Resources << /Font << /F1 7 0 R >> >> /Contents 8 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /CropBox [20 20 380 280] /Rotate 180 /Resources << /Font << /F1 7 0 R >> >> /Contents 9 0 R >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /Rotate 270 /Resources << /Font << /F1 7 0 R >> >> /Contents 10 0 R >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 250 300] /UserUnit 3.0 /Resources << /Font << /F1 7 0 R >> >> /Contents 11 0 R >>
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+8 0 obj
+<< /Length 188 >>
+stream
+1 0 0 RG -50 -50 700 892 re S
+0 0.6 0 RG 0 0 600 792 re S
+0 0 1 RG 10 10 580 772 re S
+1 0 1 RG 20 20 560 752 re S
+0 0.6 0.6 RG 30 30 540 732 re S
+BT /F1 24 Tf 100 700 Td (Box matrix) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Length 69 >>
+stream
+0 0 0 RG 25 25 350 250 re S
+BT /F1 18 Tf 40 140 Td (Rotate 180) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Length 69 >>
+stream
+0 0 0 RG 15 15 220 270 re S
+BT /F1 18 Tf 30 140 Td (Rotate 270) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Length 69 >>
+stream
+0 0 0 RG 15 15 220 270 re S
+BT /F1 18 Tf 30 140 Td (UserUnit 3) Tj ET
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000188 00000 n 
+0000000416 00000 n 
+0000000579 00000 n 
+0000000694 00000 n 
+0000000835 00000 n 
+0000000905 00000 n 
+0000001144 00000 n 
+0000001263 00000 n 
+0000001383 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R /ID [<70646678726179000000000000000001> <70646678726179000000000000000001>] >>
+startxref
+1503
+%%EOF

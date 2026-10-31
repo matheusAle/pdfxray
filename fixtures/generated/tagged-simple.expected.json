@@ -1,0 +1,88 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 940,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          200.0,
+          200.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": [
+        0,
+        1
+      ]
+    }
+  ],
+  "catalog": {
+    "object": 1,
+    "marked": true,
+    "lang": "en-US"
+  },
+  "struct_tree": {
+    "root": 6,
+    "children": [
+      {
+        "object": 7,
+        "role": "Document",
+        "standard_role": "Document",
+        "children": [
+          {
+            "object": 8,
+            "role": "H1",
+            "standard_role": "H1",
+            "page": 0,
+            "mcids": [
+              0
+            ]
+          },
+          {
+            "object": 9,
+            "role": "P",
+            "standard_role": "P",
+            "page": 0,
+            "mcids": [
+              1
+            ]
+          }
+        ]
+      }
+    ],
+    "parent_tree": [
+      {
+        "key": 0,
+        "parents": [
+          8,
+          9
+        ]
+      }
+    ]
+  }
+}

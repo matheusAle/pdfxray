@@ -1,0 +1,330 @@
+# Tier 3 corpus: fetched by `cargo xtask corpus fetch`, never committed (cache: fixtures/cache/).
+# Every URL is pinned (git commit SHA or a Wayback snapshot); sha256/size describe the file kept in the cache.
+# For archive entries, sha256/size describe the extracted `archive_member`; archive_sha256/archive_size describe the download.
+
+[[file]]
+id = "pdfua-ref-01-magazine-danish"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-01_Magazine-danish.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "aef89af13c9c94fc4f4e1a8c5872450cc4c8fff7de544d8ada6a0912425aa434"
+size = 12908012
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Magazine (Danish), reference sample for tagged publications. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-02-invoice"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-02_Invoice.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "fbae08464f192f532205833215505b78266e86df6283d9b0c439cb06927ce0b9"
+size = 62504
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Invoice, reference sample for a transactional record. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-03-academicabstract"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-03_AcademicAbstract.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "e61257d371261867926eb006f8895569a95fcfbcb93fca3be04b8b9187cb93a0"
+size = 90190
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Academic abstract, reference sample. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-04-presentation"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-04_Presentation.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "90acb829ca8bfa037796592539d15010e9099d1cd2622aac1fce7d9fd3ae7575"
+size = 1308888
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Presentation, reference sample. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-05-bookchapter-german"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-05_BookChapter-german.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "fc525b8899da31779b6143c16053779cd560d4417018a901472de33c71252352"
+size = 625630
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Book chapter (German), reference sample. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-06-brochure"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-06_Brochure.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "aefd5ab48a908b9996ffadcb14d8ff31a2c653657cbe011a46f4cf61396a589e"
+size = 1649896
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Brochure, reference sample. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-07-formaldocument"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-07_FormalDocument.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "14aecf649931454321ff3b13c6014422bb06c955d7274281a2f7a922458c281f"
+size = 210169
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Formal document, reference sample. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-08-bookchapter"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-08_BookChapter.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "2b958600daec79373736f413f2712fcd9c604de2c352cbc1ec9d67cc5d7932f1"
+size = 2284439
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Book chapter, reference sample. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-09-scanned"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-09_Scanned.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "bb46d5c723fe1427dd1bf92ccd8653f9a5cef4054f7d878168b99477fa3792ae"
+size = 10630156
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Scanned document, reference sample for tagged scans; large file. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfua-ref-10-form"
+url = "https://web.archive.org/web/20230406175310id_/https://www.pdfa.org/wp-content/uploads/2020/09/PDFUA-Reference-Files_1-1_2020-09.zip"
+archive_member = "PDFUA-Reference-Files_1-1_2020-09/PDFUA-Ref-2-10_Form.pdf"
+archive_sha256 = "fcc434850869b65e288ab824982f75e944db9acfc9f8c0c4d57b09894382b560"
+archive_size = 26986602
+sha256 = "06d5cacd7c5ba9573a57c6d99d3f357ee14a24cff0c138036840fc44c6311806"
+size = 58650
+license = "unverified (pdfa.org terms not confirmed) – do not vendor"
+source = "PDF Association, PDF/UA-1 Reference Suite 1.1 (2020-09), https://pdfa.org/resource/pdfua-reference-suite/ ; Wayback snapshot 20230406175310 of the zip (pdfa.org blocks scripted downloads)"
+notes = "Interactive form, reference sample. Conforms to PDF/UA-1; suite covers multi-page content, complex tables, forms, links to structure elements and scans. The 2024-02 revision of the suite removed one file for inappropriate content; this pinned 2020-09 snapshot predates that."
+
+[[file]]
+id = "pdfjs-structure-simple"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/structure_simple.pdf"
+sha256 = "5b5510bb5f91c86aa0bbd4882842d4583c814e0e69a0cfbff0e70dc250a8d0f3"
+size = 40264
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/structure_simple.pdf"
+notes = "Minimal tagged document with a simple structure tree and Lang. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-structure-no-parent-tree"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/structure_no_parent_tree.pdf"
+sha256 = "8d19bf2392789721581a9bf2215e3aeb759a9ddad91338a58d7231fb9e62126e"
+size = 2394
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/structure_no_parent_tree.pdf"
+notes = "StructTreeRoot without a ParentTree and with a Table: tests tolerance of an incomplete structure tree. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-tagged-stamp"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/tagged_stamp.pdf"
+sha256 = "0ce2c20e36b70558eea45511a2c307ce7e22ad0d51be1216b27f7085c0311198"
+size = 18885
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/tagged_stamp.pdf"
+notes = "Tagged document containing a stamp annotation. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-issue6782"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/issue6782.pdf"
+sha256 = "acf8b64f51b07d79eebdc78c31cba97e52bc718e8383fedc6091d6f7d8efcca6"
+size = 23181
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/issue6782.pdf"
+notes = "Tagged with RoleMap and Lang. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-issue21346"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/issue21346.pdf"
+sha256 = "95a892ac8c5e10e114ab6648a1fcc4af6a58ee3e30947691fd0e5386e1aafd78"
+size = 5173
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/issue21346.pdf"
+notes = "Tiny tagged file with RoleMap and Lang. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-issue14165"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/issue14165.pdf"
+sha256 = "b7d9dd29715e00fc6059d5d47c26c31e8e645361baeaa1eb74f810dbe88ef3fe"
+size = 19588
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/issue14165.pdf"
+notes = "Tagged with RoleMap, Artifact marked content and Lang. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-issue9972-1"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/issue9972-1.pdf"
+sha256 = "dc072721f16954e5625e10df7c3d103e74454dd43395e98b68ddfb75d4b40379"
+size = 80970
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/issue9972-1.pdf"
+notes = "Tagged with ActualText, Alt, RoleMap and Lang. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-bug1997343"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/bug1997343.pdf"
+sha256 = "759755768fbebf2b4ea36dcaa45520fbf66249d6a5844a5ebeecb62d5dfbb37c"
+size = 189463
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/bug1997343.pdf"
+notes = "Richest tagged sample: RoleMap, Table, Alt, ActualText and Artifact content. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-chrome-text-selection-markedcontent"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/chrome-text-selection-markedContent.pdf"
+sha256 = "256551a6dabf4ae27b603a820bc58a15fa082919b023c7a181b491b92ef05b44"
+size = 137291
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/chrome-text-selection-markedContent.pdf"
+notes = "Tagged with marked content and Lang. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-bug1020226"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/bug1020226.pdf"
+sha256 = "50e91d373aa313537972519c65b050f8d4d5bd996859fa20756432c2029c3ff6"
+size = 184
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/bug1020226.pdf"
+notes = "Broken file: no startxref and no xref table (184 bytes); parser recovery. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-issue19800"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/issue19800.pdf"
+sha256 = "0f1a00f85f3949dfbec0b43347594f21728ce5d918329e9dc9315e39220b5d15"
+size = 1105
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/issue19800.pdf"
+notes = "Broken file: no startxref; parser recovery. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfjs-annotation-tx3"
+url = "https://raw.githubusercontent.com/mozilla/pdf.js/87b369cd9d4cfe415b587b26a8d81f486db02874/test/pdfs/annotation-tx3.pdf"
+sha256 = "15e3ac008cc848e593474aa312a9ef1fbecad1f69b4580361ffd2d334575bb91"
+size = 31642
+license = "unknown – do not vendor"
+source = "mozilla/pdf.js @ 87b369cd9d4c, test/pdfs/annotation-tx3.pdf"
+notes = "Many incremental updates (6 %%EOF markers) on a form document. pdf.js is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-2725-878725"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/org/apache/pdfbox/pdmodel/documentinterchange/logicalstructure/PDFBOX-2725-878725.pdf"
+sha256 = "2391439547bd98bad35a7f5574f88bf80b9043ac60abdf825d20b2f069328853"
+size = 21917
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/org/apache/pdfbox/pdmodel/documentinterchange/logicalstructure/PDFBOX-2725-878725.pdf"
+notes = "Tagged PDF used by the logical-structure tests; Lang and two %%EOF markers (linearized or incrementally updated). PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-6261-085992"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/org/apache/pdfbox/pdmodel/documentinterchange/logicalstructure/PDFBOX-6261-085992.pdf"
+sha256 = "d924bd1d3887c77102e4f7a22b70d737de8a80d34ccc809a78947c8449f72137"
+size = 19363
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/org/apache/pdfbox/pdmodel/documentinterchange/logicalstructure/PDFBOX-6261-085992.pdf"
+notes = "Tagged PDF used by the logical-structure tests; three revisions (incremental updates). PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-pdfa3a"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/input/merge/PDFA3A.pdf"
+sha256 = "f0d3b0e32007d4b385b8d31bd759ce0b3ec8a465d48dc7471b99faf5d8bd3b57"
+size = 49917
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/input/merge/PDFA3A.pdf"
+notes = "PDF/A-3a file: StructTreeRoot, RoleMap, Artifact content and Lang. PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-5811-362972"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/input/merge/PDFBOX-5811-362972.pdf"
+sha256 = "fd7bbd087f837ff27a95ca5677878ba994e977b7fea71cd9b60811c2fd1ed30a"
+size = 44338
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/input/merge/PDFBOX-5811-362972.pdf"
+notes = "Tagged with RoleMap and two %%EOF markers (linearized or incrementally updated). PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-5840-410609"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/input/merge/PDFBOX-5840-410609.pdf"
+sha256 = "bb9a93ebe8e376d060fb58979e44b30c0ccc7745c234002e90bd90fcbdff043f"
+size = 33084
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/input/merge/PDFBOX-5840-410609.pdf"
+notes = "Tagged with Artifact content. PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-4531-bidi-ligature-2"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/input/PDFBOX-4531-bidi-ligature-2.pdf"
+sha256 = "cf4d80ac8466d07678de7651d63fda747a34b600c57fb4a8eb8faf9d612465ae"
+size = 40256
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/input/PDFBOX-4531-bidi-ligature-2.pdf"
+notes = "Tagged bidi/ligature text with Artifact content and Lang. PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-test-landscape2"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/input/rendering/test-landscape2.pdf"
+sha256 = "1c37c29237d4ba247acbe155f7a1957ffe55b0e2795d25fe0a7c2e4f9158669d"
+size = 10381
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/input/rendering/test-landscape2.pdf"
+notes = "Tagged landscape page with Alt text and Lang. PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-sampleforspec"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/input/sampleForSpec.pdf"
+sha256 = "bef74b4a96b426b56a87e7646d6e7b4e03e20793226df95af40d31ec68dfa8ec"
+size = 9364
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/input/sampleForSpec.pdf"
+notes = "Small tagged sample with Lang and two %%EOF markers (linearized or incrementally updated). PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-6041-example"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/org/apache/pdfbox/pdfparser/PDFBOX-6041-example.pdf"
+sha256 = "070d35db701f6ccb5ed5e15de2048fe4ad6f4f97ccc7bdfd8687af362377b6ab"
+size = 21420
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/org/apache/pdfbox/pdfparser/PDFBOX-6041-example.pdf"
+notes = "Broken file: no startxref; xref reconstruction. PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-missingcatalog"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/org/apache/pdfbox/pdfparser/MissingCatalog.pdf"
+sha256 = "3d1f9323973b220031ab84b1451d53171dce7365c65dcbc40b535600de3d7323"
+size = 433
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/org/apache/pdfbox/pdfparser/MissingCatalog.pdf"
+notes = "Broken file: document catalog is missing (433 bytes). PDFBox is Apache-2.0 but individual test PDFs have their own provenance."
+
+[[file]]
+id = "pdfbox-acroform"
+url = "https://raw.githubusercontent.com/apache/pdfbox/43e0c588a76c66a7e738b6632fe245d886ce0826/pdfbox/src/test/resources/input/compression/acroform.pdf"
+sha256 = "c823ec6e6e852f569c3358c26e823e5fcd55ed1705891ce409d2ec703e8862c9"
+size = 64609
+license = "unknown – do not vendor"
+source = "apache/pdfbox @ 43e0c588a76c, pdfbox/src/test/resources/input/compression/acroform.pdf"
+notes = "Nine %%EOF markers: many incremental updates on an AcroForm file. PDFBox is Apache-2.0 but individual test PDFs have their own provenance."

@@ -1,0 +1,225 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 1926,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          300.0,
+          400.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": [
+        0,
+        1,
+        2
+      ]
+    }
+  ],
+  "catalog": {
+    "object": 1,
+    "marked": true,
+    "lang": "en-US"
+  },
+  "struct_outline": {
+    "root": 6,
+    "children": [
+      {
+        "object": 7,
+        "role": "Document",
+        "standard_role": "Document",
+        "kids": [
+          {
+            "kind": "elem",
+            "object": 8,
+            "role": "P",
+            "standard_role": "P",
+            "page": 0,
+            "kids": [
+              {
+                "kind": "mcr",
+                "page": 0,
+                "mcid": 0
+              }
+            ]
+          },
+          {
+            "kind": "elem",
+            "object": 9,
+            "role": "Link",
+            "standard_role": "Link",
+            "page": 0,
+            "kids": [
+              {
+                "kind": "mcr",
+                "page": 0,
+                "mcid": 1
+              },
+              {
+                "kind": "objr",
+                "page": 0,
+                "object": 14
+              }
+            ]
+          },
+          {
+            "kind": "elem",
+            "object": 10,
+            "role": "Link",
+            "standard_role": "Link",
+            "page": 0,
+            "kids": [
+              {
+                "kind": "objr",
+                "page": 0,
+                "object": 15
+              }
+            ]
+          },
+          {
+            "kind": "elem",
+            "object": 11,
+            "role": "Form",
+            "standard_role": "Form",
+            "page": 0,
+            "kids": [
+              {
+                "kind": "objr",
+                "page": 0,
+                "object": 16
+              }
+            ]
+          },
+          {
+            "kind": "elem",
+            "object": 12,
+            "role": "P",
+            "standard_role": "P",
+            "page": 0,
+            "kids": [
+              {
+                "kind": "mcr",
+                "page": 0,
+                "mcid": 2
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "page_keys": [
+      {
+        "page": 0,
+        "key": 0
+      }
+    ],
+    "parent_tree": [
+      {
+        "key": 0,
+        "parents": [
+          8,
+          9,
+          12
+        ]
+      }
+    ],
+    "parent_tree_objects": [
+      {
+        "key": 1,
+        "parent": 9
+      },
+      {
+        "key": 2,
+        "parent": 10
+      },
+      {
+        "key": 3,
+        "parent": 11
+      }
+    ],
+    "parent_tree_nodes": [
+      13
+    ],
+    "parent_tree_next_key": 4
+  },
+  "annotations": [
+    {
+      "page": 0,
+      "object": 14,
+      "subtype": "Link",
+      "rect": [
+        40.0,
+        305.0,
+        140.0,
+        325.0
+      ],
+      "flags": 4,
+      "struct_parent": 1,
+      "uri": "https://example.com/report",
+      "has_appearance": false
+    },
+    {
+      "page": 0,
+      "object": 15,
+      "subtype": "Link",
+      "rect": [
+        40.0,
+        270.0,
+        140.0,
+        290.0
+      ],
+      "flags": 4,
+      "struct_parent": 2,
+      "goto_page": 0,
+      "has_appearance": false
+    },
+    {
+      "page": 0,
+      "object": 16,
+      "subtype": "Widget",
+      "rect": [
+        40.0,
+        240.0,
+        200.0,
+        260.0
+      ],
+      "flags": 4,
+      "struct_parent": 3,
+      "has_appearance": false,
+      "field_type": "Tx",
+      "field_name": "name"
+    }
+  ]
+}

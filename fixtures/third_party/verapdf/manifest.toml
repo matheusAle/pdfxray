@@ -1,0 +1,420 @@
+# Manifest of the vendored veraPDF corpus subset. Checked by `cargo xtask vendored verify`.
+# `path` is relative to this directory and equals `original_path` (the path inside veraPDF-corpus).
+
+[[file]]
+path = "ISO 32000-1/veraPDF test suite 6-8-2-2-t01-fail-d.pdf"
+sha256 = "2abb9929f1797483228c39f098c3ccf0fda6bc5c39db627f8fbd302dce492224"
+size = 3381
+original_path = "ISO 32000-1/veraPDF test suite 6-8-2-2-t01-fail-d.pdf"
+standard = "ISO 32000-1"
+clause = "6.8.2.2"
+rule = "6-8-2-2-t01"
+expected = "fail"
+exercises = "MarkInfo /Marked is the name /true instead of a boolean; Document and Figure structure elements with an MCID-based kid."
+
+[[file]]
+path = "ISO 32000-1/veraPDF test suite 6-8-3-3-t01-fail-a.pdf"
+sha256 = "b19edaa377e6a8240a4437205ac4d145f01f03e7dd3efa315e3f0c4bbb116d42"
+size = 9709
+original_path = "ISO 32000-1/veraPDF test suite 6-8-3-3-t01-fail-a.pdf"
+standard = "ISO 32000-1"
+clause = "6.8.3.3"
+rule = "6-8-3-3-t01"
+expected = "fail"
+exercises = "Page has /StructParents but the ParentTree /Nums array is empty and the page has no structure elements."
+
+[[file]]
+path = "ISO 32000-1/veraPDF test suite 6-8-3-3-t01-fail-b.pdf"
+sha256 = "77c9327439148014f731ec349090c421c465f275c8d5925cc9812a7e4fa530be"
+size = 10301
+original_path = "ISO 32000-1/veraPDF test suite 6-8-3-3-t01-fail-b.pdf"
+standard = "ISO 32000-1"
+clause = "6.8.3.3"
+rule = "6-8-3-3-t01"
+expected = "fail"
+exercises = "Two pages: the first has a Span structure element, the second has /StructParents 1 that is missing from the ParentTree."
+
+[[file]]
+path = "ISO 32000-2/veraPDF test suite 6-1-3-t04-fail-b.pdf"
+sha256 = "08ec23ebcc0598f1235d2ca10df49af364ea371c1c2105ed6079c65354233586"
+size = 3182
+original_path = "ISO 32000-2/veraPDF test suite 6-1-3-t04-fail-b.pdf"
+standard = "ISO 32000-2"
+clause = "6.1.3"
+rule = "6-1-3-t04"
+expected = "fail"
+exercises = "PDF 2.0 file trailer without Info while the catalog has a PieceInfo entry."
+
+[[file]]
+path = "PDF_UA-1/7.1 General/7.1-t03-fail-b.pdf"
+sha256 = "7f6b4eaeb06a35d14d0352919e0f58b44833962e323811ac4737f8a45c6621cb"
+size = 13854
+original_path = "PDF_UA-1/7.1 General/7.1-t03-fail-b.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.1"
+rule = "7.1-3"
+expected = "fail"
+exercises = "Tagged page whose content stream has real content marked with MCIDs but no Artifact tagging for decorative content."
+
+[[file]]
+path = "PDF_UA-1/7.1 General/7.1-t03-pass-b.pdf"
+sha256 = "60f13bd812e3b5c8abd19c5ed01cc447dd433cc3b48e0b07cf5105067f8ffdf9"
+size = 14300
+original_path = "PDF_UA-1/7.1 General/7.1-t03-pass-b.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.1"
+rule = "7.1-3"
+expected = "pass"
+exercises = "Content stream explicitly distinguishes decoration with /Artifact next to MCID-marked real content."
+
+[[file]]
+path = "PDF_UA-1/7.1 General/7.1-t07-fail-a.pdf"
+sha256 = "9e5f3e1a7edd8d1aae8f38c72a027d78e7ceb7509177fe3b697480253481b8a8"
+size = 30478
+original_path = "PDF_UA-1/7.1 General/7.1-t07-fail-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.1"
+rule = "7.1-4"
+expected = "fail"
+exercises = "Structure tree with a RoleMap that remaps a custom type to Book and a Namespace entry."
+
+[[file]]
+path = "PDF_UA-1/7.1 General/7.1-t07-pass-a.pdf"
+sha256 = "31caf101d9855433905162f49b6f7d19c2e8c87aa0564f975554b473ef9cd916"
+size = 23149
+original_path = "PDF_UA-1/7.1 General/7.1-t07-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.1"
+rule = "7.1-4"
+expected = "pass"
+exercises = "Structure tree where all elements are standard types, no RoleMap remapping, Namespace entry present."
+
+[[file]]
+path = "PDF_UA-1/7.3 Graphics/7.3-t01-fail-a.pdf"
+sha256 = "98e57f3d54f85cadf14a457dbfbeeb74a7ca9a4c97807f093e3be484581b84e1"
+size = 34282
+original_path = "PDF_UA-1/7.3 Graphics/7.3-t01-fail-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.3"
+rule = "7.3-3"
+expected = "fail"
+exercises = "Figure structure element without Alt or ActualText; RoleMap plus MCID-linked figure content."
+
+[[file]]
+path = "PDF_UA-1/7.3 Graphics/7.3-t01-pass-a.pdf"
+sha256 = "9785e9bc4fb261d5b064a50675ef7fd3e81b3beb64b4050f1164766f35bba58b"
+size = 45437
+original_path = "PDF_UA-1/7.3 Graphics/7.3-t01-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.3"
+rule = "7.3-3"
+expected = "pass"
+exercises = "Figure structure element with an Alt entry; RoleMap plus MCID-linked figure content."
+
+[[file]]
+path = "PDF_UA-1/7.4 Headings/7.4.2 Numbered headings/7.4.2-t01-fail-a.pdf"
+sha256 = "8ca9c3916ff06667f59389d69005cce78fa0596c01931147d7d300c7cf227986"
+size = 33122
+original_path = "PDF_UA-1/7.4 Headings/7.4.2 Numbered headings/7.4.2-t01-fail-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.4.2"
+rule = "7.4.2-1"
+expected = "fail"
+exercises = "Numbered headings where the first heading level is H2 instead of H1."
+
+[[file]]
+path = "PDF_UA-1/7.4 Headings/7.4.2 Numbered headings/7.4.2-t01-pass-a.pdf"
+sha256 = "9a1aac50a3e4a7add225665db9fcafbdc74dc5d8ec70884ce214fabdde306f10"
+size = 33080
+original_path = "PDF_UA-1/7.4 Headings/7.4.2 Numbered headings/7.4.2-t01-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.4.2"
+rule = "7.4.2-1"
+expected = "pass"
+exercises = "Numbered headings starting at H1 with a RoleMap and MCID-linked heading content."
+
+[[file]]
+path = "PDF_UA-1/7.5 Tables/7.5-t01-fail-a.pdf"
+sha256 = "54d49f7289d91b120fce690e59dc97f2ed7a3cadc09a2d4eef94ccc42f1da928"
+size = 35332
+original_path = "PDF_UA-1/7.5 Tables/7.5-t01-fail-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.5"
+rule = "7.5-1"
+expected = "fail"
+exercises = "Table with TH cells lacking Scope and no ID/Headers on data cells; artifacts and RoleMap present."
+
+[[file]]
+path = "PDF_UA-1/7.5 Tables/7.5-t01-pass-a.pdf"
+sha256 = "d91d6aeb4203b6852a20aebbb2d1399f72ad5527e7056a2577168a2fde60eb4f"
+size = 37174
+original_path = "PDF_UA-1/7.5 Tables/7.5-t01-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.5"
+rule = "7.5-1"
+expected = "pass"
+exercises = "Table whose TH cells all carry a Scope attribute."
+
+[[file]]
+path = "PDF_UA-1/7.9 Notes and references/7.9-t01-fail-a.pdf"
+sha256 = "32e3b981bf73febec6105e2244cc80ba82b067d4875ee51d9475fd03b63062b0"
+size = 44438
+original_path = "PDF_UA-1/7.9 Notes and references/7.9-t01-fail-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.9"
+rule = "7.9-2"
+expected = "fail"
+exercises = "Note structure element without an ID entry; Link annotations, RoleMap and artifacts present."
+
+[[file]]
+path = "PDF_UA-1/7.9 Notes and references/7.9-t01-pass-a.pdf"
+sha256 = "0dc997836f20ee7069f95002b1b38a186d88d7d86eb5c8e8512ecc8d90e98a65"
+size = 44478
+original_path = "PDF_UA-1/7.9 Notes and references/7.9-t01-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.9"
+rule = "7.9-2"
+expected = "pass"
+exercises = "Note structure element with an ID entry; Link annotations, RoleMap and artifacts present."
+
+[[file]]
+path = "PDF_UA-1/7.18 Annotations/7.18.1 General/7.18.1-t02-fail-a.pdf"
+sha256 = "b48512600f033b396b9476cdbcff161295f14c3fe99f11c38a48081685a94b7b"
+size = 20213
+original_path = "PDF_UA-1/7.18 Annotations/7.18.1 General/7.18.1-t02-fail-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.18.1"
+rule = "7.18.1-4"
+expected = "fail"
+exercises = "Highlight annotation inside an Annot structure element without Alt and without /Contents on the OBJR."
+
+[[file]]
+path = "PDF_UA-1/7.18 Annotations/7.18.1 General/7.18.1-t02-pass-a.pdf"
+sha256 = "12b4e06019bb5e1765d0bc371df16c84635a1e5145f2ecb5fba51c17245ebc51"
+size = 20226
+original_path = "PDF_UA-1/7.18 Annotations/7.18.1 General/7.18.1-t02-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.18.1"
+rule = "7.18.1-4"
+expected = "pass"
+exercises = "Highlight annotation inside an Annot structure element that has an Alt entry."
+
+[[file]]
+path = "PDF_UA-1/7.18 Annotations/7.18.5 Links/7.18.5-t01-fail-a.pdf"
+sha256 = "25bf17f0fd5e0634a66f97e6e92c6159630219a682afa17e9a0428e744cb0dd9"
+size = 22863
+original_path = "PDF_UA-1/7.18 Annotations/7.18.5 Links/7.18.5-t01-fail-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.18.5"
+rule = "7.18.5-1"
+expected = "fail"
+exercises = "Link annotation whose OBJR is nested within a Paragraph instead of a Link structure element."
+
+[[file]]
+path = "PDF_UA-1/7.18 Annotations/7.18.5 Links/7.18.5-t01-pass-a.pdf"
+sha256 = "0168782a9b7162669f6785eb6dcb9accadaa8650de94b0e92951c5d08a2bff67"
+size = 22935
+original_path = "PDF_UA-1/7.18 Annotations/7.18.5 Links/7.18.5-t01-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.18.5"
+rule = "7.18.5-1"
+expected = "pass"
+exercises = "Link annotation nested in a Link structure element with Alt and ActualText."
+
+[[file]]
+path = "PDF_UA-1/7.20 XObjects/7.20-t02-fail-a.pdf"
+sha256 = "2ad34b21477c772e759763bc4334900ca1ae7c895821942e4e832aaaa5e88487"
+size = 8237
+original_path = "PDF_UA-1/7.20 XObjects/7.20-t02-fail-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.20"
+rule = "7.20-2"
+expected = "fail"
+exercises = "Form XObject containing an MCID that is referenced three times from the structure tree."
+
+[[file]]
+path = "PDF_UA-1/7.20 XObjects/7.20-t02-pass-a.pdf"
+sha256 = "373ac02839891376111854d9b49517ff192327fcd411ce53f408f70f72ca9ae6"
+size = 20957
+original_path = "PDF_UA-1/7.20 XObjects/7.20-t02-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.20"
+rule = "7.20-2"
+expected = "pass"
+exercises = "Form XObject containing an MCID referenced exactly once from the structure tree."
+
+[[file]]
+path = "PDF_UA-1/7.2 Text/7.2-t29-fail-f.pdf"
+sha256 = "44218f07a1be906c3628ff2e4ac0067d573d409736655cd1837ad8b3aa13929a"
+size = 15183
+original_path = "PDF_UA-1/7.2 Text/7.2-t29-fail-f.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.2"
+rule = "7.2-3"
+expected = "fail"
+exercises = "Paragraph structure element with an empty primary subtag in its Lang entry."
+
+[[file]]
+path = "PDF_UA-1/7.2 Text/7.2-t29-pass-a.pdf"
+sha256 = "0bbe36b1621179567a5422b848e9d9660b4f3c9b87d03e2c47df1fa549e397fa"
+size = 21034
+original_path = "PDF_UA-1/7.2 Text/7.2-t29-pass-a.pdf"
+standard = "PDF/UA-1 (ISO 14289-1)"
+clause = "7.2"
+rule = "7.2-3"
+expected = "pass"
+exercises = "Document catalog Lang entry present with a valid primary language subtag."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.2 Real content/8.2.2-t01-fail-b.pdf"
+sha256 = "ecfff377142aec9010b0d09c402a8f82f2f7fbf1e6c404362deed8797bee3417"
+size = 16897
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.2 Real content/8.2.2-t01-fail-b.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.2"
+rule = "8.2.2-1"
+expected = "fail"
+exercises = "PDF 2.0 namespaces: content stream without an Artifact tag around decorative content."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.2 Real content/8.2.2-t01-pass-b.pdf"
+sha256 = "2a548a894cfdbc5a752c1de7b039fbafa8d249158b9d05166a4fa00589e17c6c"
+size = 17028
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.2 Real content/8.2.2-t01-pass-b.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.2"
+rule = "8.2.2-1"
+expected = "pass"
+exercises = "PDF 2.0 namespaces: content explicitly distinguished with the Artifact tag."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.4 Structure types/8.2.4-t01-fail-b.pdf"
+sha256 = "633beb1f2adf2be33817f9eb3e30b29d0180b0a27894f9b912f0ecb9b7deb1a5"
+size = 32215
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.4 Structure types/8.2.4-t01-fail-b.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.4"
+rule = "8.2.4-1"
+expected = "fail"
+exercises = "RoleMap chain Standard -> Text body -> p (wrong case), so the mapping does not reach a standard type."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.4 Structure types/8.2.4-t01-pass-b.pdf"
+sha256 = "5fc6feb15cd4f2bfce51a227e58853cf7f4e11f3cf139e79eadfa4c228eff4c8"
+size = 32233
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.4 Structure types/8.2.4-t01-pass-b.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.4"
+rule = "8.2.4-1"
+expected = "pass"
+exercises = "Indirect RoleMap chain Standard -> Text body -> P that resolves to a standard type."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.12 Heading (Hn) and (H)/8.2.5.12-t01-fail-a.pdf"
+sha256 = "622daa3fab3908c964786abfadccdca855183ae863a75a1c8a723efeaf00f1e0"
+size = 16048
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.12 Heading (Hn) and (H)/8.2.5.12-t01-fail-a.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.12"
+rule = "8.2.5.12-1"
+expected = "fail"
+exercises = "Structure tree using the unnumbered H heading type, which PDF 2.0 forbids."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.12 Heading (Hn) and (H)/8.2.5.12-t01-pass-a.pdf"
+sha256 = "ca2aaf4d449cf936d0c3684f7cc2cddcfa1adc43daa8e8f61ee23b3c0d9a691a"
+size = 16069
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.12 Heading (Hn) and (H)/8.2.5.12-t01-pass-a.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.12"
+rule = "8.2.5.12-1"
+expected = "pass"
+exercises = "Structure tree using numbered H1 heading instead of H."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.20 Link and Reference/8.2.5.20-t02-fail-b.pdf"
+sha256 = "c5713e856fb8a396ff8ccf0160609e3339c7e164117cce55541b03186390085d"
+size = 31915
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.20 Link and Reference/8.2.5.20-t02-fail-b.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.20"
+rule = "8.2.5.20-2"
+expected = "fail"
+exercises = "One Link structure element holding Link annotations that target different locations."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.20 Link and Reference/8.2.5.20-t02-pass-b.pdf"
+sha256 = "045fc93ca051f5aaa7a3013068ef40d61d95813ac832c376a62c178b4422175b"
+size = 31923
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.20 Link and Reference/8.2.5.20-t02-pass-b.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.20"
+rule = "8.2.5.20-2"
+expected = "pass"
+exercises = "Link structure elements whose annotations all target the same location."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.25 List (L, LI, LBody)/8.2.5.25-t01-fail-a.pdf"
+sha256 = "4032b9bded254346d3ce8b792e5c514c212c06eccf377ac172aff8fe6229f066"
+size = 34843
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.25 List (L, LI, LBody)/8.2.5.25-t01-fail-a.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.25"
+rule = "8.2.5.25-1"
+expected = "fail"
+exercises = "List structure element with the ListNumbering attribute set to None."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.26 Table (Table, TR, TH, TD, THead, TBody, TFoot)/8.2.5.26-t03-fail-a.pdf"
+sha256 = "7fe078b93a3ce6293a90378c40f0bf66220549c73060228d8942914fcef8c0a4"
+size = 26749
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.26 Table (Table, TR, TH, TD, THead, TBody, TFoot)/8.2.5.26-t03-fail-a.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.26"
+rule = "8.2.5.26-3"
+expected = "fail"
+exercises = "Regular Table rule: ColSpan 2 on TH1 and RowSpan 2 on an empty cell."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.26 Table (Table, TR, TH, TD, THead, TBody, TFoot)/8.2.5.26-t05-fail-a.pdf"
+sha256 = "0265745a52fa46b5a59c5202f2f2522b4eda501abfbd221380c28ea84e317ee9"
+size = 40399
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.26 Table (Table, TR, TH, TD, THead, TBody, TFoot)/8.2.5.26-t05-fail-a.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.26"
+rule = "8.2.5.26-5"
+expected = "fail"
+exercises = "Table with TH cells without Scope and no ID/Headers on data cells, artifacts and RoleMap."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.26 Table (Table, TR, TH, TD, THead, TBody, TFoot)/8.2.5.26-t05-pass-a.pdf"
+sha256 = "ee5fa4b0883f5a0cf36c2800a2b2f18048a4e4a71c493c9872cc927fbe97e20c"
+size = 41982
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.26 Table (Table, TR, TH, TD, THead, TBody, TFoot)/8.2.5.26-t05-pass-a.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.26"
+rule = "8.2.5.26-5"
+expected = "pass"
+exercises = "Table whose TH cells all have a Scope attribute."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.28 Figure/8.2.5.28.2 Figure properties/8.2.5.28.2-t01-fail-a.pdf"
+sha256 = "22dd83923a817de0c1f9dd8a560382f5b2ed93bf14ecf1545c937f6a674a15e8"
+size = 25614
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.28 Figure/8.2.5.28.2 Figure properties/8.2.5.28.2-t01-fail-a.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.28.2"
+rule = "8.2.5.28.2-1"
+expected = "fail"
+exercises = "Figure structure element without Alt or ActualText."
+
+[[file]]
+path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.28 Figure/8.2.5.28.2 Figure properties/8.2.5.28.2-t01-pass-a.pdf"
+sha256 = "bc58f794982d708053af7fcafb8e76d161340b1016fb978d650eaacdc9b540e6"
+size = 25599
+original_path = "PDF_UA-2/8.2 Logical structure/8.2.5 Additional requirements for specific structure types/8.2.5.28 Figure/8.2.5.28.2 Figure properties/8.2.5.28.2-t01-pass-a.pdf"
+standard = "PDF/UA-2 (ISO 14289-2)"
+clause = "8.2.5.28.2"
+rule = "8.2.5.28.2-1"
+expected = "pass"
+exercises = "Figure structure element with an Alt entry."

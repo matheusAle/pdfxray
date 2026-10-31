@@ -1,0 +1,49 @@
+{
+  "header_version": "1.4",
+  "revision_count": 2,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 410,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "number": 2,
+      "xref_kind": "table",
+      "xref_offset": 826,
+      "prev": 410,
+      "objects": [
+        4,
+        6
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          240.0,
+          100.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": []
+    }
+  ],
+  "catalog": {
+    "object": 1
+  }
+}

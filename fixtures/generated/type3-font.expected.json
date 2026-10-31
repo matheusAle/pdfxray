@@ -1,0 +1,158 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 868,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          200.0,
+          150.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": []
+    }
+  ],
+  "catalog": {
+    "object": 1
+  },
+  "text_ops": [
+    {
+      "page": 0,
+      "op_index": 5,
+      "operator": "Tj",
+      "text": "ab",
+      "font": "T3",
+      "font_size": 20.0,
+      "effective_size": 20.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        30.0,
+        100.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 10,
+      "operator": "Tj",
+      "text": "a",
+      "font": "T3",
+      "font_size": 1.0,
+      "effective_size": 30.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        120.0,
+        100.0
+      ]
+    }
+  ],
+  "type3_glyphs": [
+    {
+      "page": 0,
+      "op_index": 5,
+      "glyph_index": 0,
+      "code": 97,
+      "glyph_name": "sq",
+      "proc_object": 6,
+      "origin": [
+        30.0,
+        100.0
+      ],
+      "declared_bbox": [
+        30.0,
+        100.0,
+        46.0,
+        116.0
+      ],
+      "path_bbox": [
+        30.0,
+        100.0,
+        46.0,
+        116.0
+      ],
+      "paint": "fill"
+    },
+    {
+      "page": 0,
+      "op_index": 5,
+      "glyph_index": 1,
+      "code": 98,
+      "glyph_name": "tri",
+      "proc_object": 7,
+      "origin": [
+        50.0,
+        100.0
+      ],
+      "declared_bbox": [
+        50.0,
+        100.0,
+        62.0,
+        114.0
+      ],
+      "path_bbox": [
+        51.0,
+        101.0,
+        61.0,
+        113.0
+      ],
+      "paint": "stroke"
+    },
+    {
+      "page": 0,
+      "op_index": 10,
+      "glyph_index": 0,
+      "code": 97,
+      "glyph_name": "sq",
+      "proc_object": 6,
+      "origin": [
+        120.0,
+        100.0
+      ],
+      "declared_bbox": [
+        120.0,
+        100.0,
+        144.0,
+        124.0
+      ],
+      "path_bbox": [
+        120.0,
+        100.0,
+        144.0,
+        124.0
+      ],
+      "paint": "fill"
+    }
+  ]
+}

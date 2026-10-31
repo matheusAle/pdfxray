@@ -1,0 +1,114 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R /MarkInfo << /Marked true >> /Lang (en-US) >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /StructParents 0 /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 623 >>
+stream
+/TH << /MCID 0 >> BDC BT /F1 12 Tf 40 340 Td (Region) Tj ET EMC
+/TH << /MCID 1 >> BDC BT /F1 12 Tf 120 340 Td (Sales) Tj ET EMC
+/TH << /MCID 2 >> BDC BT /F1 12 Tf 120 320 Td (Q1) Tj ET EMC
+/TH << /MCID 3 >> BDC BT /F1 12 Tf 200 320 Td (Q2) Tj ET EMC
+/TH << /MCID 4 >> BDC BT /F1 12 Tf 40 300 Td (North) Tj ET EMC
+/TD << /MCID 5 >> BDC BT /F1 12 Tf 120 300 Td (1.2) Tj ET EMC
+/TD << /MCID 6 >> BDC BT /F1 12 Tf 200 300 Td (1.4) Tj ET EMC
+/TH << /MCID 7 >> BDC BT /F1 12 Tf 40 280 Td (South) Tj ET EMC
+/TD << /MCID 8 >> BDC BT /F1 12 Tf 120 280 Td (0.9) Tj ET EMC
+/TD << /MCID 9 >> BDC BT /F1 12 Tf 200 280 Td (1.1) Tj ET EMC
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /StructTreeRoot /K 7 0 R /IDTree << /Names [(h-north) 17 0 R (h-q1) 15 0 R (h-q2) 16 0 R (h-region) 13 0 R (h-sales) 14 0 R (h-south) 20 0 R] >> /ParentTree 23 0 R /ParentTreeNextKey 1 >>
+endobj
+7 0 obj
+<< /Type /StructElem /S /Document /P 6 0 R /K [8 0 R] >>
+endobj
+8 0 obj
+<< /Type /StructElem /S /Table /P 7 0 R /K [9 0 R 10 0 R 11 0 R 12 0 R] >>
+endobj
+9 0 obj
+<< /Type /StructElem /S /TR /P 8 0 R /K [13 0 R 14 0 R] >>
+endobj
+10 0 obj
+<< /Type /StructElem /S /TR /P 8 0 R /K [15 0 R 16 0 R] >>
+endobj
+11 0 obj
+<< /Type /StructElem /S /TR /P 8 0 R /K [17 0 R 18 0 R 19 0 R] >>
+endobj
+12 0 obj
+<< /Type /StructElem /S /TR /P 8 0 R /K [20 0 R 21 0 R 22 0 R] >>
+endobj
+13 0 obj
+<< /Type /StructElem /S /TH /P 9 0 R /Pg 3 0 R /ID (h-region) /A << /O /Table /RowSpan 2 >> /K 0 >>
+endobj
+14 0 obj
+<< /Type /StructElem /S /TH /P 9 0 R /Pg 3 0 R /ID (h-sales) /A << /O /Table /ColSpan 2 >> /K 1 >>
+endobj
+15 0 obj
+<< /Type /StructElem /S /TH /P 10 0 R /Pg 3 0 R /ID (h-q1) /A << /O /Table /Headers [(h-sales)] >> /K 2 >>
+endobj
+16 0 obj
+<< /Type /StructElem /S /TH /P 10 0 R /Pg 3 0 R /ID (h-q2) /A << /O /Table /Headers [(h-sales)] >> /K 3 >>
+endobj
+17 0 obj
+<< /Type /StructElem /S /TH /P 11 0 R /Pg 3 0 R /ID (h-north) /K 4 >>
+endobj
+18 0 obj
+<< /Type /StructElem /S /TD /P 11 0 R /Pg 3 0 R /A << /O /Table /Headers [(h-north) (h-q1)] >> /K 5 >>
+endobj
+19 0 obj
+<< /Type /StructElem /S /TD /P 11 0 R /Pg 3 0 R /A << /O /Table /Headers [(h-north) (h-q2)] >> /K 6 >>
+endobj
+20 0 obj
+<< /Type /StructElem /S /TH /P 12 0 R /Pg 3 0 R /ID (h-south) /K 7 >>
+endobj
+21 0 obj
+<< /Type /StructElem /S /TD /P 12 0 R /Pg 3 0 R /A << /O /Table /Headers [(h-south) (h-q1)] >> /K 8 >>
+endobj
+22 0 obj
+<< /Type /StructElem /S /TD /P 12 0 R /Pg 3 0 R /A << /O /Table /Headers [(h-south) (h-q2) (h-missing)] >> /K 9 >>
+endobj
+23 0 obj
+<< /Nums [0 [13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 19 0 R 20 0 R 21 0 R 22 0 R]] >>
+endobj
+xref
+0 24
+0000000000 65535 f 
+0000000015 00000 n 
+0000000129 00000 n 
+0000000186 00000 n 
+0000000329 00000 n 
+0000001003 00000 n 
+0000001073 00000 n 
+0000001285 00000 n 
+0000001357 00000 n 
+0000001447 00000 n 
+0000001521 00000 n 
+0000001596 00000 n 
+0000001678 00000 n 
+0000001760 00000 n 
+0000001876 00000 n 
+0000001991 00000 n 
+0000002114 00000 n 
+0000002237 00000 n 
+0000002323 00000 n 
+0000002442 00000 n 
+0000002561 00000 n 
+0000002647 00000 n 
+0000002766 00000 n 
+0000002897 00000 n 
+trailer
+<< /Size 24 /Root 1 0 R /ID [<70646678726179000000000000000001> <70646678726179000000000000000001>] >>
+startxref
+3001
+%%EOF

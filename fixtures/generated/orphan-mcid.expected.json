@@ -1,0 +1,120 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 1108,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          200.0,
+          200.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": [
+        0,
+        1,
+        2
+      ]
+    }
+  ],
+  "catalog": {
+    "object": 1,
+    "marked": true,
+    "lang": "en-US"
+  },
+  "struct_tree": {
+    "root": 6,
+    "children": [
+      {
+        "object": 7,
+        "role": "Document",
+        "standard_role": "Document",
+        "children": [
+          {
+            "object": 8,
+            "role": "P",
+            "standard_role": "P",
+            "page": 0,
+            "mcids": [
+              0
+            ]
+          },
+          {
+            "object": 9,
+            "role": "P",
+            "standard_role": "P",
+            "page": 0,
+            "mcids": [
+              5
+            ]
+          },
+          {
+            "object": 10,
+            "role": "P",
+            "standard_role": "P",
+            "page": 0,
+            "mcids": [
+              2
+            ]
+          }
+        ]
+      }
+    ],
+    "parent_tree": [
+      {
+        "key": 0,
+        "parents": [
+          8,
+          null,
+          8
+        ]
+      }
+    ]
+  },
+  "defects": [
+    {
+      "kind": "orphan_mcid",
+      "page": 0,
+      "mcid": 1
+    },
+    {
+      "kind": "missing_mcid",
+      "elem": 9,
+      "page": 0,
+      "mcid": 5
+    },
+    {
+      "kind": "parent_tree_mismatch",
+      "key": 0,
+      "mcid": 2,
+      "parent_tree": 8,
+      "k_parent": 10
+    }
+  ]
+}

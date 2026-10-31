@@ -1,0 +1,480 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 1127,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          400.0,
+          400.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": []
+    }
+  ],
+  "catalog": {
+    "object": 1
+  },
+  "paint_ops": [
+    {
+      "page": 0,
+      "op_index": 3,
+      "operator": "f",
+      "bbox": [
+        20.0,
+        20.0,
+        100.0,
+        80.0
+      ],
+      "visible_bbox": [
+        20.0,
+        20.0,
+        100.0,
+        80.0
+      ],
+      "fill": {
+        "space": "DeviceRGB",
+        "components": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal"
+    },
+    {
+      "page": 0,
+      "op_index": 12,
+      "operator": "S",
+      "bbox": [
+        120.0,
+        20.0,
+        200.0,
+        80.0
+      ],
+      "visible_bbox": [
+        120.0,
+        20.0,
+        200.0,
+        80.0
+      ],
+      "stroke": {
+        "space": "DeviceRGB",
+        "components": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "stroke_alpha": 1.0,
+      "blend_mode": "Normal",
+      "line": {
+        "width": 4.0,
+        "cap": 1,
+        "join": 1,
+        "dash_array": [
+          6.0,
+          3.0
+        ],
+        "dash_phase": 2.0
+      }
+    },
+    {
+      "page": 0,
+      "op_index": 19,
+      "operator": "B",
+      "bbox": [
+        220.0,
+        20.0,
+        300.0,
+        80.0
+      ],
+      "visible_bbox": [
+        220.0,
+        20.0,
+        300.0,
+        80.0
+      ],
+      "fill": {
+        "space": "DeviceGray",
+        "components": [
+          0.5
+        ]
+      },
+      "stroke": {
+        "space": "DeviceRGB",
+        "components": [
+          0.2,
+          0.8,
+          0.2
+        ]
+      },
+      "fill_alpha": 1.0,
+      "stroke_alpha": 1.0,
+      "blend_mode": "Normal",
+      "line": {
+        "width": 2.0,
+        "cap": 0,
+        "join": 0,
+        "dash_array": [],
+        "dash_phase": 0.0
+      }
+    },
+    {
+      "page": 0,
+      "op_index": 30,
+      "operator": "B",
+      "bbox": [
+        20.0,
+        100.0,
+        100.0,
+        160.0
+      ],
+      "visible_bbox": [
+        20.0,
+        100.0,
+        100.0,
+        160.0
+      ],
+      "fill": {
+        "space": "DeviceCMYK",
+        "components": [
+          0.0,
+          1.0,
+          1.0,
+          0.0
+        ]
+      },
+      "stroke": {
+        "space": "DeviceCMYK",
+        "components": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "fill_alpha": 1.0,
+      "stroke_alpha": 1.0,
+      "blend_mode": "Normal",
+      "line": {
+        "width": 8.0,
+        "cap": 2,
+        "join": 0,
+        "dash_array": [],
+        "dash_phase": 0.0
+      }
+    },
+    {
+      "page": 0,
+      "op_index": 38,
+      "operator": "f",
+      "bbox": [
+        170.0,
+        120.0,
+        210.0,
+        160.0
+      ],
+      "visible_bbox": [
+        170.0,
+        120.0,
+        210.0,
+        160.0
+      ],
+      "fill": {
+        "space": "DeviceRGB",
+        "components": [
+          0.0,
+          0.5,
+          0.0
+        ]
+      },
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal"
+    },
+    {
+      "page": 0,
+      "op_index": 43,
+      "operator": "f",
+      "bbox": [
+        130.0,
+        100.0,
+        150.0,
+        130.0
+      ],
+      "visible_bbox": [
+        130.0,
+        100.0,
+        150.0,
+        130.0
+      ],
+      "fill": {
+        "space": "DeviceGray",
+        "components": [
+          0.6
+        ]
+      },
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal"
+    },
+    {
+      "page": 0,
+      "op_index": 49,
+      "operator": "f",
+      "bbox": [
+        220.0,
+        100.0,
+        320.0,
+        200.0
+      ],
+      "visible_bbox": [
+        220.0,
+        100.0,
+        320.0,
+        200.0
+      ],
+      "fill": {
+        "space": "DeviceRGB",
+        "components": [
+          1.0,
+          0.5,
+          0.0
+        ]
+      },
+      "fill_alpha": 0.5,
+      "blend_mode": "Multiply"
+    },
+    {
+      "page": 0,
+      "op_index": 53,
+      "operator": "S",
+      "bbox": [
+        250.0,
+        130.0,
+        350.0,
+        230.0
+      ],
+      "visible_bbox": [
+        250.0,
+        130.0,
+        350.0,
+        230.0
+      ],
+      "stroke": {
+        "space": "DeviceRGB",
+        "components": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "stroke_alpha": 0.5,
+      "blend_mode": "Multiply",
+      "line": {
+        "width": 6.0,
+        "cap": 0,
+        "join": 0,
+        "dash_array": [],
+        "dash_phase": 0.0
+      }
+    },
+    {
+      "page": 0,
+      "op_index": 59,
+      "operator": "sh",
+      "bbox": [
+        200.0,
+        220.0,
+        350.0,
+        320.0
+      ],
+      "visible_bbox": [
+        200.0,
+        220.0,
+        350.0,
+        320.0
+      ],
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal",
+      "clip": [
+        200.0,
+        220.0,
+        350.0,
+        320.0
+      ],
+      "shading": "Sh1"
+    },
+    {
+      "page": 0,
+      "op_index": 62,
+      "operator": "f",
+      "bbox": [
+        150.0,
+        200.0,
+        230.0,
+        260.0
+      ],
+      "visible_bbox": [
+        200.0,
+        220.0,
+        230.0,
+        260.0
+      ],
+      "fill": {
+        "space": "DeviceRGB",
+        "components": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal",
+      "clip": [
+        200.0,
+        220.0,
+        350.0,
+        320.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 65,
+      "operator": "f",
+      "bbox": [
+        220.0,
+        240.0,
+        280.0,
+        280.0
+      ],
+      "visible_bbox": [
+        220.0,
+        240.0,
+        280.0,
+        280.0
+      ],
+      "fill": {
+        "space": "DeviceRGB",
+        "components": [
+          0.0,
+          0.6,
+          0.0
+        ]
+      },
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal",
+      "clip": [
+        200.0,
+        220.0,
+        350.0,
+        320.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 68,
+      "operator": "f",
+      "bbox": [
+        360.0,
+        330.0,
+        390.0,
+        360.0
+      ],
+      "visible_bbox": null,
+      "fill": {
+        "space": "DeviceRGB",
+        "components": [
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal",
+      "clip": [
+        200.0,
+        220.0,
+        350.0,
+        320.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 75,
+      "operator": "f",
+      "bbox": [
+        230.0,
+        230.0,
+        270.0,
+        270.0
+      ],
+      "visible_bbox": [
+        240.0,
+        240.0,
+        270.0,
+        270.0
+      ],
+      "fill": {
+        "space": "DeviceGray",
+        "components": [
+          0.0
+        ]
+      },
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal",
+      "clip": [
+        240.0,
+        240.0,
+        350.0,
+        300.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 79,
+      "operator": "f",
+      "bbox": [
+        20.0,
+        200.0,
+        60.0,
+        240.0
+      ],
+      "visible_bbox": [
+        20.0,
+        200.0,
+        60.0,
+        240.0
+      ],
+      "fill": {
+        "space": "DeviceGray",
+        "components": [
+          0.0
+        ]
+      },
+      "fill_alpha": 1.0,
+      "blend_mode": "Normal"
+    }
+  ]
+}

@@ -1,0 +1,302 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 786,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          400.0,
+          300.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": []
+    }
+  ],
+  "catalog": {
+    "object": 1
+  },
+  "text_ops": [
+    {
+      "page": 0,
+      "op_index": 3,
+      "operator": "Tj",
+      "text": "Plain Tj",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 12.0,
+      "effective_size": 12.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        20.0,
+        270.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 11,
+      "operator": "Tj",
+      "text": "Spaced out words",
+      "font": "F2",
+      "base_font": "Times-Roman",
+      "font_size": 18.0,
+      "effective_size": 18.0,
+      "render_mode": 0,
+      "char_spacing": 2.0,
+      "word_spacing": 5.0,
+      "horizontal_scaling": 150.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        20.0,
+        240.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 20,
+      "operator": "Tj",
+      "text": "Line one",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 12.0,
+      "effective_size": 12.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 14.0,
+      "origin": [
+        20.0,
+        210.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 21,
+      "operator": "'",
+      "text": "Line two",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 12.0,
+      "effective_size": 12.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 14.0,
+      "origin": [
+        20.0,
+        196.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 22,
+      "operator": "\"",
+      "text": "Line three",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 12.0,
+      "effective_size": 12.0,
+      "render_mode": 0,
+      "char_spacing": 1.0,
+      "word_spacing": 3.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 14.0,
+      "origin": [
+        20.0,
+        182.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 30,
+      "operator": "Tj",
+      "text": "Sized by Tm",
+      "font": "F2",
+      "base_font": "Times-Roman",
+      "font_size": 1.0,
+      "effective_size": 16.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        20.0,
+        150.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 36,
+      "operator": "Tj",
+      "text": "Raised",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 12.0,
+      "effective_size": 12.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 5.0,
+      "leading": 0.0,
+      "origin": [
+        20.0,
+        125.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 43,
+      "operator": "Tj",
+      "text": "Fill",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 24.0,
+      "effective_size": 24.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        20.0,
+        80.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 46,
+      "operator": "Tj",
+      "text": "Line",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 24.0,
+      "effective_size": 24.0,
+      "render_mode": 1,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        110.0,
+        80.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 49,
+      "operator": "Tj",
+      "text": "Both",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 24.0,
+      "effective_size": 24.0,
+      "render_mode": 2,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        200.0,
+        80.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 52,
+      "operator": "Tj",
+      "text": "Gone",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 24.0,
+      "effective_size": 24.0,
+      "render_mode": 3,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        290.0,
+        80.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 58,
+      "operator": "TJ",
+      "text": "Kerning",
+      "font": "F1",
+      "base_font": "Helvetica",
+      "font_size": 12.0,
+      "effective_size": 12.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 100.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        20.0,
+        50.0
+      ]
+    },
+    {
+      "page": 0,
+      "op_index": 64,
+      "operator": "TJ",
+      "text": "Shifted",
+      "font": "F2",
+      "base_font": "Times-Roman",
+      "font_size": 12.0,
+      "effective_size": 12.0,
+      "render_mode": 0,
+      "char_spacing": 0.0,
+      "word_spacing": 0.0,
+      "horizontal_scaling": 150.0,
+      "rise": 0.0,
+      "leading": 0.0,
+      "origin": [
+        24.5,
+        25.0
+      ]
+    }
+  ]
+}

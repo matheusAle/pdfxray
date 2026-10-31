@@ -1,0 +1,73 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R /MarkInfo << /Marked true >> /Lang (en-US) >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /StructParents 0 /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 385 >>
+stream
+/P << /MCID 0 >> BDC BT /F1 12 Tf 40 340 Td (Revenue grew in every region.) Tj ET EMC
+/P << /MCID 1 >> BDC BT /F1 12 Tf 40 310 Td (Costs stayed flat this year.) Tj ET EMC
+/P << /MCID 2 >> BDC BT /F1 12 Tf 40 280 Td (Closing remarks follow.) Tj ET EMC
+/Lbl << /MCID 3 >> BDC BT /F1 8 Tf 40 60 Td (1) Tj ET EMC
+/P << /MCID 4 >> BDC BT /F1 8 Tf 50 60 Td (Source: annual report.) Tj ET EMC
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /StructTreeRoot /K 7 0 R /ParentTree 14 0 R /ParentTreeNextKey 1 >>
+endobj
+7 0 obj
+<< /Type /StructElem /S /Document /P 6 0 R /K [8 0 R 9 0 R 12 0 R 13 0 R] >>
+endobj
+8 0 obj
+<< /Type /StructElem /S /P /P 7 0 R /Pg 3 0 R /K 0 >>
+endobj
+9 0 obj
+<< /Type /StructElem /S /Note /P 7 0 R /Pg 3 0 R /K [10 0 R 11 0 R] >>
+endobj
+10 0 obj
+<< /Type /StructElem /S /Lbl /P 9 0 R /Pg 3 0 R /K 3 >>
+endobj
+11 0 obj
+<< /Type /StructElem /S /P /P 9 0 R /Pg 3 0 R /K 4 >>
+endobj
+12 0 obj
+<< /Type /StructElem /S /P /P 7 0 R /Pg 3 0 R /K 1 >>
+endobj
+13 0 obj
+<< /Type /StructElem /S /P /P 7 0 R /Pg 3 0 R /K 2 >>
+endobj
+14 0 obj
+<< /Nums [0 [8 0 R 12 0 R 13 0 R 10 0 R 11 0 R]] >>
+endobj
+xref
+0 15
+0000000000 65535 f 
+0000000015 00000 n 
+0000000129 00000 n 
+0000000186 00000 n 
+0000000329 00000 n 
+0000000765 00000 n 
+0000000835 00000 n 
+0000000927 00000 n 
+0000001019 00000 n 
+0000001088 00000 n 
+0000001174 00000 n 
+0000001246 00000 n 
+0000001316 00000 n 
+0000001386 00000 n 
+0000001456 00000 n 
+trailer
+<< /Size 15 /Root 1 0 R /ID [<70646678726179000000000000000001> <70646678726179000000000000000001>] >>
+startxref
+1524
+%%EOF

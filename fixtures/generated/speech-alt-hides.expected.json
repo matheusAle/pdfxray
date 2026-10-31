@@ -1,0 +1,144 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 1783,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          300.0,
+          400.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    }
+  ],
+  "catalog": {
+    "object": 1,
+    "marked": true,
+    "lang": "en-US"
+  },
+  "struct_tree": {
+    "root": 6,
+    "children": [
+      {
+        "object": 7,
+        "role": "Document",
+        "standard_role": "Document",
+        "children": [
+          {
+            "object": 8,
+            "role": "H1",
+            "standard_role": "H1",
+            "page": 0,
+            "mcids": [
+              0
+            ]
+          },
+          {
+            "object": 9,
+            "role": "Sect",
+            "standard_role": "Sect",
+            "children": [
+              {
+                "object": 10,
+                "role": "P",
+                "standard_role": "P",
+                "page": 0,
+                "mcids": [
+                  1
+                ]
+              },
+              {
+                "object": 11,
+                "role": "P",
+                "standard_role": "P",
+                "page": 0,
+                "mcids": [
+                  2
+                ]
+              }
+            ]
+          },
+          {
+            "object": 12,
+            "role": "Figure",
+            "standard_role": "Figure",
+            "page": 0,
+            "mcids": [
+              3
+            ]
+          },
+          {
+            "object": 13,
+            "role": "Figure",
+            "standard_role": "Figure",
+            "page": 0,
+            "mcids": [
+              4
+            ]
+          },
+          {
+            "object": 14,
+            "role": "P",
+            "standard_role": "P",
+            "page": 0,
+            "mcids": [
+              5
+            ]
+          }
+        ]
+      }
+    ],
+    "parent_tree": [
+      {
+        "key": 0,
+        "parents": [
+          8,
+          10,
+          11,
+          12,
+          13,
+          14
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,351 @@
+{
+  "header_version": "1.7",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "table",
+      "xref_offset": 1706,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ]
+    }
+  ],
+  "page_count": 3,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          200.0,
+          200.0
+        ],
+        "node": 2,
+        "inherited": true
+      },
+      "mcids": []
+    },
+    {
+      "index": 1,
+      "object": 4,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          200.0,
+          200.0
+        ],
+        "node": 2,
+        "inherited": true
+      },
+      "mcids": []
+    },
+    {
+      "index": 2,
+      "object": 5,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          200.0,
+          200.0
+        ],
+        "node": 2,
+        "inherited": true
+      },
+      "mcids": []
+    }
+  ],
+  "catalog": {
+    "object": 1
+  },
+  "forms": [
+    {
+      "object": 12,
+      "name": "Fm1",
+      "painted_by": 3,
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        10.0,
+        10.0
+      ],
+      "mcids": []
+    },
+    {
+      "object": 13,
+      "name": "Fm2",
+      "painted_by": 3,
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        10.0,
+        50.0
+      ],
+      "mcids": []
+    }
+  ],
+  "resources": [
+    {
+      "owner": 3,
+      "node": 2,
+      "inherited": true,
+      "entries": [
+        {
+          "category": "Font",
+          "name": "F1",
+          "target": 9,
+          "uses": 2
+        },
+        {
+          "category": "Font",
+          "name": "F2",
+          "target": 10,
+          "uses": 1
+        },
+        {
+          "category": "Font",
+          "name": "F3",
+          "target": 11,
+          "uses": 0
+        },
+        {
+          "category": "ExtGState",
+          "name": "GS1",
+          "target": 15,
+          "uses": 1
+        },
+        {
+          "category": "ExtGState",
+          "name": "GS9",
+          "target": 16,
+          "uses": 0
+        },
+        {
+          "category": "XObject",
+          "name": "Fm1",
+          "target": 12,
+          "uses": 1
+        },
+        {
+          "category": "XObject",
+          "name": "Fm2",
+          "target": 13,
+          "uses": 1
+        }
+      ]
+    },
+    {
+      "owner": 4,
+      "node": 4,
+      "inherited": false,
+      "entries": [
+        {
+          "category": "Font",
+          "name": "F1",
+          "target": 14,
+          "uses": 1
+        }
+      ]
+    },
+    {
+      "owner": 5,
+      "node": 2,
+      "inherited": true,
+      "entries": [
+        {
+          "category": "Font",
+          "name": "F1",
+          "target": 9,
+          "uses": 1
+        },
+        {
+          "category": "Font",
+          "name": "F2",
+          "target": 10,
+          "uses": 0
+        },
+        {
+          "category": "Font",
+          "name": "F3",
+          "target": 11,
+          "uses": 0
+        },
+        {
+          "category": "ExtGState",
+          "name": "GS1",
+          "target": 15,
+          "uses": 0
+        },
+        {
+          "category": "ExtGState",
+          "name": "GS9",
+          "target": 16,
+          "uses": 0
+        },
+        {
+          "category": "XObject",
+          "name": "Fm1",
+          "target": 12,
+          "uses": 0
+        },
+        {
+          "category": "XObject",
+          "name": "Fm2",
+          "target": 13,
+          "uses": 0
+        }
+      ]
+    },
+    {
+      "owner": 12,
+      "node": 12,
+      "inherited": false,
+      "entries": [
+        {
+          "category": "Font",
+          "name": "F1",
+          "target": 9,
+          "uses": 1
+        }
+      ]
+    },
+    {
+      "owner": 13,
+      "node": 2,
+      "inherited": true,
+      "entries": [
+        {
+          "category": "Font",
+          "name": "F1",
+          "target": 9,
+          "uses": 0
+        },
+        {
+          "category": "Font",
+          "name": "F2",
+          "target": 10,
+          "uses": 1
+        },
+        {
+          "category": "Font",
+          "name": "F3",
+          "target": 11,
+          "uses": 0
+        },
+        {
+          "category": "ExtGState",
+          "name": "GS1",
+          "target": 15,
+          "uses": 0
+        },
+        {
+          "category": "ExtGState",
+          "name": "GS9",
+          "target": 16,
+          "uses": 0
+        },
+        {
+          "category": "XObject",
+          "name": "Fm1",
+          "target": 12,
+          "uses": 0
+        },
+        {
+          "category": "XObject",
+          "name": "Fm2",
+          "target": 13,
+          "uses": 0
+        }
+      ]
+    }
+  ],
+  "shared_resources": [
+    {
+      "object": 9,
+      "owners": [
+        3,
+        5,
+        12,
+        13
+      ],
+      "total_uses": 4
+    },
+    {
+      "object": 10,
+      "owners": [
+        3,
+        5,
+        13
+      ],
+      "total_uses": 2
+    },
+    {
+      "object": 11,
+      "owners": [
+        3,
+        5,
+        13
+      ],
+      "total_uses": 0
+    },
+    {
+      "object": 12,
+      "owners": [
+        3,
+        5,
+        13
+      ],
+      "total_uses": 1
+    },
+    {
+      "object": 13,
+      "owners": [
+        3,
+        5,
+        13
+      ],
+      "total_uses": 1
+    },
+    {
+      "object": 15,
+      "owners": [
+        3,
+        5,
+        13
+      ],
+      "total_uses": 1
+    },
+    {
+      "object": 16,
+      "owners": [
+        3,
+        5,
+        13
+      ],
+      "total_uses": 0
+    }
+  ]
+}

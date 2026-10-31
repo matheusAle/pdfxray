@@ -1,0 +1,63 @@
+{
+  "header_version": "1.5",
+  "revision_count": 1,
+  "revisions": [
+    {
+      "number": 1,
+      "xref_kind": "stream",
+      "xref_offset": 457,
+      "objects": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "compressed": [
+        {
+          "obj": 1,
+          "stream": 6,
+          "index": 0
+        },
+        {
+          "obj": 2,
+          "stream": 6,
+          "index": 1
+        },
+        {
+          "obj": 3,
+          "stream": 6,
+          "index": 2
+        },
+        {
+          "obj": 5,
+          "stream": 6,
+          "index": 3
+        }
+      ]
+    }
+  ],
+  "page_count": 1,
+  "pages": [
+    {
+      "index": 0,
+      "object": 3,
+      "media_box": {
+        "value": [
+          0.0,
+          0.0,
+          240.0,
+          100.0
+        ],
+        "node": 3,
+        "inherited": false
+      },
+      "mcids": []
+    }
+  ],
+  "catalog": {
+    "object": 1
+  }
+}

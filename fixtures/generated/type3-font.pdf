@@ -1,0 +1,65 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 150] /Resources << /Font << /T3 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 98 >>
+stream
+0 0.4 0 rg
+0.6 0 0 RG
+BT
+/T3 20 Tf
+30 100 Td
+(ab) Tj
+ET
+BT
+/T3 1 Tf
+30 0 0 30 120 100 Tm
+(a) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type3 /Name /T3 /FontBBox [0 0 1000 1000] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /sq 6 0 R /tri 7 0 R >> /Encoding << /Type /Encoding /Differences [97 /sq /tri] >> /FirstChar 97 /LastChar 98 /Widths [1000 800] /Resources << >> >>
+endobj
+6 0 obj
+<< /Length 38 >>
+stream
+1000 0 0 0 800 800 d1
+0 0 800 800 re f
+endstream
+endobj
+7 0 obj
+<< /Length 56 >>
+stream
+800 0 0 0 600 700 d1
+40 w
+50 50 m
+550 50 l
+300 650 l
+h
+S
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000395 00000 n 
+0000000674 00000 n 
+0000000762 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R /ID [<70646678726179000000000000000001> <70646678726179000000000000000001>] >>
+startxref
+868
+%%EOF

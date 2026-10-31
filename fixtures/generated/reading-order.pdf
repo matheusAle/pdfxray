@@ -1,0 +1,69 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R /MarkInfo << /Marked true >> /Lang (en-US) >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /StructParents 0 /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 395 >>
+stream
+/Heading1 << /MCID 0 >> BDC BT /F1 24 Tf 40 360 Td (Quarterly report) Tj ET EMC
+/P << /MCID 1 >> BDC BT /F1 12 Tf 40 330 Td (Revenue grew in every region.) Tj ET EMC
+/Figure << /MCID 2 >> BDC 0.8 g 40 200 100 100 re f 0 g EMC
+/Caption << /MCID 3 >> BDC BT /F1 10 Tf 40 180 Td (Figure 1: Revenue by region) Tj ET EMC
+/P << /MCID 4 >> BDC BT /F1 12 Tf 40 140 Td (Closing remarks follow.) Tj ET EMC
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /StructTreeRoot /K 7 0 R /ParentTree 13 0 R /ParentTreeNextKey 1 /RoleMap << /Heading1 /H1 >> >>
+endobj
+7 0 obj
+<< /Type /StructElem /S /Document /P 6 0 R /K [8 0 R 9 0 R 10 0 R 11 0 R 12 0 R] >>
+endobj
+8 0 obj
+<< /Type /StructElem /S /Heading1 /P 7 0 R /Pg 3 0 R /K 0 >>
+endobj
+9 0 obj
+<< /Type /StructElem /S /P /P 7 0 R /Pg 3 0 R /K 1 >>
+endobj
+10 0 obj
+<< /Type /StructElem /S /Caption /P 7 0 R /Pg 3 0 R /K 3 >>
+endobj
+11 0 obj
+<< /Type /StructElem /S /Figure /P 7 0 R /Pg 3 0 R /Alt (Grey square) /K 2 >>
+endobj
+12 0 obj
+<< /Type /StructElem /S /P /P 7 0 R /Pg 3 0 R /K 4 >>
+endobj
+13 0 obj
+<< /Nums [0 [8 0 R 9 0 R 11 0 R 10 0 R 12 0 R]] >>
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000015 00000 n 
+0000000129 00000 n 
+0000000186 00000 n 
+0000000329 00000 n 
+0000000775 00000 n 
+0000000845 00000 n 
+0000000966 00000 n 
+0000001065 00000 n 
+0000001141 00000 n 
+0000001210 00000 n 
+0000001286 00000 n 
+0000001380 00000 n 
+0000001450 00000 n 
+trailer
+<< /Size 14 /Root 1 0 R /ID [<70646678726179000000000000000001> <70646678726179000000000000000001>] >>
+startxref
+1517
+%%EOF
