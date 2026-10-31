@@ -3,7 +3,7 @@
 //!
 //! The artwork is the official logo exported from the design file into `assets/icon/` (see
 //! `assets/icon/SOURCES.md`). It is shown from those PNGs, never redrawn in code: the detailed
-//! master above [`SMALL_MAX`], the coarse-stripe small version at and below it.
+//! master above [`SMALL_MAX`], the simplified small mark at and below it.
 
 use std::sync::Arc;
 
@@ -15,10 +15,10 @@ use egui::{
 /// The window icon: the 256 px entry of the app icon.
 pub const WINDOW_ICON_PNG: &[u8] = include_bytes!("../../../assets/icon/window-icon-256.png");
 
-/// The detailed logo (288 px), for display sizes above [`SMALL_MAX`].
+/// The detailed logo (the 1024 px master export), for display sizes above [`SMALL_MAX`].
 pub const LOGO_MASTER_PNG: &[u8] = include_bytes!("../../../assets/icon/logo-master.png");
 
-/// The coarse-stripe logo (256 px), for display sizes up to [`SMALL_MAX`].
+/// The simplified mark (256 px export), for display sizes up to [`SMALL_MAX`].
 pub const LOGO_SMALL_PNG: &[u8] = include_bytes!("../../../assets/icon/logo-small.png");
 
 /// The largest display size, in points, that uses the small logo.
@@ -45,9 +45,9 @@ pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 /// The two drawings of the logo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogoArt {
-    /// Grid, guides, crosshairs and the fine hatch: legible above [`SMALL_MAX`].
+    /// The x-ray glass with its grid and five text lines: legible above [`SMALL_MAX`].
     Master,
-    /// Coarse stripes only: legible at small sizes.
+    /// A solid accent half and three thick lines: legible at small sizes.
     Small,
 }
 
@@ -137,15 +137,15 @@ mod tests {
     }
 
     #[test]
-    fn small_sizes_use_the_coarse_drawing_and_large_ones_the_master() {
+    fn small_sizes_use_the_simplified_mark_and_large_ones_the_master() {
         assert_eq!(LogoArt::for_size(28.0), LogoArt::Small);
         assert_eq!(LogoArt::for_size(48.0), LogoArt::Small);
         assert_eq!(LogoArt::for_size(48.5), LogoArt::Master);
         assert_eq!(LogoArt::for_size(72.0), LogoArt::Master);
         // both drawings decode, at the sizes the design exports
         let size = |art| logo_rgba(art).map(|(_, width, height)| (width, height));
-        assert_eq!(size(LogoArt::Master), Some((288, 288)));
-        assert_eq!(size(LogoArt::Small), Some((256, 256)));
+        assert_eq!(size(LogoArt::Master), Some((1030, 1030)));
+        assert_eq!(size(LogoArt::Small), Some((258, 258)));
         // smoke: the master is not blank
         let (rgba, _, _) = logo_rgba(LogoArt::Master).expect("master decodes");
         assert!(rgba.as_chunks::<4>().0.iter().any(|px| px[3] == 255));

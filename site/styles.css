@@ -368,6 +368,10 @@ kbd {
 .fine { font-size: 13px; color: var(--text-3); max-width: 560px; }
 .foot { max-width: var(--max); margin: 0 auto; padding: 32px 24px 48px; display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid var(--hair); color: var(--text-3); font-size: 13px; }
 
+/* Skip link: hidden until focused (keyboard and screen-reader users) */
+.skip { position: fixed; left: 16px; top: -48px; z-index: 100; padding: 10px 14px; border-radius: 8px; background: var(--accent); color: #061218; font-weight: 600; transition: top .15s; }
+.skip:focus { top: 12px; outline: 2px solid #E8FCFF; outline-offset: 2px; }
+
 /* Download: header actions, facts line, install steps */
 .nav-actions { display: flex; align-items: center; gap: 10px; }
 .gh {
