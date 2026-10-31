@@ -18,7 +18,7 @@ env:
 jobs:
   test:
     name: fmt · clippy · test (macOS)
-    runs-on: macos-latest
+    runs-on: blacksmith-6vcpu-macos-latest
     steps:
       - uses: actions/checkout@v4
       # rustup reads rust-toolchain.toml (1.99.1 + clippy + rustfmt)
@@ -73,7 +73,7 @@ jobs:
 
   hygiene:
     name: licenses · advisories · unused deps
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -84,7 +84,7 @@ jobs:
   corpus:
     name: fetched corpus (nightly)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-latest
+    runs-on: blacksmith-6vcpu-macos-latest
     steps:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install

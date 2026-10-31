@@ -25,7 +25,7 @@ env:
 jobs:
   macos:
     name: universal macOS bundle
-    runs-on: macos-latest
+    runs-on: blacksmith-6vcpu-macos-latest
     steps:
       - uses: actions/checkout@v4
       # rustup reads rust-toolchain.toml (1.99.1 + clippy + rustfmt)
