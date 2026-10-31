@@ -1,0 +1,52 @@
+---
+source: crates/pdfxray-raw/tests/corpus.rs
+expression: snapshot_of(&outcomes)
+---
+cache/pdfbox-2725-878725/PDFBOX-2725-878725.pdf:
+  - objstm-encrypted x6
+cache/pdfbox-4531-bidi-ligature-2/PDFBOX-4531-bidi-ligature-2.pdf:
+  - xref-duplicate-entry x1
+cache/pdfbox-5811-362972/PDFBOX-5811-362972.pdf: []
+cache/pdfbox-5840-410609/PDFBOX-5840-410609.pdf: []
+cache/pdfbox-6041-example/PDFBOX-6041-example.pdf:
+  - missing-header x1
+cache/pdfbox-6261-085992/PDFBOX-6261-085992.pdf: []
+cache/pdfbox-acroform/acroform.pdf: []
+cache/pdfbox-missingcatalog/MissingCatalog.pdf: []
+cache/pdfbox-pdfa3a/PDFA3A.pdf: []
+cache/pdfbox-sampleforspec/sampleForSpec.pdf: []
+cache/pdfbox-test-landscape2/test-landscape2.pdf: []
+cache/pdfjs-annotation-tx3/annotation-tx3.pdf: []
+cache/pdfjs-bug1020226/bug1020226.pdf:
+  - dict-key-not-name x2
+  - dict-value-missing x1
+  - missing-endobj x3
+  - missing-endstream x1
+  - startxref-missing x1
+  - stream-length-wrong x1
+  - trailer-key-missing x1
+  - unterminated-container x1
+  - xref-rebuilt x1
+cache/pdfjs-bug1997343/bug1997343.pdf: []
+cache/pdfjs-chrome-text-selection-markedcontent/chrome-text-selection-markedContent.pdf: []
+cache/pdfjs-issue14165/issue14165.pdf: []
+cache/pdfjs-issue19800/issue19800.pdf:
+  - startxref-missing x1
+  - trailer-size-inconsistent x1
+  - xref-rebuilt x1
+cache/pdfjs-issue21346/issue21346.pdf: []
+cache/pdfjs-issue6782/issue6782.pdf: []
+cache/pdfjs-issue9972-1/issue9972-1.pdf: []
+cache/pdfjs-structure-no-parent-tree/structure_no_parent_tree.pdf: []
+cache/pdfjs-structure-simple/structure_simple.pdf: []
+cache/pdfjs-tagged-stamp/tagged_stamp.pdf: []
+cache/pdfua-ref-01-magazine-danish/PDFUA-Ref-2-01_Magazine-danish.pdf: []
+cache/pdfua-ref-02-invoice/PDFUA-Ref-2-02_Invoice.pdf: []
+cache/pdfua-ref-03-academicabstract/PDFUA-Ref-2-03_AcademicAbstract.pdf: []
+cache/pdfua-ref-04-presentation/PDFUA-Ref-2-04_Presentation.pdf: []
+cache/pdfua-ref-05-bookchapter-german/PDFUA-Ref-2-05_BookChapter-german.pdf: []
+cache/pdfua-ref-06-brochure/PDFUA-Ref-2-06_Brochure.pdf: []
+cache/pdfua-ref-07-formaldocument/PDFUA-Ref-2-07_FormalDocument.pdf: []
+cache/pdfua-ref-08-bookchapter/PDFUA-Ref-2-08_BookChapter.pdf: []
+cache/pdfua-ref-09-scanned/PDFUA-Ref-2-09_Scanned.pdf: []
+cache/pdfua-ref-10-form/PDFUA-Ref-2-10_Form.pdf: []

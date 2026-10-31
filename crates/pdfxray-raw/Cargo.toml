@@ -1,0 +1,27 @@
+[package]
+name = "pdfxray-raw"
+description = "Lossless, never-repair PDF syntax layer with byte spans and raw diagnostics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+serde.workspace = true
+flate2.workspace = true
+weezl.workspace = true
+memchr.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+pretty_assertions.workspace = true
+pdfxray-fixtures.workspace = true
+hayro-syntax.workspace = true
+serde_json.workspace = true
+insta.workspace = true
+
+[lints]
+workspace = true
