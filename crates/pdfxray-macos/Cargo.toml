@@ -1,0 +1,32 @@
+[package]
+name = "pdfxray-macos"
+description = "pdfxray's macOS integration: files opened from Finder and the Dock, recent documents, the updater"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# MIT OR Apache-2.0 / Zlib. The Objective-C runtime bindings; macOS only, and already in the graph
+# through eframe, rfd and arboard.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-foundation = { workspace = true, features = [
+  "std",
+  "NSArray",
+  "NSBundle",
+  "NSEnumerator",
+  "NSError",
+  "NSString",
+  "NSURL",
+] }
+objc2-app-kit = { workspace = true, features = [
+  "std",
+  "NSApplication",
+  "NSDocumentController",
+  "NSResponder",
+] }
+
+[lints]
+workspace = true
