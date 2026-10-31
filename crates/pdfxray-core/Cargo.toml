@@ -1,0 +1,40 @@
+[package]
+name = "pdfxray-core"
+description = "pdfxray document model and query API"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+# The unit tests are not benchmarks; without this, `cargo bench -- --quick` hits libtest's parser.
+bench = false
+
+[dependencies]
+pdfxray-raw.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+hayro-syntax.workspace = true
+hayro-interpret.workspace = true
+kurbo.workspace = true
+rstar.workspace = true
+rayon.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+pdfxray-fixtures.workspace = true
+pretty_assertions.workspace = true
+criterion = { workspace = true, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "open"
+harness = false
+
+[[bench]]
+name = "queries"
+harness = false
+
+[lints]
+workspace = true
