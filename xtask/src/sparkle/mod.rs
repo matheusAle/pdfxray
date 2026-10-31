@@ -34,7 +34,7 @@ use crate::paths;
 use crate::staging::Staging;
 
 /// The feed installed copies read (`SUFeedURL`).
-pub const FEED_URL: &str = "https://dl.pdf-xray.app/appcast.xml";
+pub const FEED_URL: &str = "https://dl.pdfxray.app/appcast.xml";
 
 /// Name of the file in an install that records the Sparkle version it holds.
 const VERSION_FILE: &str = "VERSION";
@@ -477,7 +477,7 @@ mod tests {
         let request = AppcastRequest {
             version: "0.2.0",
             archive: &archive,
-            url: "https://dl.pdf-xray.app/releases/0.2.0/a.dmg",
+            url: "https://dl.pdfxray.app/releases/0.2.0/a.dmg",
             out: &feed,
         };
         let mut out = Vec::new();
@@ -528,7 +528,7 @@ mod tests {
         let request = AppcastRequest {
             version: "v0.2.0-rc.1",
             archive: &archive,
-            url: "https://dl.pdf-xray.app/releases/0.2.0-rc.1/pdfxray-0.2.0-rc.1-macos-universal.dmg",
+            url: "https://dl.pdfxray.app/releases/0.2.0-rc.1/pdfxray-0.2.0-rc.1-macos-universal.dmg",
             out: &feed,
         };
         let mut out = Vec::new();

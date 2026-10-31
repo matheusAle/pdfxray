@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyClass, AnyObject};
 use objc2::{MainThreadMarker, msg_send, sel};
-use objc2_foundation::{NSBundle, NSString};
+use objc2_foundation::{NSBundle, NSError, NSString};
 
 use crate::UpdaterError;
 
@@ -48,9 +48,8 @@ pub(crate) fn start() -> Result<(), UpdaterError> {
         .ok_or_else(|| UpdaterError::Load(format!("{} is not a bundle", path.display())))?;
     // SAFETY: loading a bundle runs its initialisers. This one is the Sparkle framework inside the
     // app's own signed bundle; the hardened runtime's library validation maps it only when it is
-    // signed by the same team as the app (or the app is ad-hoc signed and it is too).
-    unsafe { bundle.loadAndReturnError() }
-        .map_err(|error| UpdaterError::Load(error.localizedDescription().to_string()))?;
+    // signed by the same team as the app.
+    unsafe { bundle.loadAndReturnError() }.map_err(|error| UpdaterError::Load(load_failure(&error)))?;
 
     let class = AnyClass::get(CONTROLLER_CLASS).ok_or(UpdaterError::Incompatible)?;
     let init = sel!(initWithStartingUpdater:updaterDelegate:userDriverDelegate:);
@@ -74,6 +73,19 @@ pub(crate) fn start() -> Result<(), UpdaterError> {
     let controller = controller.ok_or(UpdaterError::Incompatible)?;
     CONTROLLER.with(|slot| slot.replace(Some(controller)));
     Ok(())
+}
+
+/// Why a bundle did not load: `dlopen`'s reason (`NSDebugDescription`, for example a refusal by
+/// library validation), else the localized description, which only says it could not be loaded.
+fn load_failure(error: &NSError) -> String {
+    error
+        .userInfo()
+        .objectForKey(&NSString::from_str("NSDebugDescription"))
+        .and_then(|reason| reason.downcast::<NSString>().ok())
+        .map_or_else(
+            || error.localizedDescription().to_string(),
+            |reason| reason.to_string(),
+        )
 }
 
 pub(crate) fn check_for_updates() -> bool {

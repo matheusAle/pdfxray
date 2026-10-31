@@ -116,6 +116,19 @@ mod tests {
 
     use super::*;
 
+    /// Takes the lock, allowing up to a second for it to come free. Other tests of this binary
+    /// start processes; between `fork` and `exec` such a child briefly shares every open file of
+    /// the test process, this lock file included, and with it the lock.
+    fn acquire_soon(path: &Path) -> Option<UpdaterLock> {
+        for _ in 0..100 {
+            if let Some(lock) = UpdaterLock::try_acquire(path).expect("io") {
+                return Some(lock);
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        None
+    }
+
     fn temp_dir(label: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("pdfxray-updater-{}-{label}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -134,7 +147,7 @@ mod tests {
             format!("{}\n", std::process::id())
         );
         drop(first);
-        let second = UpdaterLock::try_acquire(&path).expect("io");
+        let second = acquire_soon(&path);
         // smoke: the lock file exists where it was asked for
         assert!(second.is_some());
         assert!(path.ends_with("nested/updater.lock") && path.is_file());
@@ -155,7 +168,7 @@ mod tests {
             .expect("sleep");
 
         drop(lock);
-        let taken = UpdaterLock::try_acquire(&path).expect("io");
+        let taken = acquire_soon(&path);
 
         let _ = child.kill();
         let _ = child.wait();

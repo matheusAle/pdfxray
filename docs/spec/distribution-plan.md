@@ -64,8 +64,7 @@ dl.pdfxray.app/
 
 ### Update signing key
 
-8. A Sparkle EdDSA key pair is generated once (`cargo xtask sparkle keygen`, coming with the
-   auto-update work). The public key is compiled into `Info.plist`; the private key goes into a
+8. A Sparkle EdDSA key pair is generated once (`cargo xtask sparkle keygen`). The public key is compiled into `Info.plist`; the private key goes into a
    GitHub secret **and your password manager**. Losing it means installed copies cannot verify
    new updates.
 
@@ -97,6 +96,6 @@ everything is in place.
 |---|---|---|
 | W1 | xtask: notarytool API-key auth; CLI inside the app; signed, notarized, stapled DMG | done (ad-hoc path tested locally; the signed path needs the Apple secrets) |
 | W2 | Release workflow: API key, DMG, verification, GitHub release, upload to R2; `site.yml`; site download button; `docs/releasing.md` | done (actionlint clean; runs for real after W4) |
-| W3 | Sparkle auto-update: pinned framework fetch, embed + sign in the bundle, runtime loading, "Check for Updates…" menu item, one updater across the per-window processes, appcast generation + EdDSA signing in CI, key generation | sub-agent |
+| W3 | Sparkle auto-update: pinned framework fetch, embed + sign in the bundle, runtime loading, "Check for Updates…" menu item, one updater across the per-window processes, appcast generation + EdDSA signing in CI, key generation | done (ad-hoc e2e update A→B passed with a test-only re-sign; Developer ID path untested; production key pending) |
 | W4 | GitHub repo and first push (done, private); `OWNER` placeholder (done); site on pdfxray.app (done); R2 bucket + `dl.pdfxray.app` (waits for R2 to be enabled); secrets | in progress |
 | W5 | First release candidate `v0.1.0-rc.1` end to end | after W1-W4 |

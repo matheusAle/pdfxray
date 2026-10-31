@@ -19,9 +19,9 @@ use ring::signature::{ED25519, Ed25519KeyPair, KeyPair as _, UnparsedPublicKey};
 
 /// `SUPublicEDKey`: the public half of the key that signs pdfxray's updates. Installed copies
 /// accept an update only when its archive is signed by the matching private key.
-// TODO(release): replace with the production key from `cargo xtask sparkle keygen`. This one was
-// generated for local testing only; its private key was not kept, so nothing can be signed for it.
-pub const PUBLIC_ED_KEY: &str = "dCpWeq3BicvIgrEiwtN5nH7dAdcQnEcDijWsIT3GQCw=";
+// The production key (2026-10-31). Its private half is the CI secret `SPARKLE_ED_PRIVATE_KEY`
+// and lives in the maintainer's password manager; changing this breaks updates for installed copies.
+pub const PUBLIC_ED_KEY: &str = "RPw8jqLIH6B+Hsq4lkHWnQKNQ/PRZBBpFJEHeq9pnnE=";
 
 /// Environment variable that holds the private key (base64 seed) for `sparkle appcast`.
 pub const ENV_PRIVATE_KEY: &str = "SPARKLE_ED_PRIVATE_KEY";

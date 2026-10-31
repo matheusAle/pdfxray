@@ -16,6 +16,7 @@ objc2-foundation = { workspace = true, features = [
   "std",
   "NSArray",
   "NSBundle",
+  "NSDictionary",
   "NSEnumerator",
   "NSError",
   "NSString",

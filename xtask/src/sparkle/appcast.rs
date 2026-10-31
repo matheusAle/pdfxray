@@ -110,7 +110,7 @@ mod tests {
         let item = Item {
             bundle_version: "0.2.999",
             display_version: "0.2.0",
-            url: "https://dl.pdf-xray.app/releases/0.2.0/pdfxray-0.2.0-macos-universal.dmg?a=1&b=2",
+            url: "https://dl.pdfxray.app/releases/0.2.0/pdfxray-0.2.0-macos-universal.dmg?a=1&b=2",
             length: 52_428_800,
             ed_signature: "c2ln+/==",
             published: 1_793_448_000,
@@ -129,7 +129,7 @@ mod tests {
       <sparkle:version>0.2.999</sparkle:version>
       <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
-      <enclosure url=\"https://dl.pdf-xray.app/releases/0.2.0/pdfxray-0.2.0-macos-universal.dmg?a=1&amp;b=2\" length=\"52428800\" type=\"application/octet-stream\" sparkle:edSignature=\"c2ln+/==\"/>
+      <enclosure url=\"https://dl.pdfxray.app/releases/0.2.0/pdfxray-0.2.0-macos-universal.dmg?a=1&amp;b=2\" length=\"52428800\" type=\"application/octet-stream\" sparkle:edSignature=\"c2ln+/==\"/>
     </item>
   </channel>
 </rss>

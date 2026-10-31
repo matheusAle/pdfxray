@@ -254,7 +254,7 @@ mod tests {
 \t<key>SUEnableAutomaticChecks</key>
 \t<true/>
 \t<key>SUFeedURL</key>
-\t<string>https://dl.pdf-xray.app/appcast.xml</string>
+\t<string>https://dl.pdfxray.app/appcast.xml</string>
 \t<key>SUPublicEDKey</key>
 \t<string>PUBLIC_KEY</string>
 \t<key>SUScheduledCheckInterval</key>

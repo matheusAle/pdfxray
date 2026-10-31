@@ -84,7 +84,14 @@ pub fn bundle_cmd(root: &Path, args: &BundleArgs, out: &mut dyn Write) -> Result
     if !icon.is_file() {
         anyhow::bail!("{} is missing; run `cargo xtask icon`", icon.display());
     }
-    let sparkle = sparkle::prepare(root, &version, out)?;
+    // The updater ships only with a Developer ID: under library validation an ad-hoc signed app
+    // cannot load an ad-hoc signed framework ("different Team IDs"), so it would be dead weight.
+    // The version check still runs, so a bad pre-release fails before the long build either way.
+    version.bundle_version()?;
+    let sparkle = match identity {
+        Identity::Developer(_) => Some(sparkle::prepare(root, out)?),
+        Identity::AdHoc => None,
+    };
 
     let release = layout::release_name(&version, target);
     writeln!(out, "bundling {release} ({})", describe(&identity, auth.as_ref()))?;
@@ -129,7 +136,9 @@ pub fn bundle_cmd(root: &Path, args: &BundleArgs, out: &mut dyn Write) -> Result
         },
     )?;
 
-    sparkle::embed(&sparkle, &app, &identity)?;
+    if let Some(sparkle) = &sparkle {
+        sparkle::embed(sparkle, &app, &identity)?;
+    }
     sign::codesign(&identity, &entitlements, None, &app)?;
     sign::verify(&app)?;
 
@@ -224,7 +233,7 @@ fn disk_image(
 
 fn describe(identity: &Identity, auth: Option<&NotaryAuth>) -> &'static str {
     match (identity, auth) {
-        (Identity::AdHoc, _) => "ad-hoc signed",
+        (Identity::AdHoc, _) => "ad-hoc signed, no updater",
         (Identity::Developer(_), None) => "Developer ID signed",
         (Identity::Developer(_), Some(_)) => "Developer ID signed and notarized",
     }
@@ -288,7 +297,7 @@ mod tests {
     fn describes_what_will_be_produced() {
         let dev = Identity::Developer("x".into());
         let auth = NotaryAuth::Profile("p".into());
-        assert_eq!(describe(&Identity::AdHoc, None), "ad-hoc signed");
+        assert_eq!(describe(&Identity::AdHoc, None), "ad-hoc signed, no updater");
         assert_eq!(describe(&dev, None), "Developer ID signed");
         assert_eq!(describe(&dev, Some(&auth)), "Developer ID signed and notarized");
     }

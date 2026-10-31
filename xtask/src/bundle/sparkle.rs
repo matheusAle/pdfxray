@@ -17,7 +17,6 @@ use anyhow::{Context, Result};
 
 use super::cmd;
 use super::sign::{self, Identity};
-use super::version::Version;
 use crate::corpus::fetch::UreqDownloader;
 use crate::sparkle::manifest::{FRAMEWORK, PINNED};
 use crate::sparkle::{self as fetch, Install, Outcome};
@@ -28,14 +27,11 @@ pub const NESTED_CODE: [&str; 2] = ["Versions/B/Autoupdate", "Versions/B/Updater
 /// What is removed from the framework: the XPC services (sandboxed apps only) and their link.
 pub const REMOVED: [&str; 2] = ["Versions/B/XPCServices", "XPCServices"];
 
-/// The pinned Sparkle install below `target/sparkle/`, fetched (and verified) when it is missing,
-/// after checking that `version` has a `CFBundleVersion` Sparkle can order (so a bad pre-release
-/// fails before the long build).
+/// The pinned Sparkle install below `target/sparkle/`, fetched (and verified) when it is missing.
 ///
 /// Fetching here instead of failing keeps a release from ever shipping without its updater and
 /// needs no extra CI step; the download is pinned and verified exactly like `sparkle fetch`.
-pub fn prepare(root: &Path, version: &Version, out: &mut dyn Write) -> Result<Install> {
-    version.bundle_version()?;
+pub fn prepare(root: &Path, out: &mut dyn Write) -> Result<Install> {
     let (install, outcome) = fetch::install(&fetch::default_dest(root), &PINNED, &UreqDownloader::new()?)
         .context("cannot fetch Sparkle (`cargo xtask sparkle fetch` retries on its own)")?;
     let what = match outcome {

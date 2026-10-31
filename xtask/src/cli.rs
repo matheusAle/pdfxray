@@ -165,7 +165,7 @@ mod tests {
             "--archive",
             "/b/x.dmg",
             "--url",
-            "https://dl.pdf-xray.app/releases/0.2.0/x.dmg",
+            "https://dl.pdfxray.app/releases/0.2.0/x.dmg",
             "--out",
             "/b/appcast.xml",
         ]);
@@ -175,7 +175,7 @@ mod tests {
                 Command::Sparkle(SparkleCommand::Appcast { version, archive, url, out })
                     if version == "v0.2.0"
                         && archive.as_path() == Path::new("/b/x.dmg")
-                        && url == "https://dl.pdf-xray.app/releases/0.2.0/x.dmg"
+                        && url == "https://dl.pdfxray.app/releases/0.2.0/x.dmg"
                         && out.as_path() == Path::new("/b/appcast.xml")
             ),
             "expected `sparkle appcast` with every option, parsed {:?}",

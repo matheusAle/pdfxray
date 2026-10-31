@@ -183,6 +183,58 @@ On Windows, "Open with" and the file association need an installer that writes t
 (`HKCR\.pdf\OpenWithProgids` and a ProgID). That installer is not done; run
 `pdfxray-app.exe file.pdf` or drop files on the window.
 
+## Auto-update
+
+Developer ID builds update themselves with [Sparkle 2](https://sparkle-project.org) (MIT) from
+`https://dl.pdfxray.app/appcast.xml`. `cargo xtask bundle --sign …` fetches the pinned Sparkle
+(`xtask/src/sparkle/manifest.rs`, hash-checked, cached in `target/sparkle/<version>/`;
+`cargo xtask sparkle fetch` does the same by hand), copies `Sparkle.framework` into
+`Contents/Frameworks`, removes its XPC services (they are for sandboxed apps only), and signs
+`Autoupdate`, `Updater.app` and then the framework before the app is signed. The app loads the
+framework at run time; builds without it (ad-hoc bundles, `cargo run`, Linux, Windows) simply
+have no updater and no "Check for Updates…" item.
+
+`Info.plist` holds `SUFeedURL`, `SUPublicEDKey`, a daily automatic check
+(`SUEnableAutomaticChecks`; with it set Sparkle checks without asking first) and
+`SUVerifyUpdateBeforeExtraction`. `CFBundleVersion` is what Sparkle compares:
+`MAJOR.MINOR.<PATCH><stage>`, with stage `1NN`/`2NN`/`3NN` for alpha/beta/rc `.NN` and `999` for
+the release, so `0.2.0-rc.1` (`0.2.301`) < `0.2.0` (`0.2.999`) < `0.2.1-rc.1` (`0.2.1301`).
+Other pre-release names are rejected before the build.
+
+Every window is a process, and only one runs the updater: the one holding an advisory lock on
+`updater.lock` in the app data directory. "Check for Updates…" (app menu) is enabled in that
+window and disabled in the others; when it closes, another open window takes over.
+
+**Signing key.** `cargo xtask sparkle keygen` prints a new Ed25519 key pair and saves nothing.
+Put the public key in `PUBLIC_ED_KEY` (`xtask/src/sparkle/keys.rs`), store the private key as
+the `SPARKLE_ED_PRIVATE_KEY` secret and in a password manager. Losing it means installed copies
+cannot verify updates.
+
+**Feed.** The release workflow writes and uploads the feed for stable tags, after the DMG is on
+the download host. By hand:
+
+```sh
+SPARKLE_ED_PRIVATE_KEY=… cargo xtask sparkle appcast --version 0.2.0 \
+  --archive target/bundle/pdfxray-0.2.0-macos-universal.dmg \
+  --url https://dl.pdfxray.app/releases/0.2.0/pdfxray-0.2.0-macos-universal.dmg \
+  --out target/bundle/appcast.xml
+```
+
+It signs the DMG, refuses a key that does not match `PUBLIC_ED_KEY`, and writes a feed with that
+one release. Release candidates are not published to this feed.
+
+**Testing updates locally.** With library validation on, an ad-hoc signed app cannot load an
+ad-hoc signed framework ("different Team IDs"), which is why ad-hoc bundles leave Sparkle out.
+To test the updater, sign with an Apple Development certificate (it has a team ID), or re-sign a
+throwaway copy with `com.apple.security.cs.disable-library-validation` (never the release
+entitlements), and point it at a local feed with
+`defaults write dev.pdfxray.app SUFeedURL http://127.0.0.1:<port>/appcast.xml`. Delete that key
+afterwards.
+
+**Known gaps.** Sparkle quits only the window that runs it; other pdfxray windows keep running
+the old build until they are closed. An idle window takes the updater over only after it next
+repaints.
+
 ## Verify a build
 
 ```sh

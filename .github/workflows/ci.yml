@@ -43,6 +43,13 @@ jobs:
         run: cargo doc --workspace --no-deps
       - name: Fetch PDFium reference renderer (pinned, sha256-checked)
         run: cargo xtask pdfium fetch
+      # The pdfxray-verapdf tests download and cache veraPDF in target/verapdf-test-install;
+      # the CLI's validate test reuses that install, and on a fresh runner it would otherwise
+      # run first and find nothing.
+      - name: Install veraPDF for the tests
+        env:
+          PDFXRAY_VERAPDF: required
+        run: cargo test -p pdfxray-verapdf
       - name: Tests (veraPDF and PDFium required, not skipped)
         env:
           PDFXRAY_VERAPDF: required
