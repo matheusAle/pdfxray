@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    - cron: "0 3 * * *"
+  # No nightly run: CI runs on every push and pull request; the fetched corpus is checked by hand
+  # (Actions › CI › Run workflow).
   workflow_dispatch:
 
 permissions:
@@ -82,8 +82,8 @@ jobs:
       - uses: bnjbvr/cargo-machete@main
 
   corpus:
-    name: fetched corpus (nightly)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    name: fetched corpus (on demand)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

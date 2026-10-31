@@ -116,7 +116,7 @@ CLI mirrors it: `pdfxray info|diag|objects|object|xref|tree|node|hit|measure|ren
 | Visual | PNG diff (`image` + tolerance) | hayro render + overlays per fixture; hayro-vs-PDFium diff (feature `pdfium`) |
 | UI | `egui_kittest` snapshots | panels and canvas at fixed sizes |
 | E2E | `egui_kittest` harness | open fixture → click node/canvas → assert inspector contents |
-| Corpus | `cargo xtask corpus` | tier 3 fetch + verify; nightly crash/regression run |
+| Corpus | `cargo xtask corpus` | tier 3 fetch + verify; crash/regression run on demand (Actions › CI › Run workflow) |
 | Hygiene | `clippy -D warnings`, `rustfmt`, `cargo-deny`, `cargo-machete`/dead-code check | every PR |
 
 Rules: every fixture documents its *expected* facts next to its generator; snapshot updates require review
