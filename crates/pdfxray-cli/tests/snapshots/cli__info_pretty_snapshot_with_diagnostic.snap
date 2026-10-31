@@ -1,0 +1,62 @@
+---
+source: crates/pdfxray-cli/tests/cli.rs
+expression: "String::from_utf8(out).unwrap()"
+---
+{
+  "name": "cli-garbage.pdf",
+  "byte_len": 20,
+  "header_version": "2.0",
+  "header_offset": 5,
+  "page_count": 0,
+  "object_count": 0,
+  "revision_count": 1,
+  "encrypted": false,
+  "engine_error": "invalid",
+  "diagnostics": [
+    {
+      "code": "header-not-at-start",
+      "severity": "warning",
+      "message": "the %PDF- header starts at byte 5 instead of byte 0",
+      "span": [
+        5,
+        13
+      ]
+    },
+    {
+      "code": "startxref-missing",
+      "severity": "warning",
+      "message": "no usable startxref; xref sections were found by scanning",
+      "span": [
+        20,
+        20
+      ]
+    },
+    {
+      "code": "trailer-missing",
+      "severity": "warning",
+      "message": "no readable trailer dictionary",
+      "span": [
+        20,
+        20
+      ]
+    },
+    {
+      "code": "xref-rebuilt",
+      "severity": "warning",
+      "message": "xref data recovered by scanning the file: 0 section(s), 0 object(s)",
+      "span": [
+        20,
+        20
+      ]
+    },
+    {
+      "code": "page-tree-missing",
+      "severity": "error",
+      "message": "the catalog has no /Pages tree",
+      "span": [
+        0,
+        0
+      ]
+    }
+  ]
+}

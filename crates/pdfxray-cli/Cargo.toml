@@ -1,0 +1,33 @@
+[package]
+name = "pdfxray-cli"
+description = "pdfxray command line: JSON over the core query API"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "pdfxray"
+path = "src/main.rs"
+
+[dependencies]
+image.workspace = true
+pdfxray-core.workspace = true
+pdfxray-verapdf.workspace = true
+pdfxray-render = { workspace = true, features = ["pdfium"] }
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+insta.workspace = true
+pretty_assertions.workspace = true
+pdfxray-fixtures.workspace = true
+
+[lints]
+workspace = true
