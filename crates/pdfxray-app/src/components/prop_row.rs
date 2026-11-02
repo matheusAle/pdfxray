@@ -542,15 +542,16 @@ fn key_hint(ui: &Ui, id: Id, key_rect: Rect, key: &str, text: &str) {
     tooltip::named(response.on_hover_cursor(egui::CursorIcon::Help), key, text, None);
 }
 
+/// Puts `label` in `rect`, a part of the row already allocated. The row's height is the row's to
+/// say: a scope here would move the cursor back up to the end of `rect`, and the next row would
+/// start over a value that wraps below the key.
 fn put_label(ui: &mut Ui, rect: Rect, label: Label) {
-    ui.scope_builder(
+    ui.new_child(
         UiBuilder::new()
             .max_rect(rect)
             .layout(Layout::left_to_right(Align::Center)),
-        |ui| {
-            ui.add(label);
-        },
-    );
+    )
+    .add(label);
 }
 
 /// The copy icon at the right end of the row, a pointer target only: the keyboard copies from

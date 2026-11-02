@@ -1,8 +1,9 @@
 //! The Tag roles card: one row per tag role with its colour and how many elements of it the page
-//! has. A role the page does not use is dimmed.
+//! has. A role the page does not use is dimmed. A table's rows (`TR`), header cells (`TH`) and
+//! data cells (`TD`) have rows of their own, indented under *Table*, while the page has any.
 //!
-//! The card is shown while the x-ray colours by tag role or while the tag boxes are on. While the
-//! tag boxes are on, its rows pick which roles the canvas focuses on (see
+//! The card is shown while the x-ray colours by tag role or while the tag boxes or the tag labels
+//! are on. While either is on, its rows pick which roles the canvas focuses on (see
 //! [`crate::state::role_focus`]): a click focuses a role, a click on a focused row releases it,
 //! Shift-click adds or removes one. A row the page does not use cannot be picked. While roles are
 //! focused the header says how many are shown and offers *Show all*.
@@ -19,7 +20,7 @@ use egui::{
 use pdfxray_core::{PageIx, RoleClass, TagBox};
 
 use super::cards::{Card, Column, title};
-use crate::roles::{class_name, role_color};
+use crate::roles::{TagRole, role_color};
 use crate::state::AppState;
 use crate::theme::{fonts, tokens};
 use pdfxray_render::ColorBy;
@@ -42,11 +43,14 @@ const ROW_RADIUS: f32 = 5.0;
 /// Width of the accent bar of a focused row, and of the keyboard focus ring.
 const BAR_W: f32 = 2.0;
 
+/// How far the parts of a table are indented under it.
+const PART_INDENT: f32 = 14.0;
+
 /// One row of the legend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RoleRow {
-    /// The role class.
-    pub class: RoleClass,
+    /// The role.
+    pub role: TagRole,
     /// How many elements of it have a box on the page; artifacts count the artifact sequences.
     pub count: usize,
 }
@@ -73,12 +77,12 @@ pub enum RowLook {
 
 impl RowLook {
     /// The look of `row` while `focus` is focused (empty: nothing is).
-    pub fn of(row: &RoleRow, focus: &BTreeSet<RoleClass>) -> Self {
+    pub fn of(row: &RoleRow, focus: &BTreeSet<TagRole>) -> Self {
         if row.dimmed() {
             Self::Empty
         } else if focus.is_empty() {
             Self::Normal
-        } else if focus.contains(&row.class) {
+        } else if focus.contains(&row.role) {
             Self::Focused
         } else {
             Self::Unfocused
@@ -95,7 +99,7 @@ pub fn row_name(row: &RoleRow, look: RowLook) -> String {
     };
     format!(
         "{}, {} element{}{state}",
-        class_name(row.class),
+        row.role.name(),
         row.count,
         if row.count == 1 { "" } else { "s" }
     )
@@ -109,23 +113,31 @@ pub fn shown_text(focused: usize, rows: usize) -> String {
 /// True when the card is shown for the current options.
 pub fn shown(state: &AppState) -> bool {
     let view = &state.canvas.view;
-    view.color_by == ColorBy::TagRole || view.show.all_boxes
+    view.color_by == ColorBy::TagRole || view.show.all_boxes || view.show.labels
 }
 
 /// The rows for a page with `boxes` and `artifacts` artifact sequences, in the order of the
 /// design. A role that falls in no class of the design (`Other`) only has a row when the page
-/// uses one.
+/// uses one, and the parts of a table only when the page has some.
 pub fn rows_of(boxes: &[TagBox], artifacts: usize) -> Vec<RoleRow> {
-    RoleClass::ALL
+    let rows: Vec<RoleRow> = TagRole::ALL
         .into_iter()
-        .map(|class| {
-            let count = match class {
-                RoleClass::Artifact => artifacts + boxes.iter().filter(|b| b.class == class).count(),
-                _ => boxes.iter().filter(|b| b.class == class).count(),
+        .map(|role| {
+            let count = boxes.iter().filter(|b| TagRole::of_box(b) == role).count();
+            let count = match role {
+                TagRole::Class(RoleClass::Artifact) => artifacts + count,
+                _ => count,
             };
-            RoleRow { class, count }
+            RoleRow { role, count }
         })
-        .filter(|row| row.class != RoleClass::Other || row.count > 0)
+        .collect();
+    let parts = rows.iter().any(|row| row.role.is_table_part() && row.count > 0);
+    rows.into_iter()
+        .filter(|row| match row.role {
+            TagRole::Class(RoleClass::Other) => row.count > 0,
+            role if role.is_table_part() => parts,
+            _ => true,
+        })
         .collect()
 }
 
@@ -150,7 +162,7 @@ pub fn rows(state: &mut AppState, page: PageIx) -> Vec<RoleRow> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Picked {
     /// A click on the row of a role; `true` with Shift.
-    Row(RoleClass, bool),
+    Row(TagRole, bool),
     /// *Show all*.
     ShowAll,
 }
@@ -167,7 +179,7 @@ pub(super) fn show(column: &mut Column, state: &mut AppState) {
     } else {
         BTreeSet::new()
     };
-    let colors: Vec<Color32> = rows.iter().map(|row| role_color(row.class)).collect();
+    let colors: Vec<Color32> = rows.iter().map(|row| role_color(row.role.class())).collect();
     let card = Card::new(TITLE)
         .dots(colors.iter().copied().take(4).collect())
         .wide();
@@ -176,7 +188,7 @@ pub(super) fn show(column: &mut Column, state: &mut AppState) {
         picked = header(ui, &rows, &focus);
         let ids: Vec<Id> = rows
             .iter()
-            .map(|row| ui.make_persistent_id(("tag-role-row", row.class)))
+            .map(|row| ui.make_persistent_id(("tag-role-row", row.role)))
             .collect();
         let mut move_to = None;
         for (at, (row, color)) in rows.iter().zip(&colors).enumerate() {
@@ -184,7 +196,7 @@ pub(super) fn show(column: &mut Column, state: &mut AppState) {
             let response = role_row(ui, ids[at], row, *color, look, active);
             if response.clicked() {
                 let shift = ui.input(|i| i.modifiers.shift);
-                picked = Some(Picked::Row(row.class, shift));
+                picked = Some(Picked::Row(row.role, shift));
             }
             if response.has_focus() {
                 move_to = arrow_target(ui, response.id, &rows, at);
@@ -195,14 +207,14 @@ pub(super) fn show(column: &mut Column, state: &mut AppState) {
         }
     });
     match picked {
-        Some(Picked::Row(class, add)) => state.click_role(class, add),
+        Some(Picked::Row(role, add)) => state.click_role(role, add),
         Some(Picked::ShowAll) => state.show_all_roles(),
         None => {}
     }
 }
 
 /// The title, and while roles are focused how many are shown and *Show all*.
-fn header(ui: &mut Ui, rows: &[RoleRow], focus: &BTreeSet<RoleClass>) -> Option<Picked> {
+fn header(ui: &mut Ui, rows: &[RoleRow], focus: &BTreeSet<TagRole>) -> Option<Picked> {
     let mut picked = None;
     ui.horizontal(|ui| {
         title(ui, TITLE);
@@ -222,7 +234,7 @@ fn header(ui: &mut Ui, rows: &[RoleRow], focus: &BTreeSet<RoleClass>) -> Option<
             if show_all.on_hover_cursor(CursorIcon::PointingHand).clicked() {
                 picked = Some(Picked::ShowAll);
             }
-            let focused = rows.iter().filter(|row| focus.contains(&row.class)).count();
+            let focused = rows.iter().filter(|row| focus.contains(&row.role)).count();
             ui.label(
                 RichText::new(shown_text(focused, rows.len()))
                     .font(fonts::mono(tokens::mono::TINY))
@@ -255,8 +267,8 @@ fn arrow_target(ui: &Ui, id: Id, rows: &[RoleRow], at: usize) -> Option<usize> {
     None
 }
 
-/// One row: swatch, name and count. While `active` it is a button, unless the page does not use
-/// the role.
+/// One row: swatch, name and count, a part of a table indented under it. While `active` it is a
+/// button, unless the page does not use the role.
 fn role_row(
     ui: &mut Ui,
     id: Id,
@@ -307,8 +319,13 @@ fn role_row(
             StrokeKind::Inside,
         );
     }
+    let indent = if row.role.is_table_part() {
+        PART_INDENT
+    } else {
+        0.0
+    };
     let swatch = Rect::from_center_size(
-        pos2(rect.min.x + 10.0 + SWATCH / 2.0, rect.center().y),
+        pos2(rect.min.x + 10.0 + indent + SWATCH / 2.0, rect.center().y),
         vec2(SWATCH, SWATCH),
     );
     // Out of focus or unused, the swatch is hollow: the state is not colour alone.
@@ -335,7 +352,7 @@ fn role_row(
     painter.text(
         pos2(swatch.max.x + 8.0, rect.center().y),
         Align2::LEFT_CENTER,
-        class_name(row.class),
+        row.role.name(),
         font,
         ink,
     );
@@ -361,10 +378,14 @@ mod tests {
     use super::*;
 
     fn tag(class: RoleClass) -> TagBox {
+        part(class, "")
+    }
+
+    fn part(class: RoleClass, standard: &str) -> TagBox {
         TagBox {
             id: NodeId::Document,
-            role: String::new(),
-            standard: String::new(),
+            role: standard.to_owned(),
+            standard: standard.to_owned(),
             class,
             rect: Rect::new(0.0, 0.0, 1.0, 1.0),
             depth: 0,
@@ -382,7 +403,7 @@ mod tests {
 
         let rows = rows_of(&boxes, 3);
 
-        let counts: Vec<(RoleClass, usize)> = rows.iter().map(|row| (row.class, row.count)).collect();
+        let counts: Vec<(RoleClass, usize)> = rows.iter().map(|row| (row.role.class(), row.count)).collect();
         assert_eq!(
             counts,
             [
@@ -402,30 +423,66 @@ mod tests {
     }
 
     #[test]
+    fn a_table_lists_its_rows_headers_and_cells_under_it_while_the_page_has_them() {
+        let boxes = [
+            part(RoleClass::Table, "Table"),
+            part(RoleClass::Table, "TBody"),
+            part(RoleClass::Table, "TR"),
+            part(RoleClass::Table, "TR"),
+            part(RoleClass::Table, "TH"),
+            part(RoleClass::Table, "TD"),
+            part(RoleClass::Table, "TD"),
+            part(RoleClass::Table, "TD"),
+        ];
+
+        let rows = rows_of(&boxes, 0);
+
+        let table: Vec<(&str, usize)> = rows
+            .iter()
+            .filter(|row| row.role.class() == RoleClass::Table)
+            .map(|row| (row.role.name(), row.count))
+            .collect();
+        assert_eq!(table, [("Table", 2), ("TR", 2), ("TH", 1), ("TD", 3)]);
+        // Right after the table, before the lists.
+        let names: Vec<&str> = rows.iter().map(|row| row.role.name()).collect();
+        assert_eq!(names[4..9], ["Table", "TR", "TH", "TD", "L / LI"]);
+        // Smoke: a page without a table has the Table row alone.
+        assert!(
+            !rows_of(&[tag(RoleClass::Paragraph)], 0)
+                .iter()
+                .any(|row| row.role.is_table_part())
+        );
+    }
+
+    #[test]
     fn other_has_a_row_only_when_the_page_uses_it() {
         assert!(
             rows_of(&[tag(RoleClass::Other)], 0)
                 .iter()
-                .any(|r| r.class == RoleClass::Other)
+                .any(|r| r.role == TagRole::Class(RoleClass::Other))
         );
-        assert!(!rows_of(&[], 0).iter().any(|r| r.class == RoleClass::Other));
+        assert!(
+            !rows_of(&[], 0)
+                .iter()
+                .any(|r| r.role == TagRole::Class(RoleClass::Other))
+        );
     }
 
     #[test]
     fn a_row_looks_and_is_named_for_the_focus() {
         let heading = RoleRow {
-            class: RoleClass::Heading,
+            role: TagRole::Class(RoleClass::Heading),
             count: 1,
         };
         let paragraph = RoleRow {
-            class: RoleClass::Paragraph,
+            role: TagRole::Class(RoleClass::Paragraph),
             count: 2,
         };
         let table = RoleRow {
-            class: RoleClass::Table,
+            role: TagRole::Class(RoleClass::Table),
             count: 0,
         };
-        let focus = BTreeSet::from([RoleClass::Heading]);
+        let focus = BTreeSet::from([TagRole::Class(RoleClass::Heading)]);
 
         assert_eq!(
             [&heading, &paragraph, &table].map(|row| RowLook::of(row, &focus)),

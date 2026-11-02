@@ -4,9 +4,12 @@
 //!
 //! They are the design's `role-*` tokens (artifacts keep their kind colour), the same colours as
 //! the render crate's [`pdfxray_render::ROLE_COLORS`].
+//!
+//! The Tag roles card lists a table in parts ([`TagRole`]), so its rows, header cells and data
+//! cells can be focused one by one; every part keeps the table colour.
 
 use egui::Color32;
-use pdfxray_core::RoleClass;
+use pdfxray_core::{RoleClass, TagBox};
 
 use crate::theme::tokens;
 
@@ -41,6 +44,79 @@ pub const fn class_name(class: RoleClass) -> &'static str {
         RoleClass::Group => "Sect / Div",
         RoleClass::Artifact => "Artifact",
         RoleClass::Other => "Other",
+    }
+}
+
+/// What a row of the Tag roles card stands for, and what focusing it picks: a role class, or one
+/// part of a table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum TagRole {
+    /// Every element of the class; for [`RoleClass::Table`] the table and its row groups
+    /// (`THead`, `TBody` and `TFoot`), whose parts have rows of their own.
+    Class(RoleClass),
+    /// `TR`.
+    TableRow,
+    /// `TH`.
+    TableHeader,
+    /// `TD`.
+    TableCell,
+}
+
+impl TagRole {
+    /// Every role, in the card's order: the parts of a table right after it.
+    pub const ALL: [Self; 14] = [
+        Self::Class(RoleClass::Heading),
+        Self::Class(RoleClass::Paragraph),
+        Self::Class(RoleClass::Figure),
+        Self::Class(RoleClass::Caption),
+        Self::Class(RoleClass::Table),
+        Self::TableRow,
+        Self::TableHeader,
+        Self::TableCell,
+        Self::Class(RoleClass::List),
+        Self::Class(RoleClass::Link),
+        Self::Class(RoleClass::Inline),
+        Self::Class(RoleClass::Group),
+        Self::Class(RoleClass::Artifact),
+        Self::Class(RoleClass::Other),
+    ];
+
+    /// The role of an element of `class` whose standard type is `standard`.
+    pub fn of(class: RoleClass, standard: &str) -> Self {
+        match (class, standard) {
+            (RoleClass::Table, "TR") => Self::TableRow,
+            (RoleClass::Table, "TH") => Self::TableHeader,
+            (RoleClass::Table, "TD") => Self::TableCell,
+            _ => Self::Class(class),
+        }
+    }
+
+    /// The role of the element `tag` outlines.
+    pub fn of_box(tag: &TagBox) -> Self {
+        Self::of(tag.class, &tag.standard)
+    }
+
+    /// The class the role belongs to, which gives its colour.
+    pub const fn class(self) -> RoleClass {
+        match self {
+            Self::Class(class) => class,
+            Self::TableRow | Self::TableHeader | Self::TableCell => RoleClass::Table,
+        }
+    }
+
+    /// True for a row, a header cell or a data cell: the card indents it under its table.
+    pub const fn is_table_part(self) -> bool {
+        !matches!(self, Self::Class(_))
+    }
+
+    /// How the card names the role: [`class_name`] for a class, the tag for a table part.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Class(class) => class_name(class),
+            Self::TableRow => "TR",
+            Self::TableHeader => "TH",
+            Self::TableCell => "TD",
+        }
     }
 }
 
@@ -80,5 +156,38 @@ mod tests {
         assert_eq!(with_ellipsis, Vec::<&str>::new());
         // Smoke: the other names are untouched.
         assert_eq!(class_name(RoleClass::List), "L / LI");
+    }
+
+    #[test]
+    fn a_table_is_listed_in_parts_that_keep_the_table_colour() {
+        assert_eq!(TagRole::of(RoleClass::Table, "TR"), TagRole::TableRow);
+        assert_eq!(TagRole::of(RoleClass::Table, "TH"), TagRole::TableHeader);
+        assert_eq!(TagRole::of(RoleClass::Table, "TD"), TagRole::TableCell);
+        // The table and its row groups stay one role.
+        assert_eq!(
+            ["Table", "THead", "TBody", "TFoot"].map(|s| TagRole::of(RoleClass::Table, s)),
+            [TagRole::Class(RoleClass::Table); 4]
+        );
+        let parts: Vec<&str> = TagRole::ALL
+            .into_iter()
+            .filter(|role| role.is_table_part())
+            .map(TagRole::name)
+            .collect();
+        assert_eq!(parts, ["TR", "TH", "TD"]);
+        assert!(
+            TagRole::ALL
+                .into_iter()
+                .filter(|role| role.is_table_part())
+                .all(|role| role.class() == RoleClass::Table)
+        );
+        // Smoke: every class has its role, once, in the order of the classes.
+        let classes: Vec<RoleClass> = TagRole::ALL
+            .into_iter()
+            .filter_map(|role| match role {
+                TagRole::Class(class) => Some(class),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(classes, RoleClass::ALL);
     }
 }

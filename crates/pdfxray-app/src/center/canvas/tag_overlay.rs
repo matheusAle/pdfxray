@@ -2,19 +2,21 @@
 //! that name them, the artifacts, and the reading order as numbered badges joined by a path.
 //!
 //! What shows is set in the View menu ([`TagShow`]): *All tag boxes* (`⇧T`) outlines every
-//! element on the page and is what the labels, nesting and artifact options decorate; *Reading
-//! order* (`R`) draws the badges and the path whether or not the boxes are on. Colours come from
-//! [`crate::roles`], so a role reads the same here, in the Tags tree and in the legend.
+//! element on the page and *Tag labels* (`L`) puts a chip naming each one by its box, each
+//! without the other; *Nesting* and *Artifacts* add the containers and the artifacts to both.
+//! *Reading order* (`R`) draws the badges and the path whether or not the boxes are on. Colours
+//! come from [`crate::roles`], so a role reads the same here, in the Tags tree and in the legend.
 //!
-//! Chips and badges are buttons: a click selects the element they stand for. A click inside a
-//! box selects the innermost element whose box holds the point, and hovering one outlines it.
+//! Chips and badges are buttons: a click selects the element they stand for. While the boxes are
+//! on, a click inside one selects the innermost element whose box holds the point, and hovering
+//! one outlines it.
 //! The path draws from badge 1 to the last over [`motion::PATH`] when it is shown.
 //!
 //! The chip of a table header cell says which way the header heads, and hovering the header
 //! echoes the cells it heads ([`super::header_scope`]).
 //!
 //! While the Tag roles card focuses some roles ([`crate::state::role_focus`]), the other roles
-//! stay as boxes at 15 % without chips, and the reading-order path dims to 30 % where it runs
+//! stay as boxes at 15 % without chips (a table's rows, headers and cells are roles apart), and the reading-order path dims to 30 % where it runs
 //! through them; the badges stay. Focus is a view, not a filter: a click in a faint box still
 //! picks it, and hovering it outlines it at full strength.
 
@@ -36,7 +38,7 @@ use super::geometry::PageGeometry;
 use super::header_scope::{self, HeaderMark};
 use crate::components::{focus, tooltip};
 use crate::modes::{OrderSource, TagShow};
-use crate::roles::role_color;
+use crate::roles::{TagRole, role_color};
 use crate::state::AppState;
 use crate::theme::{fonts, motion, tokens};
 
@@ -111,7 +113,7 @@ pub(super) struct ArtifactBox {
 /// What the tag overlay draws on one page.
 #[derive(Debug, Default)]
 pub(super) struct TagLayer {
-    /// The boxes to outline; empty while *All tag boxes* is off.
+    /// The elements to outline or label; empty while *All tag boxes* and *Tag labels* are off.
     boxes: Arc<[TagBox]>,
     artifacts: Vec<ArtifactBox>,
     /// The order to number; `None` while *Reading order* is off.
@@ -121,10 +123,10 @@ pub(super) struct TagLayer {
     source: (OrderSource, Option<SpeechPreset>),
     /// The role colours, in the order of [`RoleClass::ALL`].
     colors: Vec<Color32>,
-    /// The header cells of the page's tables, while the boxes are on.
+    /// The header cells of the page's tables, while the boxes or the labels are on.
     headers: HashMap<NodeId, HeaderMark>,
     /// The roles in focus; `None` when every role shows.
-    focus: Option<BTreeSet<RoleClass>>,
+    focus: Option<BTreeSet<TagRole>>,
     /// The selection: a selected header's echo is the table overlay's to draw.
     selected: Option<NodeId>,
 }
@@ -137,15 +139,16 @@ pub(super) fn collect(state: &mut AppState, page: PageIx) -> TagLayer {
         from,
         (from == OrderSource::Speech).then_some(state.drawer.speech.preset),
     );
-    if !show.all_boxes && !show.reading_order {
+    let tags = show.all_boxes || show.labels;
+    if !tags && !show.reading_order {
         return TagLayer::default();
     }
-    let boxes = if show.all_boxes {
+    let boxes = if tags {
         state.tag_boxes(page)
     } else {
         Arc::from([])
     };
-    let artifacts = if show.all_boxes && show.artifacts {
+    let artifacts = if tags && show.artifacts {
         artifact_boxes(state, page)
     } else {
         Vec::new()
@@ -156,7 +159,7 @@ pub(super) fn collect(state: &mut AppState, page: PageIx) -> TagLayer {
         None
     };
     let colors = RoleClass::ALL.map(role_color).to_vec();
-    let headers = if show.all_boxes {
+    let headers = if tags {
         header_scope::marks_on(state, page)
     } else {
         HashMap::new()
@@ -200,19 +203,31 @@ impl TagLayer {
         self.boxes.iter().filter(|tag| shows(self.show, tag))
     }
 
-    /// True when `class` is drawn at full strength: it is focused, or nothing is.
-    fn focused(&self, class: RoleClass) -> bool {
-        self.focus.as_ref().is_none_or(|focus| focus.contains(&class))
+    /// True when `role` is drawn at full strength: it is focused, or nothing is.
+    fn focused(&self, role: TagRole) -> bool {
+        self.focus.as_ref().is_none_or(|focus| focus.contains(&role))
     }
 
-    /// How strong the box of `class` is drawn: 1, or [`UNFOCUSED_BOX`] out of focus.
-    fn strength(&self, class: RoleClass) -> f32 {
-        if self.focused(class) { 1.0 } else { UNFOCUSED_BOX }
+    /// How strong the box of `role` is drawn: 1, or [`UNFOCUSED_BOX`] out of focus.
+    fn strength(&self, role: TagRole) -> f32 {
+        if self.focused(role) { 1.0 } else { UNFOCUSED_BOX }
+    }
+
+    /// The role of the element `id` of a reading-order step of `class`: a table part is known by
+    /// its box.
+    fn role_of(&self, id: &NodeId, class: RoleClass) -> TagRole {
+        self.boxes
+            .iter()
+            .find(|tag| &tag.id == id)
+            .map_or(TagRole::Class(class), TagRole::of_box)
     }
 
     /// The innermost shown element whose box holds `point`: the deepest, and of two as deep the
-    /// smaller.
+    /// smaller. Without the boxes there is none to click.
     pub(super) fn box_at(&self, point: Point) -> Option<&TagBox> {
+        if !self.show.all_boxes {
+            return None;
+        }
         self.visible()
             .filter(|tag| tag.rect.contains(point))
             .min_by(|a, b| {
@@ -248,9 +263,12 @@ pub(super) fn draw(
     let under_pointer = hover.and_then(|pos| layer.box_at(geo.screen_to_page(pos)));
 
     // Every outline first, then the chips: a later box must not cut through an earlier chip.
-    for tag in layer.visible() {
+    let outlined = layer.show.all_boxes;
+    for tag in layer.visible().filter(|_| outlined) {
         let rect = geo.rect_to_screen(tag.rect);
-        let color = layer.color(tag.class).gamma_multiply(layer.strength(tag.class));
+        let color = layer
+            .color(tag.class)
+            .gamma_multiply(layer.strength(TagRole::of_box(tag)));
         if tag.class == RoleClass::Group {
             painter.rect_stroke(
                 rect,
@@ -268,10 +286,11 @@ pub(super) fn draw(
             );
         }
     }
+    let artifact = TagRole::Class(RoleClass::Artifact);
     let artifact_color = layer
         .color(RoleClass::Artifact)
-        .gamma_multiply(layer.strength(RoleClass::Artifact));
-    for art in &layer.artifacts {
+        .gamma_multiply(layer.strength(artifact));
+    for art in layer.artifacts.iter().filter(|_| outlined) {
         painter.rect_stroke(
             geo.rect_to_screen(art.rect),
             0.0,
@@ -283,43 +302,46 @@ pub(super) fn draw(
     // hovered is known once the chips are drawn.
     let echo_at = painter.add(Shape::Noop);
     let mut placed: Vec<UiRect> = Vec::new();
-    for tag in layer.visible().filter(|tag| layer.focused(tag.class)) {
-        let wanted = match tag.class {
-            RoleClass::Group => layer.show.nesting.then_some(Corner::TopRight),
-            _ => layer.show.labels.then_some(Corner::TopLeft),
+    let labelled = layer.show.labels;
+    for tag in layer
+        .visible()
+        .filter(|tag| labelled && layer.focused(TagRole::of_box(tag)))
+    {
+        // A container's chip goes above its box, clear of the chips of what it holds.
+        let corner = match tag.class {
+            RoleClass::Group => Corner::TopRight,
+            _ => Corner::TopLeft,
         };
-        if let Some(corner) = wanted {
-            let header = layer.headers.get(&tag.id);
-            let response = Chip {
-                rect: geo.rect_to_screen(tag.rect),
-                corner,
-                text: chip_text(tag),
-                fill: layer.color(tag.class),
-                id: ui.make_persistent_id(("tag-chip", page, &tag.id)),
-                scope: header.map(|mark| &mark.scope),
-            }
-            .show(ui, &painter, &mut placed);
-            let response = match header {
-                Some(mark) => tooltip::named(
-                    response,
-                    &header_scope::hint_title(chip_text(tag), &mark.text, &mark.scope),
-                    &header_scope::hint(&mark.scope),
-                    None,
-                ),
-                None => response,
-            };
-            if response.clicked() {
-                out.clicked = Some(tag.id.clone());
-            }
-            if response.hovered() {
-                hovered = Some(&tag.id);
-            }
+        let header = layer.headers.get(&tag.id);
+        let response = Chip {
+            rect: geo.rect_to_screen(tag.rect),
+            corner,
+            text: chip_text(tag),
+            fill: layer.color(tag.class),
+            id: ui.make_persistent_id(("tag-chip", page, &tag.id)),
+            scope: header.map(|mark| &mark.scope),
+        }
+        .show(ui, &painter, &mut placed);
+        let response = match header {
+            Some(mark) => tooltip::named(
+                response,
+                &header_scope::hint_title(chip_text(tag), &mark.text, &mark.scope),
+                &header_scope::hint(&mark.scope),
+                None,
+            ),
+            None => response,
+        };
+        if response.clicked() {
+            out.clicked = Some(tag.id.clone());
+        }
+        if response.hovered() {
+            hovered = Some(&tag.id);
         }
     }
     for art in layer
         .artifacts
         .iter()
-        .filter(|_| layer.focused(RoleClass::Artifact))
+        .filter(|_| labelled && layer.focused(artifact))
     {
         let response = Chip {
             rect: geo.rect_to_screen(art.rect),
@@ -532,7 +554,9 @@ fn draw_order<'a>(
         let (from, to) = (points[n], points[n + 1]);
         let step = &order.steps[n + 1];
         // Through a role out of focus the path goes faint; its badges stay.
-        let through_focus = layer.focused(order.steps[n].class) && layer.focused(step.class);
+        let before = &order.steps[n];
+        let through_focus = layer.focused(layer.role_of(&before.id, before.class))
+            && layer.focused(layer.role_of(&step.id, step.class));
         let color = segment_color(step).gamma_multiply(if through_focus { 1.0 } else { UNFOCUSED_PATH });
         let end = from + (to - from) * *fraction;
         if *fraction <= 0.0 {
@@ -772,14 +796,17 @@ mod tests {
             1,
             Rect::new(20.0, 20.0, 40.0, 30.0),
         );
-        let layer = |nesting| TagLayer {
+        let shown = |all_boxes, nesting| TagLayer {
             boxes: Arc::from(vec![outer.clone(), wide.clone(), small.clone()]),
             show: TagShow {
+                all_boxes,
+                labels: true,
                 nesting,
                 ..TagShow::default()
             },
             ..TagLayer::default()
         };
+        let layer = |nesting| shown(true, nesting);
 
         // As deep: the smaller box wins.
         assert_eq!(
@@ -800,6 +827,8 @@ mod tests {
         );
         // Without nesting the container is not there to click.
         assert_eq!(layer(false).box_at(Point::new(5.0, 95.0)), None);
+        // Labels without the boxes: there is no box to click, only the chips.
+        assert_eq!(shown(false, true).box_at(Point::new(25.0, 25.0)), None);
     }
 
     #[test]

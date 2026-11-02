@@ -34,7 +34,8 @@ pub const ORDER_FROM_TITLE: &str = "Reading order from";
 /// Name of the option that outlines every structure element on the page; `⇧T` does the same.
 pub const ALL_BOXES_LABEL: &str = "All tag boxes";
 
-/// Name of the option that writes the tag name over each box; `L` does the same.
+/// Name of the option that names each element by its box, with or without the boxes; `L` does
+/// the same.
 pub const LABELS_LABEL: &str = "Tag labels";
 
 /// Name of the option that numbers the elements in reading order; `R` does the same.

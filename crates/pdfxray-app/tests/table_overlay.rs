@@ -165,7 +165,7 @@ fn painted(harness: &App) -> Vec<Shape> {
 #[test]
 fn the_selected_cell_outline_is_painted_under_the_tag_chips_not_over_them() {
     let mut harness = opened("table-headers-ids");
-    harness.key_press_modifiers(Modifiers::SHIFT, Key::T);
+    boxes_on(&mut harness);
     // The TD `1.2`: its outline is the accent one the table overlay paints.
     select(&mut harness, elem(18));
 
@@ -383,8 +383,10 @@ fn a_header_id_no_cell_has_is_named_in_the_inspector_and_a_click_in_the_grid_sel
 
 // ---- header scope ----
 
+/// The tag boxes and their labels: `⇧T` then `L`.
 fn boxes_on(harness: &mut App) {
     harness.key_press_modifiers(Modifiers::SHIFT, Key::T);
+    harness.key_press(Key::L);
     settle(harness);
 }
 
@@ -462,6 +464,80 @@ fn a_th_chip_says_its_declared_scope_and_a_conflict_gets_an_amber_ring_and_a_mar
     harness.key_press(Key::L);
     settle(&mut harness);
     assert_eq!(header_chips(&harness), Vec::<String>::new());
+}
+
+/// The row of the Tag roles card named `role`, e.g. `TH`.
+fn role_row<'h>(harness: &'h App, role: &str) -> egui_kittest::Node<'h> {
+    let prefix = format!("{role}, ");
+    common::nodes_in(harness, Region::Center, Role::Button)
+        .into_iter()
+        .find(|node| {
+            node.accesskit_node()
+                .label()
+                .is_some_and(|name| name.starts_with(&prefix))
+        })
+        .unwrap_or_else(|| panic!("no Tag roles row for {role}"))
+}
+
+#[test]
+fn the_tag_roles_card_lists_rows_headers_and_cells_and_focuses_each_apart() {
+    let mut harness = opened("table-scope-conflict");
+    boxes_on(&mut harness);
+    // Small enough for the card to be open beside the page.
+    harness.state_mut().state.set_zoom(0.45);
+    settle(&mut harness);
+    wait_for_render(&mut harness);
+    settle(&mut harness);
+    // The chips of `tag` on the page: `TD`, or `TH · Column · declared`; not the card's rows.
+    let chips = |harness: &App, tag: &str| {
+        let scoped = format!("{tag} ·");
+        buttons_in(harness, Region::Center)
+            .into_iter()
+            .filter(|name| name == tag || name.starts_with(&scoped))
+            .count()
+    };
+    let cells = chips(&harness, "TD");
+    assert!(cells > 0, "the fixture has data cells");
+
+    role_row(&harness, "TH").click();
+    settle(&mut harness);
+
+    // The header cells alone keep their chips.
+    assert_eq!(chips(&harness, "TH"), 6);
+    assert_eq!(chips(&harness, "TD"), 0);
+    assert_eq!(chips(&harness, "TR"), 0);
+    assert!(
+        role_row(&harness, "TH")
+            .accesskit_node()
+            .label()
+            .is_some_and(|name| name.ends_with(", focused"))
+    );
+
+    // Shift adds the data cells; the rows and the table stay out.
+    let pos = role_row(&harness, "TD").rect().center();
+    harness.hover_at(pos);
+    for pressed in [true, false] {
+        harness.event_modifiers(
+            egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::SHIFT,
+            },
+            Modifiers::SHIFT,
+        );
+    }
+    settle(&mut harness);
+    assert_eq!(chips(&harness, "TH"), 6);
+    assert_eq!(chips(&harness, "TD"), cells);
+    assert_eq!(chips(&harness, "TR"), 0);
+    // Smoke: the table row of the card is a role of its own, out of focus.
+    assert!(
+        role_row(&harness, "Table")
+            .accesskit_node()
+            .label()
+            .is_some_and(|name| name.ends_with(", out of focus"))
+    );
 }
 
 #[test]

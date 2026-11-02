@@ -49,7 +49,7 @@ Ranked by severity, then by reach. **Status**: Fixed, Skipped (see below) or Ope
 | 7 | MEDIUM | Writing | `center/canvas/mod.rs:59` | “Encrypted: not rendered in v1” (release jargon; the encrypted card says “in this version”) | “This file is encrypted: pdfxray can’t draw its pages in this version.” | One voice, one vocabulary | Fixed |
 | 8 | MEDIUM | Writing | `navigator/tags.rs:21` | “This file has no structure tree.” | “…, so screen readers have no tags to follow. Content lists what each page draws.” | Empty states point forward | Fixed |
 | 9 | MEDIUM | Typography | 22 strings in `src/` (`states/broken.rs`, `states/opening.rs`, `states/encrypted.rs`, `modes.rs`, `action_bar.rs`, `table_overlay.rs`, `object_preview/mod.rs`, `object_facts/naming.rs`, …) and 22 in `pdfxray-core` explanation catalogues; `center/canvas/mod.rs:80`; `navigator/validation.rs:698` | Straight `'` beside the project’s curly quotes; “Rendering...”; “+4 more p2-p5” | `’`, “Rendering…”, “p2–p5” (`more_text`) | Typographic punctuation, applied consistently | Fixed |
-| 10 | MEDIUM | Colors | `theme/tokens.rs` `TEXT_3` (195 uses in 61 files) | `#6B7380`: 3.89:1 on PANEL, 3.83:1 on SURFACE, 3.96:1 on DRAWER, 3.50:1 on popovers, 3.11:1 on a selected row; chevrons at 70 % reach 2.52:1 | A decision: lighten `TEXT_3`, or keep it for non-essential text only | WCAG 1.4.3 (4.5:1 for 10–12 px text), 1.4.11 for chevrons | Skipped (user decision) |
+| 10 | MEDIUM | Colors | `theme/tokens.rs` `TEXT_3` (195 uses in 61 files) | `#6B7380`: 3.89:1 on PANEL, 3.83:1 on SURFACE, 3.96:1 on DRAWER, 3.50:1 on popovers, 3.11:1 on a selected row; chevrons at 70 % reach 2.52:1 | A decision: lighten `TEXT_3`, or keep it for non-essential text only | WCAG 1.4.3 (4.5:1 for 10–12 px text), 1.4.11 for chevrons | Kept by user decision (2026-11-02) |
 | 11 | MEDIUM | Accessibility | `components/prop_row.rs:333` | The per-row copy icon exists only while the row is hovered, so Tab never reaches it | A keyboard path to copy a value (designer/product) | WCAG 2.1.1 | Skipped (designer) |
 | 12 | LOW | Accessibility / UI | `components/crumb.rs`, `inspector/table.rs`, `inspector/paint_order.rs`, `drawer/paint_order.rs` | On an already selected item (current crumb, selected cell, “this op”, current card) the focus ring is the same 1 px accent as the selection outline | A distinct focus style (offset or 2 px) | Focus on a selected item is hard to tell | Skipped (designer) |
 | 13 | LOW | Layout | `inspector/table.rs:300,352` | “NAMED BY /HEADERS” and “HEADERS OF THE CELL” start on the key edge, 12 px left of every section header’s text | Align them to the section headers’ text edge, store them in natural case | Shared edges | Open |
@@ -57,7 +57,9 @@ Ranked by severity, then by reach. **Status**: Fixed, Skipped (see below) or Ope
 
 ## Skipped
 
-- **`TEXT_3` contrast (finding 10).** Not changed: the decision is the user’s. Instances that
+- **`TEXT_3` contrast (finding 10).** Kept by user decision (2026-11-02): the token stays
+  `#6B7380`; `#8A93A3` is used only where boards 26–28 ask for it (out-of-focus role names,
+  helper text). For the record, the instances that
   carry information at 10–12 px: property keys (`components/prop_row.rs:188`), section headers
   (`theme/fonts.rs:182`), tree-row details and annotations (`components/tree_row.rs:292,332`),
   navigator empty states (`navigator/mod.rs`, `objects.rs`), drawer hints such as “sorted by
@@ -125,6 +127,6 @@ Not verified:
 
 ## Verdict
 
-`Approve`: the HIGH findings are fixed. MEDIUM finding 10 (`TEXT_3`) waits for the user,
+`Approve`: the HIGH findings are fixed. MEDIUM finding 10 (`TEXT_3`) is kept by user decision,
 finding 11 and the LOW findings wait for the designer. All six domains were inspected; none is
 `Not reviewed`.

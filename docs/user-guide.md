@@ -156,11 +156,15 @@ fold into chips when there is no room beside the page.
 ## Tags, reading order and tables
 
 * **All tag boxes** (`⇧T`) outlines every structure element in its role colour; **Tag labels**
-  (`L`) adds a role chip; **Nesting** shows grouping elements; **Artifacts** marks artifacts.
-  Each role has one fixed colour, shown in the Tag roles legend, the tree dots and the x-ray.
-* **Focus on roles.** While the tag boxes are on, the Tag roles card picks which roles stand
-  out. Click a row to focus that role, click it again to release; `Shift`-click adds or removes
-  a role (removing the last releases). The other roles stay as faint boxes (15 %) without labels,
+  (`L`) names each element with a role chip by its box. Each works without the other, so you can
+  read the labels with no boxes in the way; both start off. **Nesting** adds the grouping
+  elements and **Artifacts** the artifacts to both. Each role has one fixed colour, shown in the
+  Tag roles legend, the tree dots and the x-ray.
+* **Focus on roles.** While the tag boxes or the tag labels are on, the Tag roles card picks
+  which roles stand out. A table's rows (`TR`), header cells (`TH`) and data cells (`TD`) have
+  rows of their own under *Table* when the page has them, so each can be picked apart. Click a
+  row to focus that role, click it again to release; `Shift`-click adds or removes a role
+  (removing the last releases). The other roles stay as faint boxes (15 %) without labels,
   and the reading-order path goes faint (30 %) where it runs through them; its badges stay.
   Focus is a view, not a filter: clicking a faint box still selects it, and hovering it outlines
   it at full strength. The card's header says how many roles are shown (`2 of 10 shown`); **Show

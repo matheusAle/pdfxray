@@ -240,7 +240,7 @@ fn the_xray_options_are_stored_in_the_view_state() {
     settle(&mut harness);
     assert_eq!(harness.state().state.canvas.view.color_by, ColorBy::Artifact);
 
-    // Show: the five switches start as the design has them, and each flips its own field.
+    // Show: Nesting and Artifacts start on, the rest off, and each switch flips its own field.
     let show = harness.state().state.canvas.view.show;
     assert_eq!(
         (
@@ -250,7 +250,7 @@ fn the_xray_options_are_stored_in_the_view_state() {
             show.nesting,
             show.artifacts
         ),
-        (false, true, false, true, true)
+        (false, false, false, true, true)
     );
     for label in [
         "All tag boxes",
@@ -271,7 +271,7 @@ fn the_xray_options_are_stored_in_the_view_state() {
             show.nesting,
             show.artifacts
         ),
-        (true, false, true, false, false)
+        (true, true, true, false, false)
     );
     assert!(is_selected(&the(
         &harness,
@@ -279,7 +279,7 @@ fn the_xray_options_are_stored_in_the_view_state() {
         Role::CheckBox,
         "All tag boxes"
     )));
-    assert!(!is_selected(&the(
+    assert!(is_selected(&the(
         &harness,
         Region::Center,
         Role::CheckBox,
@@ -316,12 +316,20 @@ fn shift_t_l_and_r_toggle_the_tag_overlay_options() {
         let show = harness.state().state.canvas.view.show;
         (show.all_boxes, show.labels, show.reading_order)
     };
-    assert_eq!(show(&harness), (false, true, false));
+    assert_eq!(show(&harness), (false, false, false));
 
     harness.key_press_modifiers(Modifiers::SHIFT, Key::T);
     settle(&mut harness);
-    assert_eq!(show(&harness), (true, true, false));
+    assert_eq!(show(&harness), (true, false, false));
 
+    // The labels go on and off by themselves, whatever the boxes do.
+    harness.key_press(Key::L);
+    settle(&mut harness);
+    assert_eq!(show(&harness), (true, true, false));
+    harness.key_press_modifiers(Modifiers::SHIFT, Key::T);
+    settle(&mut harness);
+    assert_eq!(show(&harness), (false, true, false));
+    harness.key_press_modifiers(Modifiers::SHIFT, Key::T);
     harness.key_press(Key::L);
     settle(&mut harness);
     assert_eq!(show(&harness), (true, false, false));

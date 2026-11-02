@@ -72,7 +72,7 @@ pub const XRAY_ALPHA: u8 = 128;
 pub struct TagShow {
     /// A box for every structure element on the page (`⇧T`).
     pub all_boxes: bool,
-    /// The tag name over each box (`L`).
+    /// A chip naming each element by its box (`L`), with or without the boxes.
     pub labels: bool,
     /// Numbered badges and the path through the elements (`R`).
     pub reading_order: bool,
@@ -86,7 +86,7 @@ impl Default for TagShow {
     fn default() -> Self {
         Self {
             all_boxes: false,
-            labels: true,
+            labels: false,
             reading_order: false,
             nesting: true,
             artifacts: true,

@@ -1162,3 +1162,56 @@ fn a_filter_that_matches_nothing_offers_the_way_back() {
         );
     }
 }
+
+#[test]
+fn the_row_after_a_wrapped_array_starts_below_its_last_line() {
+    let bbox = "[475.66 658.09 499.79 667.16]";
+    let rows = |width: f32| {
+        let mut harness = builder(vec2(width, 240.0)).build_ui(move |ui| {
+            section::show(ui, "wrapped-array", "Geometry", |ui| {
+                PropRow::new("Page bbox", bbox).show(ui);
+                PropRow::new("Size", "24.13 × 9.07 pt").show(ui);
+            });
+        });
+        harness.run();
+        let row = |name: &str| {
+            harness
+                .get_all_by_role(Role::ListItem)
+                .find(|node| {
+                    node.accesskit_node()
+                        .label()
+                        .unwrap_or_default()
+                        .starts_with(name)
+                })
+                .unwrap_or_else(|| panic!("no `{name}` row"))
+                .rect()
+        };
+        let lines: Vec<egui::Rect> = shapes_of(&harness)
+            .into_iter()
+            .filter_map(|shape| match shape {
+                Shape::Text(text) if bbox.contains(text.galley.text().trim()) => {
+                    Some(text.visual_bounding_rect())
+                }
+                _ => None,
+            })
+            .collect();
+        (row("Page bbox"), row("Size"), lines)
+    };
+
+    // Narrow: the array wraps onto a second line, and the next row starts under it.
+    let (wrapped, size, lines) = rows(300.0);
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(
+        lines.iter().all(|line| wrapped.contains_rect(*line)),
+        "{lines:?} in {wrapped:?}"
+    );
+    assert_eq!(size.min.y, wrapped.max.y + 1.0);
+    assert!(
+        lines.iter().all(|line| line.max.y < size.min.y),
+        "{lines:?} over {size:?}"
+    );
+    // Smoke: wide enough for one line, the rows keep their one-row pitch.
+    let (one_line, size, lines) = rows(400.0);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert_eq!(size.min.y - one_line.min.y, tokens::ROW_H + 1.0);
+}
