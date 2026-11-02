@@ -144,8 +144,8 @@ mod tests {
         assert_eq!(LogoArt::for_size(72.0), LogoArt::Master);
         // both drawings decode, at the sizes the design exports
         let size = |art| logo_rgba(art).map(|(_, width, height)| (width, height));
-        assert_eq!(size(LogoArt::Master), Some((1030, 1030)));
-        assert_eq!(size(LogoArt::Small), Some((258, 258)));
+        assert_eq!(size(LogoArt::Master), Some((1024, 1024)));
+        assert_eq!(size(LogoArt::Small), Some((256, 256)));
         // smoke: the master is not blank
         let (rgba, _, _) = logo_rgba(LogoArt::Master).expect("master decodes");
         assert!(rgba.as_chunks::<4>().0.iter().any(|px| px[3] == 255));
