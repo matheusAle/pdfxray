@@ -79,7 +79,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
         return;
     };
     let lines = lines(state);
-    let selected = state.selection.primary.clone();
+    let selected = state.selection.primary().cloned();
     let mut clicked = None;
     let mut hovered = None;
     ScrollArea::vertical()

@@ -10,7 +10,8 @@
 use std::fmt::Write as _;
 
 use pdfxray_core::{
-    Document, HeaderSource, IrregularRow, NodeId, ObjRef, RowGroup, TableModel, TableRules, TableScope,
+    Document, HeaderPlace, HeaderSource, IrregularRow, NodeId, ObjRef, RowGroup, ScopeSource, TableModel,
+    TableRules, TableScope,
 };
 use pdfxray_fixtures::{PdfVersion, PdfWriter, Trailer};
 use pretty_assertions::assert_eq;
@@ -284,6 +285,170 @@ fn spans_place_cells_and_headers_lists_resolve_recursively_with_dangling_ids_rep
     );
     // Smoke: only the last cell has a list entry nobody answers.
     assert_eq!(model.cells[9].missing_header_ids.len(), 1);
+}
+
+// ---- header scope -----------------------------------------------------------------------------
+
+/// `(object, scope, source, place, objects it governs, objects that name it)` of every header cell.
+type ScopeRow = (u32, TableScope, ScopeSource, HeaderPlace, Vec<u32>, Vec<u32>);
+
+fn scopes(model: &TableModel) -> Vec<ScopeRow> {
+    let num = |node: &NodeId| match node {
+        NodeId::StructElem(r) => r.num,
+        other => panic!("{other} is not an element"),
+    };
+    model
+        .cells
+        .iter()
+        .filter_map(|c| {
+            let s = c.header_scope.as_ref()?;
+            Some((
+                num(&c.node),
+                s.scope,
+                s.source,
+                s.place,
+                s.governs.iter().map(num).collect(),
+                s.named_by.iter().map(num).collect(),
+            ))
+        })
+        .collect()
+}
+
+#[test]
+fn a_declared_scope_is_declared_unless_its_place_says_the_other_way_and_each_header_lists_what_it_governs() {
+    use HeaderPlace::{FirstColumn, HeaderRow, TopRow};
+    use ScopeSource::{Conflict, Declared};
+    use TableScope::{Both, Column, Row};
+
+    let doc = fixture("table-scope-conflict");
+
+    let model = table_of(&doc, 8);
+
+    assert_eq!(
+        scopes(&model),
+        [
+            // Region: right along both its rows, and down its column.
+            (13, Both, Declared, TopRow, vec![14, 15, 16, 17, 20], vec![]),
+            (14, Column, Declared, TopRow, vec![15, 16, 18, 19, 21, 22], vec![]),
+            (15, Column, Declared, HeaderRow, vec![18, 21], vec![]),
+            (16, Column, Declared, HeaderRow, vec![19, 22], vec![]),
+            (17, Row, Declared, FirstColumn, vec![18, 19], vec![]),
+            // South says Column but sits where a row header does; nothing is below it.
+            (20, Column, Conflict, FirstColumn, vec![], vec![]),
+        ]
+    );
+    // The place reads as the other direction, in words.
+    let south = model.cell_of(&elem(20)).unwrap().header_scope.as_ref().unwrap();
+    assert_eq!(south.place.reads_as(), Row);
+    assert_eq!(south.place.phrase(), "the first column");
+    // Smoke: data cells have no scope of their own.
+    assert!(
+        model
+            .cells
+            .iter()
+            .filter(|c| !c.header)
+            .all(|c| c.header_scope.is_none())
+    );
+}
+
+#[test]
+fn a_header_without_scope_is_inferred_from_its_place_and_lists_the_cells_that_name_its_id() {
+    use HeaderPlace::{FirstColumn, HeaderRow, TopRow};
+    use ScopeSource::Inferred;
+    use TableScope::{Column, Row};
+
+    let doc = fixture("table-headers-ids");
+
+    let model = table_of(&doc, 8);
+
+    assert_eq!(
+        scopes(&model),
+        [
+            // Region has an ID nobody names; it heads North and South by position.
+            (13, Column, Inferred, TopRow, vec![17, 20], vec![]),
+            // Sales is named by Q1 and Q2, and reaches the data through their lists.
+            (
+                14,
+                Column,
+                Inferred,
+                TopRow,
+                vec![15, 16, 18, 19, 21, 22],
+                vec![15, 16]
+            ),
+            (15, Column, Inferred, HeaderRow, vec![18, 21], vec![18, 21]),
+            (16, Column, Inferred, HeaderRow, vec![19, 22], vec![19, 22]),
+            (17, Row, Inferred, FirstColumn, vec![18, 19], vec![18, 19]),
+            (20, Row, Inferred, FirstColumn, vec![21, 22], vec![21, 22]),
+        ]
+    );
+}
+
+#[test]
+fn a_row_scope_in_the_top_row_conflicts_and_both_or_a_matching_scope_never_does() {
+    // A row of two headers over a data row whose first cell is a header. Cells: the top row 11
+    // and 12, the data row 13 (TH) and 14 (TD).
+    let rows: [&[(&str, &str)]; 2] = [
+        &[
+            ("TH", "/A << /O /Table /Scope /Row >>"),
+            ("TH", "/A << /O /Table /Scope /Both >>"),
+        ],
+        &[("TH", "/A << /O /Table /Scope /Row >>"), ("TD", "")],
+    ];
+    let doc = table_doc(PdfVersion::V1_7, false, &rows);
+
+    let found: Vec<(u32, ScopeSource, HeaderPlace)> = scopes(&table_of(&doc, 8))
+        .into_iter()
+        .map(|(n, _, source, place, _, _)| (n, source, place))
+        .collect();
+
+    assert_eq!(
+        found,
+        [
+            (11, ScopeSource::Conflict, HeaderPlace::TopRow),
+            (12, ScopeSource::Declared, HeaderPlace::TopRow),
+            (13, ScopeSource::Declared, HeaderPlace::FirstColumn),
+        ]
+    );
+    // The check names the cell, what it says and how its place reads.
+    let conflicts: Vec<String> = doc
+        .info()
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "table-header-scope-conflict")
+        .map(|d| d.message.clone())
+        .collect();
+    assert_eq!(
+        conflicts,
+        ["11 0 R has /Scope /Row, but sits in the top row, where it reads as a column header"]
+    );
+}
+
+#[test]
+fn a_header_in_a_later_column_of_a_data_row_reads_as_a_row_header() {
+    // Cells: a header row 11 and 12, then 13 (TD) and 14 (TH with Scope Column).
+    let rows: [&[(&str, &str)]; 2] = [
+        &[("TH", ""), ("TH", "")],
+        &[("TD", ""), ("TH", "/A << /O /Table /Scope /Column >>")],
+    ];
+    let doc = table_doc(PdfVersion::V1_7, false, &rows);
+
+    let model = table_of(&doc, 8);
+    let late = model.cell_of(&elem(14)).unwrap().header_scope.clone().unwrap();
+
+    assert_eq!(
+        (late.source, late.place, late.place.phrase()),
+        (ScopeSource::Conflict, HeaderPlace::DataRow, "a row of data cells")
+    );
+    // Smoke: the header row is inferred, and reads as column headers.
+    assert_eq!(
+        model
+            .cell_of(&elem(11))
+            .unwrap()
+            .header_scope
+            .as_ref()
+            .map(|s| (s.scope, s.source)),
+        Some((TableScope::Column, ScopeSource::Inferred))
+    );
 }
 
 // ---- pdf 2.0 against pdf 1.7 ------------------------------------------------------------------

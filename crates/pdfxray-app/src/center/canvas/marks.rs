@@ -72,8 +72,8 @@ pub(super) fn collect(state: &mut AppState, page: PageIx, preview: Option<&NodeI
 
     // The glyph boxes belong to the selected operator, which is on one page.
     let selection_here = matches!(
-        state.selection.primary,
-        Some(NodeId::Glyph { page: p, .. } | NodeId::Op { page: p, .. }) if p == page
+        state.selection.primary(),
+        Some(NodeId::Glyph { page: p, .. } | NodeId::Op { page: p, .. }) if *p == page
     );
     let (glyphs, chosen) = if selection_here {
         state.selected_glyph_boxes()
@@ -90,12 +90,11 @@ pub(super) fn collect(state: &mut AppState, page: PageIx, preview: Option<&NodeI
             },
         });
     }
-    if let (Some(n), Some(NodeId::Glyph { .. })) = (chosen, state.selection.primary.clone())
+    if let (Some(n), Some(NodeId::Glyph { .. })) = (chosen, state.selection.primary().cloned())
         && let Some(selected) = glyphs.get(n)
         && let Some(info) = state
             .selection
-            .primary
-            .as_ref()
+            .primary()
             .and_then(|id| state.document.as_ref()?.doc.glyph_info(id))
     {
         let lengths = state.lengths();
@@ -110,7 +109,7 @@ pub(super) fn collect(state: &mut AppState, page: PageIx, preview: Option<&NodeI
     }
 
     if let Some(id) = state.canvas.hover.clone()
-        && Some(&id) != state.selection.primary.as_ref()
+        && Some(&id) != state.selection.primary()
         && let Some(rect) = rect_on_page(state, &id)
     {
         marks.boxes.push(Mark {
@@ -128,11 +127,13 @@ pub(super) fn collect(state: &mut AppState, page: PageIx, preview: Option<&NodeI
         state.canvas.drawn_preview = Some(id.clone());
     }
 
-    if let Some(label) = state.selection_label()
+    // A summarised multi-selection has no per-node labels.
+    if !state.selection.shows_summary()
+        && let Some(label) = state.selection_label()
         && let Some(rect) = state
             .selection
-            .primary
-            .clone()
+            .primary()
+            .cloned()
             .and_then(|id| rect_on_page(state, &id))
     {
         // While stepping, the operator the stepper stopped at says it is painting now.

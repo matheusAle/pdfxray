@@ -661,11 +661,11 @@ fn a_damaged_index_gets_a_banner_a_chip_and_a_button_to_the_worst_problems_first
     // The banner says what is wrong, with the count, and where to look.
     let centre = texts_in(&harness, Region::Center, Role::Label);
     assert!(
-        centre.contains(&"This file's index is damaged".to_owned()),
+        centre.contains(&"This file’s index is damaged".to_owned()),
         "{centre:?}"
     );
     assert!(centre.contains(
-        &"4 objects aren't where the xref says. Other viewers silently search for them; pdfxray shows the damage."
+        &"4 objects aren’t where the xref says. Other viewers silently search for them; pdfxray shows the damage."
             .to_owned()
     ));
     let _view = harness.get_by_label("View 6 problems");

@@ -332,7 +332,7 @@ pub(super) fn image(ui: &mut Ui, cx: &Cx<'_>, action: &mut Action) {
         }
         if let Some((space, link)) = &facts.color_space {
             let output = PropRow::new("ColorSpace", space).link(link.is_some()).show(ui);
-            if output.value.clicked() {
+            if output.followed {
                 action.navigate.clone_from(link);
             }
         }
@@ -344,7 +344,7 @@ pub(super) fn image(ui: &mut Ui, cx: &Cx<'_>, action: &mut Action) {
         }
         if let Some(id) = &facts.object {
             let output = PropRow::new("Object", &id.to_string()).link(true).show(ui);
-            if output.value.clicked() {
+            if output.followed {
                 action.navigate = Some(id.clone());
             }
         }

@@ -1,4 +1,5 @@
-//! The title bar: the file, one chip that opens its summary and revisions, and Validate.
+//! The title bar: the file and one chip that opens its summary and revisions. Validation lives
+//! in the rail's Validation entry and the File menu.
 
 use egui::text::{LayoutJob, TextFormat};
 use std::sync::Arc;
@@ -9,7 +10,7 @@ use egui::{
 };
 use pdfxray_core::{Document, RevisionInfo, XrefKind};
 
-use crate::components::{Icon, ToolButton, focus, popover, tooltip};
+use crate::components::{Icon, focus, popover, tooltip};
 use crate::object_facts::human_bytes;
 use crate::state::{AppState, LoadedDocument};
 use crate::states::{Screen, broken, encrypted};
@@ -48,11 +49,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     drag_window(ui, bar);
 
     let content = bar.shrink2(vec2(PAD, 0.0));
-    let mut left = egui::Rect::from_min_max(content.min + vec2(TRAFFIC_LIGHTS, 0.0), content.max);
-    if state.screen().has_workspace() {
-        // The file name gives way to Validate: a long name is cut, never drawn under it.
-        left.max.x -= validate_button().width(ui) + FILE_GAP;
-    }
+    let left = egui::Rect::from_min_max(content.min + vec2(TRAFFIC_LIGHTS, 0.0), content.max);
     ui.scope_builder(
         UiBuilder::new()
             .max_rect(left)
@@ -61,15 +58,6 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
             ui.spacing_mut().item_spacing.x = FILE_GAP;
             file_cluster(ui, state);
         },
-    );
-    if !state.screen().has_workspace() {
-        return;
-    }
-    ui.scope_builder(
-        UiBuilder::new()
-            .max_rect(content)
-            .layout(Layout::right_to_left(Align::Center)),
-        |ui| right_cluster(ui, state),
     );
 }
 
@@ -80,10 +68,11 @@ fn drag_window(ui: &Ui, bar: egui::Rect) {
     if !cfg!(target_os = "macos") {
         return;
     }
+    // Not focusable: Tab must not stop on a strip with no name that only the pointer uses.
     let response = ui.interact(
         bar,
         ui.make_persistent_id("window-drag"),
-        egui::Sense::click_and_drag(),
+        egui::Sense::CLICK | egui::Sense::DRAG,
     );
     if response.double_clicked() {
         let zoomed = ui.input(|i| i.viewport().maximized.unwrap_or(false));
@@ -429,19 +418,4 @@ fn timeline_row(ui: &mut Ui, revision: &RevisionInfo, current: bool) -> bool {
         },
     );
     response.on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
-}
-
-/// The Validate button of the right cluster.
-fn validate_button() -> ToolButton<'static> {
-    ToolButton::new("Validate")
-        .icon(Icon::Validation)
-        .primary()
-        .tall()
-}
-
-fn right_cluster(ui: &mut Ui, state: &mut AppState) {
-    let validate = validate_button().show(ui);
-    if validate.clicked() {
-        state.request_validation(ui.ctx());
-    }
 }

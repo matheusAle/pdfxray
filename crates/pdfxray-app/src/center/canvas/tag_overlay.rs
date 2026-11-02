@@ -9,7 +9,16 @@
 //! Chips and badges are buttons: a click selects the element they stand for. A click inside a
 //! box selects the innermost element whose box holds the point, and hovering one outlines it.
 //! The path draws from badge 1 to the last over [`motion::PATH`] when it is shown.
+//!
+//! The chip of a table header cell says which way the header heads, and hovering the header
+//! echoes the cells it heads ([`super::header_scope`]).
+//!
+//! While the Tag roles card focuses some roles ([`crate::state::role_focus`]), the other roles
+//! stay as boxes at 15 % without chips, and the reading-order path dims to 30 % where it runs
+//! through them; the badges stay. Focus is a view, not a filter: a click in a faint box still
+//! picks it, and hovering it outlines it at full strength.
 
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use egui::{
@@ -17,13 +26,15 @@ use egui::{
     Ui, Vec2, WidgetInfo, pos2, vec2,
 };
 use pdfxray_core::{
-    NodeId, OrderStep, PageIx, Point, ReadingOrder, RoleClass, SpeechPreset, StepKind, TagBox,
+    HeaderScope, NodeId, OrderStep, PageIx, Point, ReadingOrder, RoleClass, ScopeSource, SpeechPreset,
+    StepKind, TagBox,
 };
 use pdfxray_render::role_slot;
 
 use super::connector;
 use super::geometry::PageGeometry;
-use crate::components::tooltip;
+use super::header_scope::{self, HeaderMark};
+use crate::components::{focus, tooltip};
 use crate::modes::{OrderSource, TagShow};
 use crate::roles::role_color;
 use crate::state::AppState;
@@ -43,6 +54,12 @@ const PATH_WIDTH: f32 = 2.0;
 
 /// Dash and gap of the segment into a detour.
 const DETOUR_DASH: (f32, f32) = (5.0, 4.0);
+
+/// Strength of the box of a role out of focus.
+pub const UNFOCUSED_BOX: f32 = 0.15;
+
+/// Strength of the reading-order path where it runs through a role out of focus.
+pub const UNFOCUSED_PATH: f32 = 0.3;
 
 /// Name of the chip of an artifact sequence.
 pub const ARTIFACT_CHIP: &str = "Art";
@@ -104,6 +121,12 @@ pub(super) struct TagLayer {
     source: (OrderSource, Option<SpeechPreset>),
     /// The role colours, in the order of [`RoleClass::ALL`].
     colors: Vec<Color32>,
+    /// The header cells of the page's tables, while the boxes are on.
+    headers: HashMap<NodeId, HeaderMark>,
+    /// The roles in focus; `None` when every role shows.
+    focus: Option<BTreeSet<RoleClass>>,
+    /// The selection: a selected header's echo is the table overlay's to draw.
+    selected: Option<NodeId>,
 }
 
 /// Collects what the overlay needs for `page`: nothing while its options are off.
@@ -133,6 +156,11 @@ pub(super) fn collect(state: &mut AppState, page: PageIx) -> TagLayer {
         None
     };
     let colors = RoleClass::ALL.map(role_color).to_vec();
+    let headers = if show.all_boxes {
+        header_scope::marks_on(state, page)
+    } else {
+        HashMap::new()
+    };
     TagLayer {
         boxes,
         artifacts,
@@ -140,6 +168,9 @@ pub(super) fn collect(state: &mut AppState, page: PageIx) -> TagLayer {
         show,
         source,
         colors,
+        headers,
+        focus: state.shown_roles(),
+        selected: state.selection.primary().cloned(),
     }
 }
 
@@ -167,6 +198,16 @@ impl TagLayer {
 
     fn visible(&self) -> impl Iterator<Item = &TagBox> {
         self.boxes.iter().filter(|tag| shows(self.show, tag))
+    }
+
+    /// True when `class` is drawn at full strength: it is focused, or nothing is.
+    fn focused(&self, class: RoleClass) -> bool {
+        self.focus.as_ref().is_none_or(|focus| focus.contains(&class))
+    }
+
+    /// How strong the box of `class` is drawn: 1, or [`UNFOCUSED_BOX`] out of focus.
+    fn strength(&self, class: RoleClass) -> f32 {
+        if self.focused(class) { 1.0 } else { UNFOCUSED_BOX }
     }
 
     /// The innermost shown element whose box holds `point`: the deepest, and of two as deep the
@@ -209,7 +250,7 @@ pub(super) fn draw(
     // Every outline first, then the chips: a later box must not cut through an earlier chip.
     for tag in layer.visible() {
         let rect = geo.rect_to_screen(tag.rect);
-        let color = layer.color(tag.class);
+        let color = layer.color(tag.class).gamma_multiply(layer.strength(tag.class));
         if tag.class == RoleClass::Group {
             painter.rect_stroke(
                 rect,
@@ -227,29 +268,46 @@ pub(super) fn draw(
             );
         }
     }
+    let artifact_color = layer
+        .color(RoleClass::Artifact)
+        .gamma_multiply(layer.strength(RoleClass::Artifact));
     for art in &layer.artifacts {
         painter.rect_stroke(
             geo.rect_to_screen(art.rect),
             0.0,
-            Stroke::new(1.0, layer.color(RoleClass::Artifact)),
+            Stroke::new(1.0, artifact_color),
             StrokeKind::Outside,
         );
     }
+    // The echo of a hovered header goes over the boxes and under the chips; which header is
+    // hovered is known once the chips are drawn.
+    let echo_at = painter.add(Shape::Noop);
     let mut placed: Vec<UiRect> = Vec::new();
-    for tag in layer.visible() {
+    for tag in layer.visible().filter(|tag| layer.focused(tag.class)) {
         let wanted = match tag.class {
             RoleClass::Group => layer.show.nesting.then_some(Corner::TopRight),
             _ => layer.show.labels.then_some(Corner::TopLeft),
         };
         if let Some(corner) = wanted {
+            let header = layer.headers.get(&tag.id);
             let response = Chip {
                 rect: geo.rect_to_screen(tag.rect),
                 corner,
                 text: chip_text(tag),
                 fill: layer.color(tag.class),
                 id: ui.make_persistent_id(("tag-chip", page, &tag.id)),
+                scope: header.map(|mark| &mark.scope),
             }
             .show(ui, &painter, &mut placed);
+            let response = match header {
+                Some(mark) => tooltip::named(
+                    response,
+                    &header_scope::hint_title(chip_text(tag), &mark.text, &mark.scope),
+                    &header_scope::hint(&mark.scope),
+                    None,
+                ),
+                None => response,
+            };
             if response.clicked() {
                 out.clicked = Some(tag.id.clone());
             }
@@ -258,13 +316,18 @@ pub(super) fn draw(
             }
         }
     }
-    for art in &layer.artifacts {
+    for art in layer
+        .artifacts
+        .iter()
+        .filter(|_| layer.focused(RoleClass::Artifact))
+    {
         let response = Chip {
             rect: geo.rect_to_screen(art.rect),
             corner: Corner::TopLeft,
             text: ARTIFACT_CHIP,
             fill: layer.color(RoleClass::Artifact),
             id: ui.make_persistent_id(("art-chip", page, art.seq)),
+            scope: None,
         }
         .show(ui, &painter, &mut placed);
         if response.clicked() {
@@ -276,8 +339,16 @@ pub(super) fn draw(
         out.clicked = clicked.or(out.clicked.take());
         hovered = badge_hover.or(hovered);
     }
-    // The element under the pointer, or whose chip or badge is: outlined and tinted over the rest.
+    // The element under the pointer, or whose chip or badge is: outlined and tinted over the rest,
+    // at full strength even when its role is out of focus.
     let preview = hovered.or_else(|| under_pointer.map(|tag| &tag.id));
+    if let Some(mark) = preview
+        .filter(|id| layer.selected.as_ref() != Some(*id))
+        .and_then(|id| layer.headers.get(id))
+    {
+        let echo = header_scope::echo_shapes(geo, &mark.echo, layer.color(RoleClass::Table));
+        painter.set(echo_at, Shape::Vec(echo));
+    }
     if let Some(tag) = preview.and_then(|id| layer.boxes.iter().find(|t| &t.id == id)) {
         let color = layer.color(tag.class);
         painter.rect(
@@ -300,7 +371,8 @@ enum Corner {
     TopRight,
 }
 
-/// A chip of bold `text` on `fill` by the `corner` of `rect` (screen), a button named `text`.
+/// A chip of bold `text` on `fill` by the `corner` of `rect` (screen), a button named `text`. A
+/// table header cell's chip also says which way it heads (see [`header_scope`]).
 struct Chip<'a> {
     /// The box the chip labels.
     rect: UiRect,
@@ -312,6 +384,9 @@ struct Chip<'a> {
     fill: Color32,
     /// Interaction id.
     id: Id,
+    /// The scope of a header cell: an arrow and marks after the name, an outlined chip when the
+    /// scope is inferred and an amber ring when it conflicts.
+    scope: Option<&'a HeaderScope>,
 }
 
 impl Chip<'_> {
@@ -324,9 +399,15 @@ impl Chip<'_> {
             text,
             fill,
             id,
+            scope,
         } = self;
-        let galley = painter.layout_no_wrap(text.to_owned(), fonts::bold(tokens::text::SMALL), tokens::BG);
-        let size = galley.size() + vec2(8.0, 3.0);
+        // An inferred scope is an outlined chip: the role colour on the page.
+        let outlined = scope.is_some_and(|s| s.source == ScopeSource::Inferred);
+        let ink = if outlined { fill } else { tokens::BG };
+        let galley = painter.layout_no_wrap(text.to_owned(), fonts::bold(tokens::text::SMALL), ink);
+        let name_w = galley.size().x;
+        let tail = scope.map_or(0.0, header_scope::tail_width);
+        let size = galley.size() + vec2(8.0 + tail, 3.0);
         let wanted = match corner {
             Corner::TopLeft => UiRect::from_min_size(pos2(rect.min.x - size.x - 3.0, rect.min.y), size),
             Corner::TopRight => {
@@ -335,18 +416,30 @@ impl Chip<'_> {
         };
         let at = clear_of(placed, wanted);
         placed.push(at);
-        painter.rect_filled(at, tokens::RADIUS_SM, fill);
-        painter.rect_stroke(
-            at,
-            tokens::RADIUS_SM,
-            Stroke::new(1.0, tokens::BG),
-            StrokeKind::Outside,
-        );
-        painter.galley(at.min + vec2(4.0, 1.5), galley, tokens::BG);
+        if outlined {
+            painter.rect_stroke(at, tokens::RADIUS_SM, Stroke::new(1.0, fill), StrokeKind::Inside);
+        } else {
+            painter.rect_filled(at, tokens::RADIUS_SM, fill);
+            painter.rect_stroke(
+                at,
+                tokens::RADIUS_SM,
+                Stroke::new(1.0, tokens::BG),
+                StrokeKind::Outside,
+            );
+        }
+        painter.galley(at.min + vec2(4.0, 1.5), galley, ink);
+        if let Some(scope) = scope {
+            header_scope::paint_tail(painter, at.min.x + 4.0 + name_w, at.center().y, scope, ink);
+            if scope.source == ScopeSource::Conflict {
+                header_scope::paint_ring(painter, at);
+            }
+        }
         let response = ui
             .interact(at, id, Sense::click())
             .on_hover_cursor(CursorIcon::PointingHand);
-        response.widget_info(|| WidgetInfo::labeled(Role::Button, true, text));
+        focus::page_ring(painter, &response, at, tokens::RADIUS_SM);
+        let name = scope.map_or_else(|| text.to_owned(), |scope| header_scope::chip_name(text, scope));
+        response.widget_info(|| WidgetInfo::labeled(Role::Button, true, name.clone()));
         response
     }
 }
@@ -438,7 +531,9 @@ fn draw_order<'a>(
     for (n, fraction) in done.iter().enumerate() {
         let (from, to) = (points[n], points[n + 1]);
         let step = &order.steps[n + 1];
-        let color = segment_color(step);
+        // Through a role out of focus the path goes faint; its badges stay.
+        let through_focus = layer.focused(order.steps[n].class) && layer.focused(step.class);
+        let color = segment_color(step).gamma_multiply(if through_focus { 1.0 } else { UNFOCUSED_PATH });
         let end = from + (to - from) * *fraction;
         if *fraction <= 0.0 {
             continue;
@@ -515,6 +610,12 @@ fn badge(ui: &Ui, painter: &Painter, page: PageIx, center: Pos2, step: &OrderSte
             Sense::click(),
         )
         .on_hover_cursor(CursorIcon::PointingHand);
+    focus::page_ring(
+        painter,
+        &response,
+        UiRect::from_center_size(center, Vec2::splat(BADGE_RADIUS * 2.0)),
+        BADGE_RADIUS,
+    );
     let label = badge_label(step);
     response.widget_info(|| WidgetInfo::labeled(Role::Button, true, label.clone()));
     response

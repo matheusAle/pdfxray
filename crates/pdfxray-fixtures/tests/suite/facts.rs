@@ -143,7 +143,7 @@ fn header_version_matches_the_first_line() {
             "1.4", "1.7", "1.7", "1.7", "1.7", "1.4", "1.4", "1.5", "1.7", "1.7", "1.7", "1.7", "1.7", "1.7",
             "1.7", "1.7", "2.0", "1.7", "1.7", "1.7", "1.7", "1.4", "1.5", "1.7", "1.7", "1.7", "1.7",
             // speech-alt-hides .. rolemap-two-hops: only table-scope-pdf2 is PDF 2.0.
-            "1.7", "1.7", "1.7", "1.7", "2.0", "1.7", "1.7", "1.7", "1.7"
+            "1.7", "1.7", "1.7", "1.7", "2.0", "1.7", "1.7", "1.7", "1.7", "1.7"
         ]
     );
 }
@@ -238,7 +238,7 @@ fn pages_match_boxes_rotation_user_unit_and_mcids_in_the_bytes() {
 
     let skipped: Vec<&str> = checked.iter().filter(|(_, ok)| !ok).map(|(n, _)| *n).collect();
     assert_eq!(skipped, ["xref-stream-objstm"]);
-    assert_eq!(checked.len(), 36);
+    assert_eq!(checked.len(), 37);
 }
 
 #[test]

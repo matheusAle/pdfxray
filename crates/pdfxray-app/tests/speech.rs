@@ -398,7 +398,7 @@ fn hovering_a_row_previews_its_node_and_clicking_selects_it_and_scrolls_the_canv
     the(&harness, Region::Drawer, Role::Button, &callout).click();
     settle(&mut harness);
 
-    assert_eq!(harness.state().state.selection.primary, Some(elem(24)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(24)));
     assert_eq!(harness.state().state.canvas.page, 1);
     assert!(
         harness.state().state.canvas.scroll_offset.y > 0.0,
@@ -472,7 +472,7 @@ fn speech_as_the_reading_order_source_changes_the_badges_on_the_canvas() {
     // Badge 2 is the Sect.
     the(&harness, Region::Center, Role::Button, "Reading order step 2").click();
     settle(&mut harness);
-    assert_eq!(harness.state().state.selection.primary, Some(elem(9)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(9)));
     // Choosing it brought the transcript up.
     assert_eq!(harness.state().state.drawer.tab, DrawerTab::Speech);
 }

@@ -9,7 +9,7 @@ fn the_inspector_explains_the_finding_in_plain_words() {
     let fake = FakeValidator::ready();
     let mut harness = app_with(&fake);
     open_fixture(&mut harness, "orphan-mcid");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
 
     the(&harness, Region::Navigator, Role::Button, "MCID 1 p1").click();
     harness.run();
@@ -67,7 +67,7 @@ fn a_figure_without_alt_shows_its_source_with_an_example_fix_that_is_never_appli
     fake.run_gate.open();
     let mut harness = app_with(&Arc::new(fake));
     open_fixture(&mut harness, "struct-rich");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
 
     // 12 0 R has no /Alt: the example adds one.
     the(&harness, Region::Navigator, Role::Button, "H1 12 0 R p1").click();
@@ -110,7 +110,7 @@ fn a_rule_without_its_own_note_says_it_is_general_guidance_for_the_clause() {
     fake.run_gate.open();
     let mut harness = app_with(&Arc::new(fake));
     open_fixture(&mut harness, "orphan-mcid");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
 
     the(&harness, Region::Navigator, Role::Button, "MCID 1 p1").click();
     harness.run();
@@ -131,7 +131,7 @@ fn rule_docs_opens_the_rules_of_the_standard_in_the_browser() {
     let fake = FakeValidator::ready();
     let mut harness = app_with(&fake);
     open_fixture(&mut harness, "orphan-mcid");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
     the(&harness, Region::Navigator, Role::Button, "MCID 1 p1").click();
     harness.run();
 

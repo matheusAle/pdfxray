@@ -13,6 +13,7 @@ pub mod glyph;
 pub mod graphics;
 pub mod header;
 pub mod measure;
+pub mod multi;
 pub mod object;
 pub mod paint_order;
 pub mod print;
@@ -61,18 +62,24 @@ pub(crate) struct Action {
 
 /// Draws the inspector host for the current selection.
 pub fn ui(ui: &mut Ui, state: &mut AppState) {
+    // Three or more selected: their summary, unless the inspector is pinned to a node.
+    let pinned = state.selection.pinned.is_some();
+    if !pinned && state.selection.shows_summary() {
+        multi::ui(ui, state);
+        return;
+    }
     let Some(selection) = state
         .selection
         .pinned
         .clone()
-        .or_else(|| state.selection.primary.clone())
+        .or_else(|| state.selection.primary().cloned())
     else {
         Frame::new().inner_margin(Margin::same(14)).show(ui, |ui| {
             ui.label(RichText::new(NOTHING_SELECTED).color(tokens::TEXT_3));
         });
         return;
     };
-    // A right-click on a value of another panel is not ours.
+    // The value menu of another panel is not ours.
     prop_row::take_context(ui.ctx());
     let mut action = Action::default();
     // The Validation entry shows the failed check instead of the node's properties.
@@ -88,12 +95,18 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
             .show(ui, |ui| validation::footer(ui, state, index));
     }
 
+    // One node of a multi-selection: the way back to the summary and to the other nodes.
+    if !pinned && state.selection.stepped_in() {
+        multi::stepped_bar(ui, state);
+    }
+
     // The reading order of a selected page; read here so the panels below only borrow the state.
     let extras = Extras {
         order: reading_order::Data::of(state, &selection),
         table: table::Data::of(state, &selection),
     };
-    let comparing = state.selection.pinned.is_none() && state.selection.secondary.is_some();
+    // Two selected are the compare view.
+    let comparing = !pinned && state.selection.other().is_some();
     if comparing {
         measure::ui(ui, state, &mut action);
     } else if let Some(index) = finding {
@@ -132,9 +145,9 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
             &mut action,
         );
     }
-    // The menu of a value that was right-clicked lists the actions of the selection.
-    if let Some(value) = prop_row::take_context(ui.ctx()) {
-        context_menu::attach(&value, state, &selection);
+    // The menu of a value lists the copy lines, then the actions of the selection.
+    if let Some(target) = prop_row::take_context(ui.ctx()) {
+        context_menu::attach_value(&target, Some((state, &selection)));
     }
 
     if let Some(id) = action.navigate {

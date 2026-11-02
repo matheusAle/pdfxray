@@ -5,6 +5,7 @@
 
 use egui::{Id, Role, Sense, Ui, WidgetInfo, vec2};
 
+use super::focus;
 use super::icon::Icon;
 use crate::theme::{fonts, tokens};
 
@@ -18,6 +19,9 @@ const HIT_GROW: f32 = 4.0;
 const ROW_GAP: f32 = 1.0;
 /// Gap between the header and the first row.
 const BODY_GAP: f32 = 4.0;
+/// Where a header's text starts, from the left edge of the section: after its chevron. A
+/// sub-header inside the section starts on the same edge.
+pub const TEXT_X: f32 = 20.0;
 
 fn state_id(key: &str) -> Id {
     Id::unique(("pdfxray-section", key))
@@ -73,6 +77,7 @@ pub fn show_with<R>(
             ui.painter()
                 .rect_filled(response.rect, tokens::RADIUS_SM, tokens::NEUTRAL_HOVER);
         }
+        focus::row_ring(ui, &response, response.rect, tokens::RADIUS_SM);
         let dimmed = if hovered {
             tokens::TEXT_2
         } else {
@@ -85,7 +90,7 @@ pub fn show_with<R>(
             dimmed,
         );
         let galley = ui.painter().layout_job(fonts::section_header(title));
-        let pos = egui::pos2(rect.min.x + 20.0, rect.center().y - galley.size().y / 2.0);
+        let pos = egui::pos2(rect.min.x + TEXT_X, rect.center().y - galley.size().y / 2.0);
         let ink = if hovered { tokens::TEXT_2 } else { tokens::TEXT_3 };
         ui.painter().galley(pos, galley, ink);
     }
@@ -103,4 +108,19 @@ pub fn show_with<R>(
     });
     ui.add_space(PAD);
     result
+}
+
+/// A sub-header inside a section's body, in natural case: Inter 11/600 in text-2, starting on the
+/// section header's text edge ([`TEXT_X`]).
+pub fn sub_header(ui: &mut Ui, text: &str) -> egui::Response {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.add_space(TEXT_X);
+        ui.label(
+            egui::RichText::new(text)
+                .font(fonts::semibold(tokens::text::SMALL))
+                .color(tokens::TEXT_2),
+        )
+    })
+    .inner
 }

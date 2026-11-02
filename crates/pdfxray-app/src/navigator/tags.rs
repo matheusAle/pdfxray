@@ -17,8 +17,8 @@ use crate::state::derived::{Derived, TagIndex, split_role};
 use crate::state::{AppState, NavTree};
 use crate::tree_view::{Decor, TreeModel, badge_word};
 
-/// Shown when the file has no structure tree.
-pub const NO_STRUCTURE: &str = "This file has no structure tree.";
+/// Shown when the file has no structure tree: what that means, and where the content is.
+pub const NO_STRUCTURE: &str = "This file has no structure tree, so screen readers have no tags to follow. Content lists what each page draws.";
 
 /// Text of the warning on a figure without `/Alt`; the mark in front of it is painted.
 pub const ALT_MISSING: &str = "Alt";

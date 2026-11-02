@@ -164,7 +164,7 @@ impl MeasureTool {
 pub struct Comparison {
     /// The primary selection.
     pub first: Rect,
-    /// The second selection.
+    /// The other selected node of a two-node selection.
     pub second: Rect,
 }
 

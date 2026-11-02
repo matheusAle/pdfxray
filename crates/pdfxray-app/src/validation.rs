@@ -448,7 +448,12 @@ impl ValidationState {
             Ok(version) => self.environment = Environment::Known(Availability::Ready { version }),
             Err(ValidatorError::Cancelled) => {}
             Err(ValidatorError::Failed(message)) => {
-                self.error = Some(format!("Installing veraPDF failed: {message}"));
+                // The error ends with the two ways on: the button is offered again, and the
+                // path field takes a veraPDF installed by hand.
+                self.error = Some(format!(
+                    "Installing veraPDF failed: {message}. Try again, or enter the path of a \
+                     veraPDF you installed yourself."
+                ));
             }
         }
     }

@@ -10,6 +10,7 @@ use std::time::Duration;
 use egui::{Context, Key, Modifiers};
 use pdfxray_core::NodeId;
 
+use crate::state::canvas::Reveal;
 use crate::state::{AppState, DrawerTab};
 
 /// How many operators playing advances per second.
@@ -63,7 +64,7 @@ impl AppState {
         let Some(last) = self.last_op(self.canvas.page) else {
             return;
         };
-        let start = match &self.selection.primary {
+        let start = match self.selection.primary() {
             Some(NodeId::Op { page, ix }) if *page == self.canvas.page => (*ix).min(last),
             _ => last,
         };
@@ -75,17 +76,19 @@ impl AppState {
         self.step_to(start);
     }
 
-    /// Paints operators up to and including `ix` and selects that operator.
+    /// Paints operators up to and including `ix` and selects that operator. With "Follow step"
+    /// the canvas scrolls to what it paints when that is out of view; otherwise the view stays.
     pub fn step_to(&mut self, ix: u32) {
         let Some(last) = self.last_op(self.canvas.page) else {
             return;
         };
         let ix = ix.min(last);
         self.canvas.view.step = ix;
-        self.select(NodeId::Op {
+        self.select_on_canvas(NodeId::Op {
             page: self.canvas.page,
             ix,
         });
+        self.canvas.reveal = self.canvas.view.follow_step.then_some(Reveal::IntoView);
     }
 
     /// Moves the stepper by `delta` operators, stopping at the first and last.

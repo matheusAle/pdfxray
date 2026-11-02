@@ -23,7 +23,7 @@ use pdfxray_render::xray::{
 };
 use pdfxray_render::{
     ColorBy, ContentFilter, Overlay, ROLE_COLORS, RenderError, RenderSpec, RenderedPage, XrayOptions,
-    alpha_heatmap_overlays, clip_overlays, filtered_pdf, ops_for, render_page, xray_overlays,
+    alpha_heatmap_overlays, clip_overlays, filtered_pdf, ops_for, ops_for_all, render_page, xray_overlays,
 };
 use pretty_assertions::assert_eq;
 
@@ -236,6 +236,29 @@ fn isolating_the_inner_form_paints_only_inside_its_bounding_box() {
     );
     assert!(non_white(&hidden) > non_white(&only_text));
     assert!(non_white(&hidden) < non_white(&full));
+}
+
+#[test]
+fn ops_for_all_is_the_union_of_every_node_of_a_set() {
+    let doc = open("form-xobject-nesting");
+    let nodes = [
+        NodeId::Op { page: 0, ix: 4 },
+        NodeId::Op { page: 0, ix: 15 },
+        NodeId::Op { page: 0, ix: 999 },
+    ];
+
+    // Operator 4, and the inner form's Do with everything it executes; the missing one adds
+    // nothing.
+    assert_eq!(
+        ops_for_all(&doc, &nodes),
+        std::iter::once(4).chain(15..=26).collect::<BTreeSet<u32>>()
+    );
+    assert_eq!(ops_for_all(&doc, &[]), BTreeSet::new());
+    // Smoke: isolating the set paints less than the page and more than the operator alone.
+    let full = non_white(&render(&doc, ContentFilter::All));
+    let set_only = non_white(&render(&doc, ContentFilter::Only(ops_for_all(&doc, &nodes))));
+    let one = non_white(&render(&doc, ContentFilter::Only(set(&[4]))));
+    assert!(one < set_only && set_only < full, "{one} < {set_only} < {full}");
 }
 
 #[test]

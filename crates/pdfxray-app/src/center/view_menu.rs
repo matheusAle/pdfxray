@@ -222,7 +222,7 @@ fn tool_row(ui: &mut Ui, state: &AppState, tool: ViewTool) -> bool {
         (true, false, false) => (egui::Color32::TRANSPARENT, tokens::TEXT),
     };
     ui.painter().rect_filled(rect, tokens::RADIUS_SM, fill);
-    focus::ring(ui, &response, rect, tokens::RADIUS_SM);
+    focus::row_ring(ui, &response, rect, tokens::RADIUS_SM);
     let y = rect.center().y;
     tool.icon().paint(
         ui,

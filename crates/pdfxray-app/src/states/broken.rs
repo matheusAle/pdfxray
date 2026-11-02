@@ -9,7 +9,7 @@ use crate::state::{AppState, DrawerTab};
 use crate::theme::{fonts, tokens};
 
 /// Headline of the banner.
-pub const TITLE: &str = "This file's index is damaged";
+pub const TITLE: &str = "This file’s index is damaged";
 
 /// The diagnostic code of an object that is not where the xref says.
 const MOVED: &str = "xref-offset-wrong";
@@ -44,11 +44,11 @@ impl Damage {
             0 => "The xref table or the startxref pointer is wrong. Other viewers silently rebuild it; \
                   pdfxray shows the damage."
                 .to_owned(),
-            1 => "1 object isn't where the xref says. Other viewers silently search for it; pdfxray \
+            1 => "1 object isn’t where the xref says. Other viewers silently search for it; pdfxray \
                   shows the damage."
                 .to_owned(),
             n => format!(
-                "{n} objects aren't where the xref says. Other viewers silently search for them; pdfxray \
+                "{n} objects aren’t where the xref says. Other viewers silently search for them; pdfxray \
                  shows the damage."
             ),
         }
@@ -160,12 +160,12 @@ mod tests {
 
         assert_eq!(
             two.message(),
-            "2 objects aren't where the xref says. Other viewers silently search for them; pdfxray shows the damage."
+            "2 objects aren’t where the xref says. Other viewers silently search for them; pdfxray shows the damage."
         );
         assert_eq!(two.button(), "View 2 problems");
         assert_eq!(
             one.message(),
-            "1 object isn't where the xref says. Other viewers silently search for it; pdfxray shows the damage."
+            "1 object isn’t where the xref says. Other viewers silently search for it; pdfxray shows the damage."
         );
         assert_eq!(one.button(), "View 1 problem");
     }

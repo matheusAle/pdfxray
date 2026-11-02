@@ -14,7 +14,7 @@ use crate::units::Lengths;
 /// Outline colour of the primary selection.
 pub(crate) const SELECTION: Color32 = tokens::ACCENT;
 
-/// Outline colour of the second selection.
+/// Outline colour of the other node of a two-node selection (the compare view).
 pub(crate) const COMPARED: Color32 = tokens::PINK;
 
 /// Colour of the measure line and of the gap markers.

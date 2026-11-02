@@ -6,7 +6,7 @@
 pub const HINTS: &[(&str, &str)] = &[
     (
         "CTM",
-        "Current transformation matrix: maps the image's unit square to page space. \
+        "Current transformation matrix: maps the image’s unit square to page space. \
          [a b c d e f] = scale x, skew y, skew x, scale y, translate x, translate y.",
     ),
     (
@@ -61,7 +61,7 @@ pub const HINTS: &[(&str, &str)] = &[
     ),
     (
         "ParentTree",
-        "The structure tree's index from content back to its tag: how a marked-content \
+        "The structure tree’s index from content back to its tag: how a marked-content \
          sequence finds the element that owns it.",
     ),
     (

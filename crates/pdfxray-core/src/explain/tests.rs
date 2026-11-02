@@ -206,10 +206,11 @@ fn every_diagnostic_code_of_this_crate_and_the_raw_layer_is_explained() {
         "table-header-missing",
         "table-header-unresolved",
         "table-headers-id-missing",
+        "table-header-scope-conflict",
         "table-irregular",
     ] {
         assert!(diagnostic(code).is_some(), "no explanation for {code}");
     }
     assert_eq!(diagnostic("not-a-code"), None);
-    assert_eq!(diagnostic_codes().count(), 44 + 5 + 27 + 1 + 10);
+    assert_eq!(diagnostic_codes().count(), 44 + 5 + 27 + 1 + 11);
 }

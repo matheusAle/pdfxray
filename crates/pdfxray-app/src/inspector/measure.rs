@@ -1,5 +1,6 @@
-//! The inspector while two nodes are selected (the first, then a Shift-click on the second): the
-//! space between them, how their edges line up and the print boxes of their page.
+//! The inspector while two nodes are selected (the primary and one more: a Shift-click, or a
+//! marquee that caught two): the space between them, measured from the primary, how their edges
+//! line up and the print boxes of their page.
 
 use egui::{Frame, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
 use pdfxray_core::NodeId;
@@ -66,8 +67,10 @@ pub fn other_units(gap: &Gap, lengths: &Lengths) -> Vec<(String, &'static str)> 
 }
 
 pub(super) fn ui(ui: &mut Ui, state: &AppState, action: &mut Action) {
-    let (Some(first), Some(second)) = (state.selection.primary.clone(), state.selection.secondary.clone())
-    else {
+    let (Some(first), Some(second)) = (
+        state.selection.primary().cloned(),
+        state.selection.other().cloned(),
+    ) else {
         return;
     };
     let comparison = state.comparison();

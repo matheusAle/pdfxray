@@ -4,21 +4,34 @@
 //! bold, the selected cell accented, a cell that cannot be read with a header outlined in amber;
 //! a click selects the cell), the rule set the header cells were found with, and for a selected
 //! cell the header cells that are read with it, each with the rule that found it.
+//!
+//! A selected header cell also says which way it heads: its Scope row (`Column · declared`,
+//! `Column · inferred`, `Row · declared, conflicts with position`), how many cells it governs,
+//! the cells whose `/Headers` name it, and for a conflict the `table-header-scope-conflict` card
+//! in plain words.
 
 use std::fmt::Write as _;
 
-use egui::{Frame, Margin, Rect, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo, pos2, vec2};
+use egui::{Frame, Margin, Rect, RichText, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo, pos2, vec2};
 use pdfxray_core::numeric::f32_from_u32;
-use pdfxray_core::{NodeId, TableCell, TableRules};
+use pdfxray_core::{HeaderScope, NodeId, ScopeSource, TableCell, TableRules, explain};
 
 use super::Action;
+use crate::center::canvas::header_scope::{governs_text, hint, scope_text};
 use crate::center::canvas::table_overlay::{no_header_reason, rule_hint, rule_label};
-use crate::components::{PropRow, section, tooltip};
+use crate::components::{PropRow, focus, section, tooltip};
 use crate::state::{AppState, TableContext, TableData};
 use crate::theme::{fonts, tokens};
 
 /// Title of the section.
 pub const TITLE: &str = "Table";
+
+/// The diagnostic of a header whose scope its position contradicts.
+pub const SCOPE_CONFLICT_CODE: &str = "table-header-scope-conflict";
+/// The sub-header over the cells that name a header cell by its `/ID`.
+pub const NAMED_BY: &str = "Named by /Headers";
+/// The sub-header over the header cells read with the selected cell.
+pub const HEADERS_OF_THE_CELL: &str = "Headers of the cell";
 
 /// What the rule set is called: `PDF 2.0 algorithm`.
 pub const fn rules_name(rules: TableRules) -> &'static str {
@@ -34,7 +47,7 @@ pub const fn rules_hint(rules: TableRules) -> &'static str {
         TableRules::Pdf2 => {
             "ISO 32000-2: from the cell, search up each column and left along each row; /Headers wins"
         }
-        TableRules::Pdf17 => "PDF 1.7: /Headers, else a header's /Scope, else where it sits; no search",
+        TableRules::Pdf17 => "PDF 1.7: /Headers, else a header’s /Scope, else where it sits; no search",
     }
 }
 
@@ -118,6 +131,10 @@ pub(super) fn show(ui: &mut Ui, data: &Data, action: &mut Action) {
             .inner_margin(Margin::symmetric(8, 0))
             .show(ui, |ui| grid(ui, table, *cell, action));
         if let Some(at) = *cell {
+            if let Some(scope) = &model.cells[at].header_scope {
+                ui.add_space(10.0);
+                header_scope(ui, table, scope, action);
+            }
             ui.add_space(10.0);
             headers(ui, table, at, action);
         }
@@ -184,6 +201,7 @@ fn grid(ui: &mut Ui, table: &TableData, selected: Option<usize>, action: &mut Ac
                 lacking,
                 response.hovered(),
             );
+            focus::ring(ui, &response, rect, tokens::RADIUS_SM);
         }
         let response = if lacking {
             tooltip::text(response, no_header_reason(cell))
@@ -259,13 +277,78 @@ fn paint_cell(
     );
 }
 
+/// The value of a link to cell `at`: `1.2 · row 3, col 2`.
+fn cell_link(table: &TableData, at: usize) -> String {
+    let cell = &table.model.cells[at];
+    let text = table.text(at);
+    format!(
+        "{} · row {}, col {}",
+        if text.is_empty() { "empty cell" } else { text },
+        cell.row + 1,
+        cell.col + 1
+    )
+}
+
+/// Which way a selected header cell heads, how many cells it governs and which cells name it;
+/// a conflict between its scope and its position as a card.
+fn header_scope(ui: &mut Ui, table: &TableData, scope: &HeaderScope, action: &mut Action) {
+    let conflict = scope.source == ScopeSource::Conflict;
+    let text = scope_text(scope);
+    let row = PropRow::new("Scope", &text).warn(conflict).show(ui);
+    tooltip::text(row.value, hint(scope));
+    PropRow::new("Governs", &governs_text(scope.governs.len())).show(ui);
+    if !scope.named_by.is_empty() {
+        ui.add_space(6.0);
+        section::sub_header(ui, NAMED_BY);
+        ui.add_space(4.0);
+        for node in &scope.named_by {
+            let Some(at) = table.index_of(node) else {
+                continue;
+            };
+            let row = PropRow::new("/Headers", &cell_link(table, at))
+                .link(true)
+                .show(ui);
+            tooltip::text(row.value.clone(), "This cell names the header by its /ID");
+            if row.followed {
+                action.navigate = Some(node.clone());
+            }
+        }
+    }
+    if conflict {
+        ui.add_space(6.0);
+        conflict_card(ui, scope);
+    }
+}
+
+/// The plain-language card for `table-header-scope-conflict`.
+fn conflict_card(ui: &mut Ui, scope: &HeaderScope) {
+    let color = tokens::WARN;
+    Frame::new()
+        // Inset like the problem cards.
+        .outer_margin(Margin::symmetric(12, 0))
+        .fill(color.gamma_multiply(0.08))
+        .stroke(Stroke::new(1.0, color.gamma_multiply(0.35)))
+        .corner_radius(tokens::RADIUS_LG)
+        .inner_margin(Margin::same(10))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(
+                RichText::new(SCOPE_CONFLICT_CODE)
+                    .font(fonts::mono_medium(tokens::mono::BODY))
+                    .color(color),
+            );
+            ui.add_space(2.0);
+            ui.add(egui::Label::new(RichText::new(hint(scope)).color(tokens::TEXT)).wrap());
+            if let Some(why) = explain::diagnostic(SCOPE_CONFLICT_CODE) {
+                ui.add(egui::Label::new(RichText::new(why).color(tokens::TEXT_2)).wrap());
+            }
+        });
+}
+
 /// The header cells read with cell `at`, nearest first.
 fn headers(ui: &mut Ui, table: &TableData, at: usize, action: &mut Action) {
     let cell = &table.model.cells[at];
-    ui.horizontal(|ui| {
-        ui.add_space(8.0);
-        ui.label(fonts::section_header("HEADERS OF THE CELL"));
-    });
+    section::sub_header(ui, HEADERS_OF_THE_CELL);
     ui.add_space(4.0);
     if cell.headers.is_empty() {
         let (text, warn) = if cell.header {
@@ -279,17 +362,10 @@ fn headers(ui: &mut Ui, table: &TableData, at: usize, action: &mut Action) {
         let Some(found) = table.index_of(&header.cell) else {
             continue;
         };
-        let target = &table.model.cells[found];
-        let text = table.text(found);
-        let value = format!(
-            "{} · row {}, col {}",
-            if text.is_empty() { "empty cell" } else { text },
-            target.row + 1,
-            target.col + 1
-        );
+        let value = cell_link(table, found);
         let row = PropRow::new(rule_label(header.via), &value).link(true).show(ui);
         tooltip::text(row.value.clone(), rule_hint(header.via));
-        if row.value.clicked() {
+        if row.followed {
             action.navigate = Some(header.cell.clone());
         }
     }

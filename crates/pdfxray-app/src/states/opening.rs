@@ -11,13 +11,13 @@ use pdfxray_core::numeric::f32_from_f64;
 
 use super::card;
 use crate::brand;
-use crate::components::Icon;
+use crate::components::{Icon, focus};
 use crate::open::{OpenProgress, STAGES, StageState, stage_title};
 use crate::state::AppState;
 use crate::theme::{fonts, tokens};
 
 /// Note under the progress bar.
-pub const PAGES_NOTE: &str = "Pages appear as soon as they're ready";
+pub const PAGES_NOTE: &str = "Pages appear as soon as they’re ready";
 
 /// Name of the button that stops opening.
 pub const CANCEL_LABEL: &str = "Cancel";
@@ -207,6 +207,7 @@ fn footer(ui: &mut Ui) -> bool {
     let button = Rect::from_min_max(pos2(rect.max.x - galley.size().x - 8.0, rect.min.y), rect.max);
     let response = ui.interact(button, ui.make_persistent_id("cancel-open"), Sense::click());
     response.widget_info(|| WidgetInfo::labeled(Role::Button, true, CANCEL_LABEL));
+    focus::ring(ui, &response, button, tokens::RADIUS_SM);
     let ink = if response.hovered() {
         tokens::TEXT
     } else {

@@ -203,7 +203,7 @@ fn structure(ui: &mut Ui, cx: &Cx<'_>, action: &mut Action) {
         let role = props.get("Element", "Type").unwrap_or_default();
         if !matches!(cx.id, NodeId::StructElem(_)) {
             let value = format!("/{role}  {object}");
-            if PropRow::new("Owner", &value).link(true).show(ui).value.clicked() {
+            if PropRow::new("Owner", &value).link(true).show(ui).followed {
                 action.navigate = Some(NodeId::StructElem(object));
             }
         }
@@ -297,7 +297,7 @@ fn group_section(
                 .copy_text(&shown)
                 .link(row.link.is_some())
                 .show(ui);
-            if output.value.clicked() {
+            if output.followed {
                 action.navigate.clone_from(&row.link);
             }
         }

@@ -40,6 +40,8 @@ enum Line {
     Object(usize),
     /// The line that says no object is listed, under the heading of the list.
     Empty,
+    /// Under [`Line::Empty`] while the filter hides every object: the way back to the list.
+    ClearFilter,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -114,6 +116,9 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     lines.extend((0..objects.len()).map(Line::Object));
     if objects.is_empty() {
         lines.push(Line::Empty);
+        if filtering {
+            lines.push(Line::ClearFilter);
+        }
     }
     let empty = if filtering {
         format!("No objects match “{}”.", state.nav.filter.trim())
@@ -121,7 +126,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
         NO_OBJECTS.to_owned()
     };
 
-    let selected = state.selection.primary.clone();
+    let selected = state.selection.primary().cloned();
     let reveal = reveal_offset(state, selected.as_ref(), &rows, &objects, head, ui);
     let context = Context {
         document_rows: &document_rows,
@@ -159,6 +164,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     }
     match clicked {
         Clicked::None => {}
+        Clicked::ClearFilter => state.nav.filter.clear(),
         Clicked::Select(id) => {
             state.objects.seen_selection = Some(id.clone());
             state.select(id);
@@ -178,8 +184,8 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
             }
         }
     }
-    if state.objects.seen_selection != state.selection.primary {
-        state.objects.seen_selection.clone_from(&state.selection.primary);
+    if state.objects.seen_selection.as_ref() != state.selection.primary() {
+        state.objects.seen_selection = state.selection.primary().cloned();
     }
 }
 
@@ -228,6 +234,7 @@ enum Clicked {
     Group(ResKind),
     /// The n-th resource row of the filtered groups.
     Resource(usize),
+    ClearFilter,
 }
 
 /// The row that was right-clicked, or has its menu open, and the node it stands for.
@@ -246,6 +253,18 @@ fn draw_line(ui: &mut Ui, cx: &Context<'_>, line: Line, index: usize, menu: &mut
         Line::Section(section) => {
             section_header(ui, cx, section);
             None
+        }
+        Line::ClearFilter => {
+            let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), tokens::ROW_H), Sense::hover());
+            let clicked = ui
+                .scope_builder(
+                    UiBuilder::new()
+                        .max_rect(Rect::from_min_max(rect.min + vec2(6.0, 0.0), rect.max))
+                        .layout(Layout::left_to_right(Align::Center)),
+                    super::clear_filter_button,
+                )
+                .inner;
+            clicked.then_some(Clicked::ClearFilter)
         }
         Line::Empty => {
             let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), tokens::ROW_H), Sense::hover());

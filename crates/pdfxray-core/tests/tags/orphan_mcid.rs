@@ -43,7 +43,7 @@ fn orphan_mcid_messages_name_both_sides() {
         messages,
         [
             "ParentTree key 0 names 8 0 R for MCID 2 on page 1, but 10 0 R references it in /K",
-            "9 0 R references MCID 5 on page 1, but that page's content has no such sequence",
+            "9 0 R references MCID 5 on page 1, but that page’s content has no such sequence",
             "MCID 1 on page 1 is not referenced by any structure element (orphan content)",
         ]
     );

@@ -8,15 +8,19 @@
 //!
 //! The line style says the same as the label: solid for `Headers`, dashed for `Scope`, dotted for
 //! `position`. A label is a button that selects the header it points to.
+//!
+//! A selected header cell also shows its echo: the band over the cells it heads (see
+//! [`super::header_scope`]).
 
 use std::collections::HashMap;
 
 use egui::{Color32, CursorIcon, Rect as UiRect, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo, vec2};
-use pdfxray_core::{HeaderSource, NodeId, PageIx, Rect, RoleClass, TableCell};
+use pdfxray_core::{HeaderSource, NodeId, PageIx, Rect, RoleClass, TableCell, TagBox};
 
 use super::connector::{self, LineStyle};
 use super::geometry::PageGeometry;
-use crate::components::{Icon, tooltip};
+use super::header_scope::{Echo, echo_shapes};
+use crate::components::{Icon, focus, tooltip};
 use crate::roles::role_color;
 use crate::state::{AppState, TableData};
 use crate::theme::tokens;
@@ -36,8 +40,8 @@ pub const fn rule_label(via: HeaderSource) -> &'static str {
 /// What the rule means, for the tooltip of a label.
 pub const fn rule_hint(via: HeaderSource) -> &'static str {
     match via {
-        HeaderSource::Headers => "Named by this cell's /Headers list",
-        HeaderSource::Scope => "The header's /Scope reaches this cell",
+        HeaderSource::Headers => "Named by this cell’s /Headers list",
+        HeaderSource::Scope => "The header’s /Scope reaches this cell",
         HeaderSource::Position => "A header without /Scope, found by where it sits",
     }
 }
@@ -106,19 +110,20 @@ pub(super) struct TableLayer {
     selected: Option<usize>,
     links: Vec<Link>,
     color: Option<Color32>,
+    /// The cells the selected header cell heads.
+    echo: Option<Echo>,
 }
 
 /// Collects the table behind the selection that is on `page`: nothing when the selection is in no
 /// table or the table has nothing on the page.
 pub(super) fn collect(state: &mut AppState, page: PageIx) -> TableLayer {
-    let Some(selection) = state.selection.primary.clone() else {
+    let Some(selection) = state.selection.primary().cloned() else {
         return TableLayer::default();
     };
     let Some(context) = state.table_context(&selection) else {
         return TableLayer::default();
     };
     let boxes = state.tag_boxes(page);
-    let by_node: HashMap<&NodeId, Rect> = boxes.iter().map(|tag| (&tag.id, tag.rect)).collect();
     let data: &TableData = &context.data;
     let mut layer = TableLayer {
         color: Some(role_color(RoleClass::Table)),
@@ -126,21 +131,11 @@ pub(super) fn collect(state: &mut AppState, page: PageIx) -> TableLayer {
     };
     // The index of each model cell among the cells on this page.
     let mut placed: HashMap<usize, usize> = HashMap::new();
-    let on_page: Vec<(usize, &TableCell, Rect)> = data
-        .model
-        .cells
-        .iter()
-        .enumerate()
-        .filter_map(|(at, cell)| Some((at, cell, *by_node.get(&cell.node)?)))
-        .collect();
-    let slots = snap(
-        &on_page
-            .iter()
-            .map(|&(_, cell, rect)| (cell, rect))
-            .collect::<Vec<_>>(),
-    );
-    for ((at, cell, _), rect) in on_page.into_iter().zip(slots) {
+    let mut slots: HashMap<usize, Rect> = HashMap::new();
+    for (at, rect) in self::placed(data, &boxes) {
+        let cell = &data.model.cells[at];
         placed.insert(at, layer.cells.len());
+        slots.insert(at, rect);
         layer.cells.push(CellBox {
             node: cell.node.clone(),
             rect,
@@ -149,6 +144,7 @@ pub(super) fn collect(state: &mut AppState, page: PageIx) -> TableLayer {
         });
     }
     if let Some(at) = context.cell {
+        layer.echo = Echo::of(&data.model.cells, at, &slots);
         layer.selected = placed.get(&at).copied();
         if layer.selected.is_some() {
             layer.links = data.model.cells[at]
@@ -162,6 +158,30 @@ pub(super) fn collect(state: &mut AppState, page: PageIx) -> TableLayer {
         }
     }
     layer
+}
+
+/// The cells of `data` that have a box among `boxes` (those of one page), as indexes into its
+/// model, each with its slot of the grid (see [`snap`]).
+pub(super) fn placed(data: &TableData, boxes: &[TagBox]) -> Vec<(usize, Rect)> {
+    let by_node: HashMap<&NodeId, Rect> = boxes.iter().map(|tag| (&tag.id, tag.rect)).collect();
+    let on_page: Vec<(usize, &TableCell, Rect)> = data
+        .model
+        .cells
+        .iter()
+        .enumerate()
+        .filter_map(|(at, cell)| Some((at, cell, *by_node.get(&cell.node)?)))
+        .collect();
+    let slots = snap(
+        &on_page
+            .iter()
+            .map(|&(_, cell, rect)| (cell, rect))
+            .collect::<Vec<_>>(),
+    );
+    on_page
+        .into_iter()
+        .zip(slots)
+        .map(|((at, _, _), rect)| (at, rect))
+        .collect()
 }
 
 /// The extent `(low, high)` along one axis of each column or row that has a cell covering only it.
@@ -250,6 +270,11 @@ pub(super) fn draw(ui: &Ui, geo: &PageGeometry, page: PageIx, layer: &TableLayer
         .map(|cell| geo.rect_to_screen(cell.rect))
         .collect();
 
+    // The echo of a selected header, under the grid.
+    if let Some(echo) = &layer.echo {
+        painter.extend(echo_shapes(geo, echo, color));
+    }
+
     // The grid: every cell thin, the whole table a little stronger.
     for rect in &rects {
         painter.rect_stroke(
@@ -296,6 +321,7 @@ pub(super) fn draw(ui: &Ui, geo: &PageGeometry, page: PageIx, layer: &TableLayer
             painter.circle_filled(mark.center(), MARK / 2.0, tokens::WARN.gamma_multiply(0.25));
         }
         Icon::Warning.paint(ui, mark.shrink(1.0), MARK - 2.0, tokens::WARN);
+        focus::page_ring(&painter, &response, mark, MARK / 2.0);
         let name = no_header_name(&cell.text);
         response.widget_info(|| WidgetInfo::labeled(Role::Button, true, name.clone()));
         let response = tooltip::text(response, reason.clone());
@@ -371,6 +397,7 @@ mod tests {
             id: None,
             headers: Vec::new(),
             missing_header_ids: Vec::new(),
+            header_scope: None,
         }
     }
 

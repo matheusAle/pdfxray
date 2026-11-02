@@ -37,6 +37,13 @@ impl ContentFilter {
     }
 }
 
+/// The operators that make up every node of `ids`: the union of [`ops_for`] over the set, so a
+/// multi-selection can be isolated or hidden with one [`ContentFilter`]. Filters are per page:
+/// pass nodes of one page.
+pub fn ops_for_all<'a>(doc: &Document, ids: impl IntoIterator<Item = &'a NodeId>) -> BTreeSet<u32> {
+    ids.into_iter().flat_map(|id| ops_for(doc, id)).collect()
+}
+
 /// The operators that make up `id`, to build [`ContentFilter::Only`] and
 /// [`ContentFilter::Hide`] sets from selected nodes.
 ///

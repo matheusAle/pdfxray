@@ -40,6 +40,15 @@
 //!   header heads every cell below it in the columns it spans, a row header every cell to its
 //!   right in the rows it spans. No search stops early, and no namespace is consulted.
 //!
+//! # Header scope
+//!
+//! Every header cell also says which way it heads ([`HeaderScope`]): its `Scope`, else what its
+//! position says under the PDF 1.7 rules above (a column header in a table head or a row without
+//! data cells, a row header otherwise). A `Scope` of `Row` or `Column` that its position
+//! contradicts is a *conflict*: readers follow the `Scope`, so the header is announced for cells
+//! the layout does not suggest. Each header lists the cells it heads, and the cells whose
+//! `/Headers` name it.
+//!
 //! The ISO text itself was read only through its public errata and the Well-Tagged PDF
 //! specification; the searches are an implementation of that description.
 
@@ -153,6 +162,75 @@ pub struct HeaderRef {
     pub via: HeaderSource,
 }
 
+/// How the direction of a header cell is known. See [`HeaderScope`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeSource {
+    /// The cell's `Scope` says it, and its position does not say otherwise.
+    Declared,
+    /// The cell has no `Scope`: the direction is read from where it sits.
+    Inferred,
+    /// The cell's `Scope` says one direction and its position the other. Readers follow the
+    /// `Scope`.
+    Conflict,
+}
+
+/// Where a header cell sits, as far as its direction goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HeaderPlace {
+    /// Inside `THead`.
+    Head,
+    /// The first row, which holds no data cell.
+    TopRow,
+    /// A later row that holds no data cell.
+    HeaderRow,
+    /// The first column of a row that holds data cells.
+    FirstColumn,
+    /// Another column of a row that holds data cells.
+    DataRow,
+}
+
+impl HeaderPlace {
+    /// The direction a header cell here heads when it has no `Scope`.
+    #[must_use]
+    pub const fn reads_as(self) -> TableScope {
+        match self {
+            Self::Head | Self::TopRow | Self::HeaderRow => TableScope::Column,
+            Self::FirstColumn | Self::DataRow => TableScope::Row,
+        }
+    }
+
+    /// The place in words: `the first column`.
+    #[must_use]
+    pub const fn phrase(self) -> &'static str {
+        match self {
+            Self::Head => "the table head",
+            Self::TopRow => "the top row",
+            Self::HeaderRow => "a row of header cells",
+            Self::FirstColumn => "the first column",
+            Self::DataRow => "a row of data cells",
+        }
+    }
+}
+
+/// The direction a header cell heads, how that is known, and the cells it heads. Only header
+/// cells have one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HeaderScope {
+    /// The direction: the cell's `Scope`, else what its position says.
+    pub scope: TableScope,
+    /// Where `scope` comes from.
+    pub source: ScopeSource,
+    /// Where the cell sits; [`HeaderPlace::reads_as`] is what its position says.
+    pub place: HeaderPlace,
+    /// The cells whose own `/Headers` list names this cell's `/ID`, in reading order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub named_by: Vec<NodeId>,
+    /// The cells this cell is a header of, by whichever rule, in reading order.
+    pub governs: Vec<NodeId>,
+}
+
 /// Where a row sits in the table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -193,6 +271,9 @@ pub struct TableCell {
     /// `/Headers` entries that name no cell of this table.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub missing_header_ids: Vec<String>,
+    /// For a header cell, the direction it heads and the cells it heads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub header_scope: Option<HeaderScope>,
 }
 
 /// A row whose width, spans included, differs from the table's.
@@ -261,12 +342,31 @@ struct Raw {
 impl Raw {
     /// The scope the cell heads by: its `Scope`, else what its position says.
     fn kind(&self) -> TableScope {
-        self.scope
-            .unwrap_or(if self.group == RowGroup::Head || !self.row_has_data {
-                TableScope::Column
-            } else {
-                TableScope::Row
-            })
+        self.scope.unwrap_or_else(|| self.place().reads_as())
+    }
+
+    /// Where the cell sits: in a table head or a row without data cells it reads as a column
+    /// header, otherwise as a row header.
+    fn place(&self) -> HeaderPlace {
+        match (self.group, self.row_has_data) {
+            (RowGroup::Head, _) => HeaderPlace::Head,
+            (_, false) if self.row == 0 => HeaderPlace::TopRow,
+            (_, false) => HeaderPlace::HeaderRow,
+            (_, true) if self.col == 0 => HeaderPlace::FirstColumn,
+            (_, true) => HeaderPlace::DataRow,
+        }
+    }
+
+    /// Where the cell's direction comes from: a `Row` or `Column` its place contradicts is a
+    /// conflict; `Both` agrees with any place.
+    fn source(&self) -> ScopeSource {
+        match self.scope {
+            None => ScopeSource::Inferred,
+            Some(scope @ (TableScope::Row | TableScope::Column)) if scope != self.place().reads_as() => {
+                ScopeSource::Conflict
+            }
+            Some(_) => ScopeSource::Declared,
+        }
     }
 
     fn via(&self) -> HeaderSource {
@@ -527,7 +627,7 @@ impl TagTree {
             .filter_map(|(i, c)| Some((c.id.as_deref()?, i)))
             .collect();
         let node = |i: usize| self.id_of(grid.raws[i].ei);
-        let cells = (0..grid.raws.len())
+        let mut cells: Vec<TableCell> = (0..grid.raws.len())
             .map(|i| {
                 let raw = &grid.raws[i];
                 let (found, missing) = grid.headers_of(i, rules, &by_id);
@@ -546,9 +646,32 @@ impl TagTree {
                         .map(|(j, via)| HeaderRef { cell: node(j), via })
                         .collect(),
                     missing_header_ids: missing,
+                    header_scope: None,
                 }
             })
             .collect();
+        for (i, raw) in grid.raws.iter().enumerate().filter(|(_, raw)| raw.header) {
+            let named_by = raw.id.as_deref().map_or_else(Vec::new, |id| {
+                grid.raws
+                    .iter()
+                    .zip(&cells)
+                    .filter(|(other, _)| other.explicit.iter().flatten().any(|named| named == id))
+                    .map(|(_, cell)| cell.node.clone())
+                    .collect()
+            });
+            let governs = cells
+                .iter()
+                .filter(|cell| cell.headers.iter().any(|h| h.cell == cells[i].node))
+                .map(|cell| cell.node.clone())
+                .collect();
+            cells[i].header_scope = Some(HeaderScope {
+                scope: raw.kind(),
+                source: raw.source(),
+                place: raw.place(),
+                named_by,
+                governs,
+            });
+        }
         let irregular = (0..grid.rows)
             .filter_map(|r| {
                 let width = (0..grid.cols).filter(|&c| grid.at(r, c).is_some()).count();
@@ -570,6 +693,24 @@ impl TagTree {
     }
 }
 
+/// `Row`, `Column` or `Both`, as `/Scope` writes it.
+const fn scope_name(scope: TableScope) -> &'static str {
+    match scope {
+        TableScope::Row => "Row",
+        TableScope::Column => "Column",
+        TableScope::Both => "Both",
+    }
+}
+
+/// `row`, `column` or `row and column`: the kind of header a scope makes.
+const fn scope_word(scope: TableScope) -> &'static str {
+    match scope {
+        TableScope::Row => "row",
+        TableScope::Column => "column",
+        TableScope::Both => "row and column",
+    }
+}
+
 fn to_u32(n: usize) -> u32 {
     u32::try_from(n).unwrap_or(u32::MAX)
 }
@@ -586,7 +727,7 @@ impl Builder<'_> {
     }
 
     /// Reports tables without headers, data cells without header cells, `/Headers` entries that
-    /// name no cell, and irregular rows.
+    /// name no cell, header cells whose `Scope` their position contradicts, and irregular rows.
     pub(super) fn check_tables(&mut self) {
         /// A finding about element `ei`.
         type Found = (&'static str, Severity, String, usize);
@@ -644,6 +785,27 @@ impl Builder<'_> {
                         at(&cell.node),
                     ));
                 }
+            }
+            for cell in &model.cells {
+                let Some(scope) = cell
+                    .header_scope
+                    .as_ref()
+                    .filter(|s| s.source == ScopeSource::Conflict)
+                else {
+                    continue;
+                };
+                found.push((
+                    "table-header-scope-conflict",
+                    Severity::Warning,
+                    format!(
+                        "{} has /Scope /{}, but sits in {}, where it reads as a {} header",
+                        label(&cell.node),
+                        scope_name(scope.scope),
+                        scope.place.phrase(),
+                        scope_word(scope.place.reads_as())
+                    ),
+                    at(&cell.node),
+                ));
             }
             if !model.irregular.is_empty() {
                 let rows: Vec<String> = model

@@ -15,7 +15,7 @@ use pdfxray_render::xray::{
     OUTSIDE_CROP, TAG_PALETTE, TAGGED, UNTAGGED, UNTAGGED_TAG, WHITE_ON_WHITE,
 };
 use pdfxray_render::{
-    ColorBy, ContentFilter, RenderSpec, XrayOptions, alpha_heatmap_overlays, clip_overlays, ops_for,
+    ColorBy, ContentFilter, RenderSpec, XrayOptions, alpha_heatmap_overlays, clip_overlays, ops_for_all,
     xray_overlays,
 };
 
@@ -43,19 +43,24 @@ impl IsolateMode {
     }
 }
 
-/// A node that is isolated or hidden on one page.
+/// The selected nodes isolated or hidden on one page.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Isolation {
     /// Keep or remove [`Self::ops`].
     pub mode: IsolateMode,
-    /// The node the user chose.
-    pub node: NodeId,
-    /// Display name of [`Self::node`].
+    /// The nodes the user chose: the selection on its primary's page.
+    pub nodes: Vec<NodeId>,
+    /// Display name of the node, or `4 elements` for several.
     pub title: String,
     /// Page the operators belong to; filters are per page.
     pub page: PageIx,
     /// The operators that make up the node.
     pub ops: BTreeSet<u32>,
+}
+
+/// How several selected nodes are named together: `4 elements`.
+pub fn elements_text(count: usize) -> String {
+    format!("{count} elements")
 }
 
 /// Opacity of the x-ray outlines in the page bitmap (50 %); the hovered and the selected item
@@ -125,7 +130,7 @@ impl OrderSource {
 }
 
 /// Everything the View menu sets.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ViewMode {
     /// Outline every painted item.
     pub xray: bool,
@@ -150,10 +155,33 @@ pub struct ViewMode {
     /// The stepper moves over operators that paint nothing (graphics state, marked content ...)
     /// instead of stopping at each.
     pub skip_state_only: bool,
+    /// The canvas scrolls to what the stepper paints when it moves (on by default).
+    pub follow_step: bool,
     /// The stepper is playing: it advances by itself.
     pub playing: bool,
     /// Time since the stepper last advanced while playing.
     pub(crate) play_carry: Duration,
+}
+
+impl Default for ViewMode {
+    fn default() -> Self {
+        Self {
+            xray: false,
+            color_by: ColorBy::default(),
+            show: TagShow::default(),
+            order_from: OrderSource::default(),
+            invisible: false,
+            isolation: None,
+            stepper: false,
+            step: 0,
+            clip: false,
+            heatmap: false,
+            skip_state_only: false,
+            follow_step: true,
+            playing: false,
+            play_carry: Duration::ZERO,
+        }
+    }
 }
 
 impl ViewMode {
@@ -277,8 +305,8 @@ impl ViewTool {
     pub const fn hint(self) -> &'static str {
         match self {
             Self::Xray => "Outline every painted item: glyphs, paths, images, shadings",
-            Self::Isolate => "Paint only the selected node's content",
-            Self::Hide => "Paint everything except the selected node's content",
+            Self::Isolate => "Paint only the selected node’s content",
+            Self::Hide => "Paint everything except the selected node’s content",
             Self::PaintOrder => "Paint the page one operator at a time",
             Self::Clip => "Outline the clip in effect for the selected operator",
             Self::Alpha => "Tint items with a soft mask, a blend mode or alpha below 1",
@@ -429,8 +457,8 @@ pub fn heatmap_legend() -> Vec<LegendEntry> {
 /// What the selection means for the render modes: the operators behind it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SelectedOps {
-    /// The node the operators were computed for; for a validation finding, its target.
-    pub(crate) node: NodeId,
+    /// The nodes the operators were computed for ([`AppState::view_targets`]).
+    pub(crate) nodes: Vec<NodeId>,
     /// Page of the operators.
     pub(crate) page: PageIx,
     /// The operators; empty when the node has no content to isolate.
@@ -441,9 +469,14 @@ impl AppState {
     /// The node that isolate, hide and clip act on: the selection, or for a validation finding
     /// the node the finding points at.
     pub fn view_target(&self) -> Option<NodeId> {
-        let selection = self.selection.primary.as_ref()?;
-        let NodeId::Validation(index) = selection else {
-            return Some(selection.clone());
+        self.target_of(self.selection.primary()?)
+    }
+
+    /// The node isolate and hide act on for selected node `id`: itself, or for a validation
+    /// finding the node the finding points at.
+    fn target_of(&self, id: &NodeId) -> Option<NodeId> {
+        let NodeId::Validation(index) = id else {
+            return Some(id.clone());
         };
         let finding = self
             .document
@@ -455,18 +488,41 @@ impl AppState {
         finding.target.clone()
     }
 
-    /// Recomputes the operators behind [`Self::view_target`] when the selection changed. Called
+    /// The nodes isolate and hide act on: the [`Self::view_target`] of every selected node that
+    /// is on the primary's page (filters are per page), in selection order.
+    pub fn view_targets(&self) -> Vec<NodeId> {
+        let Some(loaded) = &self.document else {
+            return Vec::new();
+        };
+        let page_of = |node: &NodeId| node_page(node).or_else(|| loaded.doc.bbox(node).map(|(page, _)| page));
+        let Some(page) = self.view_target().as_ref().and_then(page_of) else {
+            return Vec::new();
+        };
+        self.selection
+            .nodes()
+            .iter()
+            .filter_map(|id| self.target_of(id))
+            .filter(|node| page_of(node) == Some(page))
+            .collect()
+    }
+
+    /// Recomputes the operators behind [`Self::view_targets`] when the selection changed. Called
     /// once per frame; cheap while nothing changed.
     pub(crate) fn refresh_selection_ops(&mut self) {
-        let target = self.view_target();
-        if self.canvas.selected_ops.as_ref().map(|s| &s.node) == target.as_ref() {
+        let targets = self.view_targets();
+        let current = self.canvas.selected_ops.as_ref().map(|s| s.nodes.as_slice());
+        if current.unwrap_or_default() == targets.as_slice() {
             return;
         }
-        self.canvas.selected_ops = target.and_then(|node| {
+        self.canvas.selected_ops = targets.first().cloned().and_then(|first| {
             let doc = &self.document.as_ref()?.doc;
-            let page = node_page(&node).or_else(|| doc.bbox(&node).map(|(page, _)| page))?;
-            let ops = ops_for(doc, &node);
-            Some(SelectedOps { node, page, ops })
+            let page = node_page(&first).or_else(|| doc.bbox(&first).map(|(page, _)| page))?;
+            let ops = ops_for_all(doc, &targets);
+            Some(SelectedOps {
+                nodes: targets,
+                page,
+                ops,
+            })
         });
     }
 
@@ -487,14 +543,17 @@ impl AppState {
         let Some(loaded) = &self.document else {
             return;
         };
-        let title = loaded
-            .doc
-            .node(&selected.node)
-            .map_or_else(|| selected.node.to_string(), |props| props.title);
+        let title = match selected.nodes.as_slice() {
+            [node] => loaded
+                .doc
+                .node(node)
+                .map_or_else(|| node.to_string(), |props| props.title),
+            nodes => elements_text(nodes.len()),
+        };
         self.go_to_page(selected.page);
         self.canvas.view.isolation = Some(Isolation {
             mode,
-            node: selected.node,
+            nodes: selected.nodes,
             title,
             page: selected.page,
             ops: selected.ops,
@@ -519,7 +578,7 @@ impl AppState {
     /// The operator whose clip the Clip toggle shows: the selected operator, or the operator of
     /// the selected glyph, when it is on the page shown.
     pub fn clip_op(&self) -> Option<u32> {
-        match self.selection.primary.as_ref()? {
+        match self.selection.primary()? {
             NodeId::Op { page, ix } if *page == self.canvas.page => Some(*ix),
             NodeId::Glyph { page, op, .. } if *page == self.canvas.page => Some(*op),
             _ => None,
@@ -560,7 +619,7 @@ mod tests {
     fn isolation(mode: IsolateMode, ops: &[u32]) -> Isolation {
         Isolation {
             mode,
-            node: NodeId::Op { page: 0, ix: 3 },
+            nodes: vec![NodeId::Op { page: 0, ix: 3 }],
             title: "Op".to_owned(),
             page: 0,
             ops: ops.iter().copied().collect(),

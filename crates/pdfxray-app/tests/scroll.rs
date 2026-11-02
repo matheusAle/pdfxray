@@ -1,5 +1,7 @@
 //! The canvas is one vertical scroll of every page: scrolling decides the current page, a click
 //! on another page makes it current, and the page controls scroll instead of swapping the page.
+//! A zoom keeps the spot under the pointer (⌘ and the wheel) or at the centre of the view (the
+//! zoom buttons) where it is.
 
 #![allow(
     clippy::unwrap_used,
@@ -13,13 +15,15 @@
 
 mod common;
 
-use common::{Region, app, click_at, nodes_in, open_fixture, the, wait_for_render, wait_until};
+use common::{Region, app, canvas_view, click_at, nodes_in, open_fixture, the, wait_for_render, wait_until};
 use egui::epaint::{ClippedShape, Shape};
-use egui::{Event, Modifiers, MouseWheelUnit, Rect, Role, TextureId, vec2};
+use egui::{Event, Modifiers, MouseWheelUnit, Pos2, Rect, Role, TextureId, Vec2, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfxray_app::PdfxrayApp;
 use pdfxray_app::center::canvas::PAGE_GAP;
+use pdfxray_app::view::ZoomMode;
+use pdfxray_core::Point;
 use pretty_assertions::assert_eq;
 
 /// Where the image of page `page` (zero-based) is, if it is drawn.
@@ -45,6 +49,124 @@ fn wheel(harness: &mut Harness<'_, PdfxrayApp>, dy: f32) {
         source: egui::MouseWheelSource::Wheel,
         modifiers: Modifiers::NONE,
     });
+}
+
+/// ⌘ and the wheel, `dy` points up (a zoom in).
+fn zoom_wheel(harness: &mut Harness<'_, PdfxrayApp>, dy: f32) {
+    harness.event(Event::MouseWheel {
+        unit: MouseWheelUnit::Point,
+        delta: vec2(0.0, dy),
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
+        modifiers: Modifiers::COMMAND,
+    });
+}
+
+/// The point of the page under the pointer at `at`, as the canvas reads it (after a frame).
+fn page_point_at(harness: &mut Harness<'_, PdfxrayApp>, at: Pos2) -> Point {
+    harness.hover_at(at);
+    harness.step();
+    harness
+        .state()
+        .state
+        .canvas
+        .cursor
+        .expect("the pointer is on a page")
+        .page
+}
+
+/// The two points are the same spot of the page, within a point.
+fn assert_same_spot(actual: Point, expected: Point, when: &str) {
+    assert!(
+        (actual.x - expected.x).abs() < 1.0 && (actual.y - expected.y).abs() < 1.0,
+        "{when}: {actual:?} is not {expected:?}"
+    );
+}
+
+fn offset(harness: &Harness<'_, PdfxrayApp>) -> Vec2 {
+    harness.state().state.canvas.scroll_offset
+}
+
+/// `long-doc` at `zoom`, scrolled down `down` points with the pointer `from_centre` away from
+/// the centre of the canvas, at rest; and where the pointer is.
+fn scrolled(zoom: f32, from_centre: Vec2, down: f32) -> (Harness<'static, PdfxrayApp>, Pos2) {
+    let mut harness = app();
+    open_fixture(&mut harness, "long-doc");
+    harness.state_mut().state.set_zoom(zoom);
+    harness.run_steps(3);
+    wait_for_render(&mut harness);
+    let at = canvas_view(&harness).center() + from_centre;
+    harness.hover_at(at);
+    wheel(&mut harness, -down);
+    harness.run_steps(4);
+    wait_for_render(&mut harness);
+    (harness, at)
+}
+
+#[test]
+fn command_and_the_wheel_zoom_at_the_pointer_without_scrolling() {
+    let (mut harness, at) = scrolled(1.5, vec2(120.0, 90.0), 300.0);
+    let spot = page_point_at(&mut harness, at);
+    let before = offset(&harness);
+
+    // 100 points of wheel: e^(100 / 200) times the zoom, spread over a few frames.
+    zoom_wheel(&mut harness, 100.0);
+    let mut zooms = Vec::new();
+    for frame in 0..8 {
+        harness.step();
+        zooms.push(harness.state().state.canvas.zoom);
+        // Every frame, the pages are drawn with the spot still under the pointer.
+        if let Some(cursor) = harness.state().state.canvas.cursor {
+            assert_same_spot(cursor.page, spot, &format!("frame {frame}"));
+        }
+    }
+    wait_for_render(&mut harness);
+
+    let zoom = harness.state().state.canvas.zoom;
+    assert!((zoom - 1.5 * 0.5_f32.exp()).abs() < 1e-3, "{zoom}");
+    assert!(zooms.windows(2).all(|pair| pair[1] >= pair[0]), "{zooms:?}");
+    assert_eq!(harness.state().state.canvas.zoom_mode, ZoomMode::Manual);
+    assert_same_spot(page_point_at(&mut harness, at), spot, "at rest");
+    // The pages grew around the pointer: the view moved down and right into them. The wheel's
+    // 100 points, taken as a scroll, would have moved it up.
+    let after = offset(&harness);
+    assert!(
+        after.y > before.y + 100.0 && after.x > before.x,
+        "{before:?} -> {after:?}"
+    );
+
+    // Smoke: zooming back out at the same spot is the way back.
+    zoom_wheel(&mut harness, -100.0);
+    harness.run_steps(8);
+    wait_for_render(&mut harness);
+    assert!((harness.state().state.canvas.zoom - 1.5).abs() < 1e-3);
+    assert_same_spot(page_point_at(&mut harness, at), spot, "zoomed back out");
+    assert!(
+        (offset(&harness) - before).length() < 1.0,
+        "{:?} vs {before:?}",
+        offset(&harness)
+    );
+}
+
+#[test]
+fn the_zoom_buttons_zoom_at_the_centre_of_the_view() {
+    let (mut harness, centre) = scrolled(1.0, Vec2::ZERO, 500.0);
+    let spot = page_point_at(&mut harness, centre);
+
+    the(&harness, Region::Center, Role::Button, "Zoom in").click();
+    harness.run_steps(3);
+    wait_for_render(&mut harness);
+
+    assert_eq!(harness.state().state.canvas.zoom, 1.25);
+    assert_same_spot(page_point_at(&mut harness, centre), spot, "zoomed in");
+    // ⌘- (the menu's Zoom Out) too, and the view is back where it was.
+    harness.state_mut().state.zoom_out();
+    harness.run_steps(3);
+    wait_for_render(&mut harness);
+    assert_eq!(harness.state().state.canvas.zoom, 1.0);
+    assert_same_spot(page_point_at(&mut harness, centre), spot, "zoomed out");
+    // Smoke: the centre is on a page well down the document, not at its top.
+    assert!(offset(&harness).y > 400.0, "{:?}", offset(&harness));
 }
 
 #[test]
@@ -121,11 +243,10 @@ fn clicking_a_page_below_makes_it_current_without_scrolling() {
     assert!(
         state
             .selection
-            .primary
-            .as_ref()
+            .primary()
             .is_some_and(|id| id.to_string().contains(":1")),
         "{:?}",
-        state.selection.primary
+        state.selection.primary().cloned()
     );
     // Smoke: the view stayed where it was.
     assert_eq!(state.canvas.scroll_offset, offset);

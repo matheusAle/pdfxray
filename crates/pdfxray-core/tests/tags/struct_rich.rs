@@ -20,6 +20,8 @@ fn struct_rich_matches_its_expected_outline() {
             ("rolemap-multi-hop", Severity::Warning, Some(24)),
             // The data cell beside a `Scope /Column` header has no header of its own.
             ("table-header-unresolved", Severity::Info, Some(18)),
+            // That header sits in the first column of a row of data: its place says Row.
+            ("table-header-scope-conflict", Severity::Warning, Some(17)),
         ]
     );
     // Smoke: all 15 elements, none missing and none extra.

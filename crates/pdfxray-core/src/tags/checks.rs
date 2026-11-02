@@ -315,7 +315,7 @@ impl Builder<'_> {
                     "mcid-not-in-content",
                     Severity::Error,
                     format!(
-                        "{owner} references MCID {mcid} on page {}, but that page's content has no such sequence",
+                        "{owner} references MCID {mcid} on page {}, but that page’s content has no such sequence",
                         page + 1
                     ),
                     Some(owner),

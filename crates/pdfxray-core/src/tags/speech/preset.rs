@@ -121,7 +121,7 @@ const PDFJS_RULES: [PresetRule; 3] = [
     },
     PresetRule {
         topic: "Table headers",
-        behaviour: "A cell's /Headers list is used; otherwise a TH is a row or column header by its \
+        behaviour: "A cell’s /Headers list is used; otherwise a TH is a row or column header by its \
                     Scope, else by position (the PDF 1.7 rules, whatever the PDF version)",
         evidence: "[PDFJS-STL] [PDFJS#21702], H",
     },

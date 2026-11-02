@@ -45,7 +45,7 @@ fn a_wrong_stream_length_is_explained_with_both_figures() {
     assert_eq!(
         explain::diagnostic("stream-length-wrong"),
         Some(
-            "The stream's declared length does not match its real length. Acrobat silently fixes this; other readers may drop the last command. pdfxray shows it as-is."
+            "The stream’s declared length does not match its real length. Acrobat silently fixes this; other readers may drop the last command. pdfxray shows it as-is."
         )
     );
 }
@@ -178,7 +178,7 @@ fn every_raw_and_core_code_has_a_plain_text_that_ends_like_a_sentence() {
     assert!(all.contains("box-outside-mediabox") && all.contains("untagged-content"));
     assert_eq!(
         all.len(),
-        5 + 27 + 1 + 10,
+        5 + 27 + 1 + 11,
         "page tree, structure and resource codes remain"
     );
     let mut figures = String::new();

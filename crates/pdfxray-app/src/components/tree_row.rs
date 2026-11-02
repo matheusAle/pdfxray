@@ -201,7 +201,7 @@ impl<'a> TreeRow<'a> {
                 );
             }
             // The row the keyboard is on, selected or not.
-            focus::ring(ui, &row, rect.shrink2(vec2(2.0, 0.5)), tokens::RADIUS_SM);
+            focus::row_ring(ui, &row, rect.shrink2(vec2(2.0, 0.5)), tokens::RADIUS_SM);
         }
 
         let mut toggled = false;
@@ -233,6 +233,7 @@ impl<'a> TreeRow<'a> {
                 Icon::ChevronRight
             };
             icon.paint(ui, slot, 12.0, ink);
+            focus::ring(ui, &chevron, chevron.rect, tokens::RADIUS_SM);
             toggled = chevron.clicked();
         }
         x += CHEVRON + 2.0;

@@ -223,29 +223,19 @@ fn nesting_off_leaves_the_containers_out_and_artifacts_get_their_own_chips() {
     assert!(!bare.contains(&"Sect".to_owned()), "{bare:?}");
 }
 
-/// Rests the pointer on the Tag roles chip so that the card opens, then lists its rows as
-/// `(name, count)` with whether the row is dimmed.
-fn legend_rows(harness: &mut App) -> Vec<(String, String, bool)> {
+/// Rests the pointer on the Tag roles chip so that the card opens, then lists its rows by their
+/// accessible names (`P, 2 elements`) with whether the row is dimmed.
+fn legend_rows(harness: &mut App) -> Vec<(String, bool)> {
     let chip = harness.get_by_label(role_legend::TITLE).rect();
     harness.hover_at(pos2(chip.max.x - 4.0, chip.center().y));
     harness.run_steps(4);
-    let labels: Vec<_> = nodes_in(harness, Region::Center, Role::Label)
+    nodes_in(harness, Region::Center, Role::Button)
         .into_iter()
-        .map(|node| {
-            (
-                node.value().unwrap_or_default(),
-                node.accesskit_node().is_disabled(),
-            )
+        .filter_map(|node| {
+            let name = node.accesskit_node().label()?;
+            name.contains(" element")
+                .then(|| (name, node.accesskit_node().is_disabled()))
         })
-        .collect();
-    let start = labels
-        .iter()
-        .position(|(text, _)| text == "H1–H6")
-        .expect("the first row");
-    labels[start..]
-        .chunks(2)
-        .filter(|pair| pair.len() == 2)
-        .map(|pair| (pair[0].0.clone(), pair[1].0.clone(), pair[0].1))
         .collect()
 }
 
@@ -258,23 +248,23 @@ fn the_tag_roles_legend_counts_the_classes_on_the_page_and_dims_the_unused_ones(
     boxes_on(&mut harness);
     let rows = legend_rows(&mut harness);
 
-    let named: Vec<(&str, &str, bool)> = rows
+    let named: Vec<(&str, bool)> = rows
         .iter()
-        .map(|(name, count, dimmed)| (name.as_str(), count.as_str(), *dimmed))
+        .map(|(name, dimmed)| (name.as_str(), *dimmed))
         .collect();
     assert_eq!(
         named,
         [
-            ("H1–H6", "1", false),
-            ("P", "2", false),
-            ("Figure", "1", false),
-            ("Caption", "1", false),
-            ("Table…", "0", true),
-            ("L / LI", "0", true),
-            ("Link", "0", true),
-            ("Span", "0", true),
-            ("Sect / Div", "1", false),
-            ("Artifact", "0", true),
+            ("H1–H6, 1 element", false),
+            ("P, 2 elements", false),
+            ("Figure, 1 element", false),
+            ("Caption, 1 element", false),
+            ("Table, 0 elements", true),
+            ("L / LI, 0 elements", true),
+            ("Link, 0 elements", true),
+            ("Span, 0 elements", true),
+            ("Sect / Div, 1 element", false),
+            ("Artifact, 0 elements", true),
         ]
     );
     // The same rows come from the legend's own function.
@@ -297,7 +287,13 @@ fn the_legend_follows_tag_role_colouring_and_offers_no_colour_editing() {
     harness.hover_at(pos2(chip.max.x - 4.0, chip.center().y));
     harness.run_steps(4);
 
-    assert!(common::has_label(&harness, "H1–H6"));
+    // Without the tag boxes the rows are a plain legend: there is nothing to focus.
+    assert!(common::has_label(&harness, "H1–H6, 1 element"));
+    assert!(
+        !buttons_in(&harness, Region::Center)
+            .iter()
+            .any(|name| name.contains(" element"))
+    );
     assert!(harness.query_by_label_contains("Edit tag colours").is_none());
     // Smoke: the View menu has no colour entry either.
     view_tools::open(&mut harness);
@@ -365,7 +361,7 @@ fn clicking_a_badge_selects_the_element_it_numbers() {
     settle(&mut harness);
 
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(core.steps[2].id.clone())
     );
     // The backtrack badge selects the figure.
@@ -378,7 +374,7 @@ fn clicking_a_badge_selects_the_element_it_numbers() {
     .click();
     settle(&mut harness);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(core.steps[3].id.clone())
     );
     assert_eq!(core.steps[3].role, "Figure");
@@ -555,7 +551,10 @@ fn clicking_a_chip_selects_its_element_and_a_click_in_a_box_picks_the_innermost_
 
     the(&harness, Region::Center, Role::Button, "Caption").click();
     settle(&mut harness);
-    assert_eq!(harness.state().state.selection.primary, Some(caption.id.clone()));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(caption.id.clone())
+    );
 
     // A click in the middle of the figure's box (page 300 x 400) selects the Figure, not the
     // content operator under it.
@@ -566,7 +565,10 @@ fn clicking_a_chip_selects_its_element_and_a_click_in_a_box_picks_the_innermost_
     );
     let at = screen_of(&harness, middle, 400.0);
     click_at(&mut harness, at);
-    assert_eq!(harness.state().state.selection.primary, Some(figure.id.clone()));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(figure.id.clone())
+    );
 }
 
 #[test]
@@ -588,7 +590,7 @@ fn reading_order_from_paint_order_changes_the_numbers_and_loses_the_backtrack() 
     the(&harness, Region::Center, Role::Button, "Reading order step 3").click();
     settle(&mut harness);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(paint.steps[2].id.clone())
     );
     assert_eq!(paint.backtracks, 0);
@@ -661,7 +663,7 @@ fn a_row_of_the_inspector_list_selects_its_element() {
     settle(&mut harness);
 
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(core.steps[1].id.clone())
     );
     assert_eq!(core.steps[1].role, "P");
@@ -704,6 +706,305 @@ fn an_untagged_file_has_no_reading_order_section() {
     assert!(!common::has_label(&harness, "Same order"));
 }
 
+// ---- Tag roles focus ----
+
+/// Makes the page small enough for the column of cards to fit beside it, so the Tag roles card
+/// is open rather than a chip.
+fn card_open(harness: &mut App) {
+    harness.state_mut().state.set_zoom(0.45);
+    settle(harness);
+    wait_for_render(harness);
+    settle(harness);
+}
+
+/// The row of the Tag roles card whose name starts with `role`, e.g. `H1–H6`.
+fn role_row<'h>(harness: &'h App, role: &str) -> egui_kittest::Node<'h> {
+    let prefix = format!("{role}, ");
+    let mut found: Vec<_> = nodes_in(harness, Region::Center, Role::Button)
+        .into_iter()
+        .filter(|node| {
+            node.accesskit_node()
+                .label()
+                .is_some_and(|name| name.starts_with(&prefix))
+        })
+        .collect();
+    assert_eq!(found.len(), 1, "one row for {role}");
+    found.remove(0)
+}
+
+fn row_name(harness: &App, role: &str) -> String {
+    role_row(harness, role).accesskit_node().label().unwrap()
+}
+
+fn click_row(harness: &mut App, role: &str) {
+    role_row(harness, role).click();
+    settle(harness);
+}
+
+/// Clicks the row of `role` with Shift held.
+fn shift_click_row(harness: &mut App, role: &str) {
+    let pos = role_row(harness, role).rect().center();
+    harness.hover_at(pos);
+    for pressed in [true, false] {
+        harness.event_modifiers(
+            egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::SHIFT,
+            },
+            Modifiers::SHIFT,
+        );
+    }
+    settle(harness);
+}
+
+fn focused(harness: &App) -> Vec<RoleClass> {
+    harness.state().state.focused_roles().into_iter().collect()
+}
+
+#[test]
+fn a_click_focuses_a_role_a_second_click_releases_and_shift_adds_or_removes_one() {
+    let mut harness = opened("reading-order");
+    boxes_on(&mut harness);
+    card_open(&mut harness);
+
+    click_row(&mut harness, "H1–H6");
+
+    assert_eq!(focused(&harness), [RoleClass::Heading]);
+    assert_eq!(chips(&harness), ["H1"]);
+    assert_eq!(row_name(&harness, "H1–H6"), "H1–H6, 1 element, focused");
+    assert_eq!(row_name(&harness, "P"), "P, 2 elements, out of focus");
+    assert!(common::has_label(&harness, "1 of 10 shown"));
+    assert!(common::is_selected(&role_row(&harness, "H1–H6")));
+
+    // The focused row again: every role shows.
+    click_row(&mut harness, "H1–H6");
+    assert_eq!(focused(&harness), []);
+    assert_eq!(chips(&harness), ["Caption", "Document", "Figure", "H1", "P", "P"]);
+    assert_eq!(row_name(&harness, "P"), "P, 2 elements");
+    assert!(harness.query_by_label(role_legend::SHOW_ALL).is_none());
+
+    // Shift adds a role, and removes one; removing the last releases.
+    click_row(&mut harness, "H1–H6");
+    shift_click_row(&mut harness, "Figure");
+    assert_eq!(focused(&harness), [RoleClass::Heading, RoleClass::Figure]);
+    assert_eq!(chips(&harness), ["Figure", "H1"]);
+    assert!(common::has_label(&harness, "2 of 10 shown"));
+    shift_click_row(&mut harness, "H1–H6");
+    assert_eq!(focused(&harness), [RoleClass::Figure]);
+    shift_click_row(&mut harness, "Figure");
+    assert_eq!(focused(&harness), []);
+
+    // Smoke: a role the page does not use cannot be picked.
+    assert!(role_row(&harness, "Table").accesskit_node().is_disabled());
+    click_row(&mut harness, "Table");
+    assert_eq!(focused(&harness), []);
+}
+
+#[test]
+fn esc_and_show_all_release_the_focus_and_the_card_only_picks_while_the_boxes_are_on() {
+    let mut harness = opened("reading-order");
+    boxes_on(&mut harness);
+    card_open(&mut harness);
+    harness.state_mut().state.select(NodeId::Page(0));
+    settle(&mut harness);
+
+    // Esc releases the focus before it clears the selection.
+    click_row(&mut harness, "H1–H6");
+    press(&mut harness, Key::Escape, Modifiers::NONE);
+    assert_eq!(focused(&harness), []);
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Page(0))
+    );
+
+    click_row(&mut harness, "Caption");
+    the(&harness, Region::Center, Role::Button, role_legend::SHOW_ALL).click();
+    settle(&mut harness);
+    assert_eq!(focused(&harness), []);
+
+    // With the boxes off the focus waits, Esc leaves it alone, and the card does not pick.
+    click_row(&mut harness, "Caption");
+    boxes_on(&mut harness);
+    press(&mut harness, Key::Escape, Modifiers::NONE);
+    harness.state_mut().state.click_role(RoleClass::Figure, false);
+    assert_eq!(focused(&harness), [RoleClass::Caption]);
+    assert_eq!(harness.state().state.shown_roles(), None);
+    // Smoke: on again, the focus is back.
+    boxes_on(&mut harness);
+    assert_eq!(chips(&harness), ["Caption"]);
+}
+
+/// The outlines painted last frame whose stroke is `color`.
+fn outlines_in(harness: &App, color: egui::Color32) -> Vec<egui::Rect> {
+    let mut shapes = Vec::new();
+    for ClippedShape { shape, .. } in &harness.output().shapes {
+        flatten(shape, &mut shapes);
+    }
+    shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            Shape::Rect(rect) if rect.stroke.color == color && rect.stroke.width == 1.5 => Some(rect.rect),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn roles_out_of_focus_stay_as_faint_boxes_without_labels_and_a_click_still_picks_them() {
+    let mut harness = opened("reading-order");
+    boxes_on(&mut harness);
+    card_open(&mut harness);
+    let faint =
+        |class| role_color(class).gamma_multiply(pdfxray_app::center::canvas::tag_overlay::UNFOCUSED_BOX);
+    assert_eq!(outlines_in(&harness, role_color(RoleClass::Paragraph)).len(), 2);
+
+    click_row(&mut harness, "Figure");
+
+    // The figure at full strength with its chip; the paragraphs faint, without theirs.
+    assert_eq!(outlines_in(&harness, role_color(RoleClass::Figure)).len(), 1);
+    assert_eq!(outlines_in(&harness, faint(RoleClass::Paragraph)).len(), 2);
+    assert_eq!(outlines_in(&harness, role_color(RoleClass::Paragraph)), []);
+    assert_eq!(chips(&harness), ["Figure"]);
+    // Under the pointer a faint box is outlined at full strength.
+    let core = doc("reading-order").reading_order(0, ReadingOrderSource::Structure);
+    let caption = core.steps.iter().find(|s| s.role == "Caption").unwrap();
+    let middle = Point::new(
+        f64::midpoint(caption.rect.x0, caption.rect.x1),
+        f64::midpoint(caption.rect.y0, caption.rect.y1),
+    );
+    let at = screen_of(&harness, middle, 400.0);
+    harness.hover_at(at);
+    settle(&mut harness);
+    assert_eq!(rects_hovered(&harness, role_color(RoleClass::Caption)), 1);
+    // A click in it picks it: focus is a view, not a filter.
+    click_at(&mut harness, at);
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(caption.id.clone())
+    );
+    // Smoke: the focus is untouched by the click.
+    assert_eq!(focused(&harness), [RoleClass::Figure]);
+}
+
+/// How many outlines of the element under the pointer (2 px, in `color`) were painted last frame.
+fn rects_hovered(harness: &App, color: egui::Color32) -> usize {
+    let mut shapes = Vec::new();
+    for ClippedShape { shape, .. } in &harness.output().shapes {
+        flatten(shape, &mut shapes);
+    }
+    shapes
+        .iter()
+        .filter(|shape| matches!(shape, Shape::Rect(rect) if rect.stroke.color == color && rect.stroke.width == 2.0))
+        .count()
+}
+
+/// The reading-order segments painted last frame: `(full, faint)` counts.
+fn path_segments(harness: &App) -> (usize, usize) {
+    let mut shapes = Vec::new();
+    for ClippedShape { shape, .. } in &harness.output().shapes {
+        flatten(shape, &mut shapes);
+    }
+    let faint = pdfxray_app::center::canvas::tag_overlay::UNFOCUSED_PATH;
+    let segments: Vec<egui::Color32> = shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            Shape::LineSegment { stroke, .. } if stroke.width == 2.0 => Some(stroke.color),
+            _ => None,
+        })
+        .collect();
+    let full = segments
+        .iter()
+        .filter(|c| [tokens::ACCENT, tokens::WARN].contains(c))
+        .count();
+    let dim = segments
+        .iter()
+        .filter(|c| {
+            [
+                tokens::ACCENT.gamma_multiply(faint),
+                tokens::WARN.gamma_multiply(faint),
+            ]
+            .contains(c)
+        })
+        .count();
+    (full, dim)
+}
+
+#[test]
+fn the_reading_order_path_dims_through_roles_out_of_focus_and_keeps_its_badges() {
+    let mut harness = opened("reading-order");
+    boxes_on(&mut harness);
+    order_on(&mut harness);
+    card_open(&mut harness);
+    let (full, dim) = path_segments(&harness);
+    assert_eq!((full, dim), (4, 0));
+
+    click_row(&mut harness, "Figure");
+    shift_click_row(&mut harness, "Caption");
+
+    // Five steps: H1, P, Caption, Figure, P. Only Caption → Figure (the amber backtrack) joins two
+    // focused roles; every other segment touches a role out of focus.
+    assert_eq!(path_segments(&harness), (1, 3));
+    assert_eq!(badges(&harness).len(), 5);
+    // Smoke: released, the path is whole again.
+    press(&mut harness, Key::Escape, Modifiers::NONE);
+    assert_eq!(path_segments(&harness), (4, 0));
+}
+
+#[test]
+fn the_rows_take_the_keyboard_arrows_space_and_shift_space() {
+    let mut harness = opened("reading-order");
+    boxes_on(&mut harness);
+    card_open(&mut harness);
+    role_row(&harness, "H1–H6").focus();
+    settle(&mut harness);
+    assert!(role_row(&harness, "H1–H6").is_focused());
+
+    press(&mut harness, Key::Space, Modifiers::NONE);
+    assert_eq!(focused(&harness), [RoleClass::Heading]);
+
+    press(&mut harness, Key::ArrowDown, Modifiers::NONE);
+    assert!(role_row(&harness, "P").is_focused());
+    press(&mut harness, Key::Space, Modifiers::SHIFT);
+    assert_eq!(focused(&harness), [RoleClass::Heading, RoleClass::Paragraph]);
+
+    // Down past Figure and Caption skips the roles the page does not use.
+    for _ in 0..3 {
+        press(&mut harness, Key::ArrowDown, Modifiers::NONE);
+    }
+    assert!(role_row(&harness, "Sect / Div").is_focused());
+    press(&mut harness, Key::ArrowUp, Modifiers::NONE);
+    assert!(role_row(&harness, "Caption").is_focused());
+    // Space on a row out of focus focuses that role alone.
+    press(&mut harness, Key::Space, Modifiers::NONE);
+    assert_eq!(focused(&harness), [RoleClass::Caption]);
+    // Smoke: the row with the keyboard focus has the 2 px accent ring.
+    let row = role_row(&harness, "Caption").rect();
+    let mut shapes = Vec::new();
+    for ClippedShape { shape, .. } in &harness.output().shapes {
+        flatten(shape, &mut shapes);
+    }
+    assert!(shapes.iter().any(|shape| matches!(shape, Shape::Rect(r)
+        if r.rect == row && r.stroke.color == tokens::ACCENT && r.stroke.width == 2.0)));
+}
+
+#[test]
+fn the_focus_belongs_to_its_document_for_the_session() {
+    let mut harness = opened("reading-order");
+    boxes_on(&mut harness);
+    card_open(&mut harness);
+    click_row(&mut harness, "Figure");
+
+    open_fixture(&mut harness, "reading-order-columns");
+    settle(&mut harness);
+    assert_eq!(focused(&harness), []);
+
+    open_fixture(&mut harness, "reading-order");
+    settle(&mut harness);
+    assert_eq!(focused(&harness), [RoleClass::Figure]);
+}
+
 // ---- Snapshot ----
 
 /// Design frame 12 on `reading-order`: tag boxes, labels and the reading order, the backtrack in
@@ -726,6 +1027,32 @@ fn snapshot_tag_overlay_reading_order() {
     harness.remove_cursor();
     harness.run_steps(2);
     harness.snapshot("app_tag_overlay_reading_order");
+}
+
+/// Design board 2.11 on `reading-order`: the tag boxes with H1–H6 and Figure focused, the other
+/// roles faint without labels, and the Tag roles card with its focused, out-of-focus and unused
+/// rows.
+#[test]
+fn snapshot_tag_roles_focus() {
+    let _gpu = common::gpu_lock();
+    let mut harness = builder()
+        .wgpu()
+        .build_eframe(|cc| pdfxray_app::PdfxrayApp::new(cc));
+    harness.run();
+    open_fixture(&mut harness, "reading-order");
+    common::click_rail(&mut harness, "Tags");
+    boxes_on(&mut harness);
+    // As large as the page gets with the card still open beside it.
+    harness.state_mut().state.set_zoom(0.9);
+    harness.run_steps(4);
+    harness.state_mut().state.click_role(RoleClass::Heading, false);
+    harness.state_mut().state.click_role(RoleClass::Figure, true);
+    harness.run_steps(4);
+    wait_for_render(&mut harness);
+
+    harness.remove_cursor();
+    harness.run_steps(2);
+    harness.snapshot("app_tag_roles_focus");
 }
 
 #[test]

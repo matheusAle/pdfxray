@@ -23,6 +23,7 @@ use common::{
 use egui::{Key, Role, vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
+use pdfxray_app::center::canvas::RENDERING_TEXT;
 use pdfxray_app::center::canvas::cards::{COLUMN_W, MARGIN};
 use pdfxray_app::center::toolbar;
 use pdfxray_app::components::StepTrack;
@@ -91,7 +92,7 @@ fn pick_glyph(harness: &mut Harness<'static, PdfxrayApp>) {
     click_at(harness, canvas.min + vec2(30.0 * zoom, (100.0 - 46.0) * zoom));
     the(harness, Region::Drawer, Role::Button, "'H'").click();
     settle(harness);
-    assert_eq!(harness.state().state.selection.primary, Some(GLYPH_H));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(GLYPH_H));
 }
 
 /// The chip that stands for the x-ray legend (`4 kinds`), if it is showing.
@@ -380,8 +381,8 @@ fn isolating_a_tag_keeps_only_its_marked_content() {
             .view
             .isolation
             .as_ref()
-            .map(|i| i.node.clone()),
-        Some(heading.clone())
+            .map(|i| i.nodes.clone()),
+        Some(vec![heading.clone()])
     );
     assert_ne!(digest(&harness), full);
     assert_eq!(
@@ -421,7 +422,7 @@ fn a_validation_finding_isolates_its_target() {
     press(&mut harness, "Isolate");
 
     let isolation = harness.state().state.canvas.view.isolation.clone().unwrap();
-    assert_eq!(isolation.node, target);
+    assert_eq!(isolation.nodes, std::slice::from_ref(&target));
     let doc = Document::open(fixture_path("orphan-mcid")).unwrap();
     assert_eq!(isolation.ops, ops_for(&doc, &target));
     assert!(!isolation.ops.is_empty());
@@ -487,7 +488,7 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     // It starts after the last operator, which is the full page.
     assert_eq!(harness.state().state.canvas.view.step, last);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: last })
     );
     assert!(has_label(&harness, "step 80 / 80"));
@@ -501,7 +502,7 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     settle(&mut harness);
     wait_for_render(&mut harness);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 37 })
     );
     assert_eq!(
@@ -536,7 +537,7 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     settle(&mut harness);
     wait_for_render(&mut harness);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 36 })
     );
     assert_eq!(
@@ -552,7 +553,7 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     settle(&mut harness);
     wait_for_render(&mut harness);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 38 })
     );
     assert_eq!(
@@ -565,13 +566,13 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     the(&harness, Region::Center, Role::Button, "Previous operator").click();
     settle(&mut harness);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 37 })
     );
     the(&harness, Region::Center, Role::Button, "Next operator").click();
     settle(&mut harness);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 38 })
     );
     harness.state_mut().state.step_to(0);
@@ -596,7 +597,7 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
         expected_digest(&harness, "graphics-state", ContentFilter::All, |_| Vec::new())
     );
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 10 })
     );
     assert!(!has_label(&harness, "step 11 / 80"));
@@ -617,7 +618,7 @@ fn the_stepper_starts_at_the_selected_operator_and_outlines_what_it_painted() {
 
     assert_eq!(harness.state().state.canvas.view.step, 3);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 3 })
     );
     // The red square (op 3, the first fill) is outlined as the selection.
@@ -748,7 +749,9 @@ fn rendering_never_blocks_the_frame_and_keeps_the_old_bitmap_meanwhile() {
     harness.run_steps(2);
     assert_ne!(harness.state().state.shown_digest(), Some(plain));
     // Smoke: the status bar stops saying so once the bitmap is in.
-    assert!(!has_label(&harness, "Rendering..."));
+    assert!(!has_label(&harness, RENDERING_TEXT));
+    // The note ends in a real ellipsis, like the other “in progress” notes.
+    assert_eq!(RENDERING_TEXT, "Rendering…");
     // No further render was needed for the answer.
     assert_eq!(harness.state().state.render_count(), renders + 1);
 }

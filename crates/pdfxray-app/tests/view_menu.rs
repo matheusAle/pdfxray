@@ -164,8 +164,8 @@ fn isolate_and_hide_are_toolbar_buttons_that_wait_for_a_selection() {
             .view
             .isolation
             .as_ref()
-            .map(|i| i.node.clone()),
-        Some(NodeId::Op { page: 0, ix: 3 })
+            .map(|i| i.nodes.clone()),
+        Some(vec![NodeId::Op { page: 0, ix: 3 }])
     );
 }
 

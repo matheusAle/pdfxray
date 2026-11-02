@@ -93,7 +93,7 @@ pub fn not_painted_yet(from: u32, to: u32) -> String {
 /// the stepper is on and the selection is the operator it stopped at.
 pub fn painting_now(state: &AppState) -> Option<String> {
     let view = &state.canvas.view;
-    let Some(NodeId::Op { page, ix }) = state.selection.primary.as_ref() else {
+    let Some(NodeId::Op { page, ix }) = state.selection.primary() else {
         return None;
     };
     if !view.stepper || *page != state.canvas.page || *ix != view.step {

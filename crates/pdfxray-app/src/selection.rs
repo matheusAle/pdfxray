@@ -32,6 +32,27 @@ pub fn node_page(id: &NodeId) -> Option<PageIx> {
     }
 }
 
+/// What the multi-selection summary groups `id` by: an element's role as written (`P`, `Cell`,
+/// without the `→ TD` of its mapping), an operator's name (`Tj`), `MCID`, `Artifact` or `Glyph`,
+/// else the node's title.
+pub fn role_label(doc: &Document, id: &NodeId) -> String {
+    match id {
+        NodeId::MarkedContent { .. } => "MCID".to_owned(),
+        NodeId::Artifact { .. } => "Artifact".to_owned(),
+        NodeId::Glyph { .. } => "Glyph".to_owned(),
+        _ => doc.node(id).map_or_else(
+            || id.to_string(),
+            |props| {
+                props
+                    .title
+                    .split_once(" → ")
+                    .map_or(props.title.as_str(), |(role, _)| role)
+                    .to_owned()
+            },
+        ),
+    }
+}
+
 /// The rectangle to outline on the canvas for `id`: whatever geometry the core knows for the
 /// node (page boxes, operators, glyphs, marked content, artifacts, structure elements,
 /// validation findings via their target). Pages themselves are not outlined.
@@ -64,6 +85,34 @@ mod tests {
         assert_eq!(node_page(&NodeId::Op { page: 4, ix: 9 }), Some(4));
         assert_eq!(node_page(&NodeId::Document), None);
         assert_eq!(node_page(&NodeId::StructElem(ObjRef::new(5, 0))), None);
+    }
+
+    #[test]
+    fn nodes_are_grouped_by_role_operator_name_or_kind() {
+        let doc = fixture("struct-rich");
+
+        assert_eq!(
+            role_label(&doc, &NodeId::StructElem(ObjRef::new(14, 0))),
+            "Figure"
+        );
+        // A mapped role is named as written, without where it maps to.
+        assert_eq!(role_label(&doc, &NodeId::StructElem(ObjRef::new(18, 0))), "Cell");
+        assert_eq!(role_label(&doc, &NodeId::Op { page: 0, ix: 17 }), "f");
+        assert_eq!(
+            role_label(&doc, &NodeId::MarkedContent { page: 0, mcid: 2 }),
+            "MCID"
+        );
+        // Smoke: a page box is named by its title.
+        assert_eq!(
+            role_label(
+                &doc,
+                &NodeId::PageBox {
+                    page: 0,
+                    kind: BoxKind::Crop
+                }
+            ),
+            "CropBox"
+        );
     }
 
     #[test]

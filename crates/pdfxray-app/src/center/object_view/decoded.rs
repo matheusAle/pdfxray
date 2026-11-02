@@ -11,7 +11,10 @@ use egui::{
 use pdfxray_core::{DiagnosticInfo, ObjRef};
 
 use super::{ops, preview};
-use crate::components::{Icon, ToolButton};
+use pdfxray_core::numeric::f32_from_usize;
+
+use crate::components::long_value::{self, Wrapped};
+use crate::components::{Icon, ToolButton, focus};
 use crate::object_facts::{DictLine, LineKind, ObjectFacts, Piece, human_bytes, key_of, thousands};
 use crate::state::AppState;
 use crate::theme::{fonts, tokens};
@@ -28,6 +31,10 @@ const NUMBER_W: f32 = 26.0;
 const TEXT_X: f32 = 44.0;
 /// Indent of the entries inside brackets.
 const INDENT: f32 = 16.0;
+/// Space between a line's text and the right edge.
+const RIGHT_PAD: f32 = 10.0;
+/// Height of each line a value wraps onto, under its first one.
+const WRAP_LINE_H: f32 = 20.0;
 
 /// What the user did in the view this frame.
 #[derive(Debug, Default)]
@@ -82,23 +89,114 @@ fn dictionary(ui: &mut Ui, facts: &ObjectFacts, max_height: f32, actions: &mut A
         let flagged = length.filter(|d| line.key.as_deref() == key_of(d.code));
         Row::Line(i + 1, line, flagged)
     }));
+    // Whether a long value was unfolded is kept per object and line.
+    let salt = ui.make_persistent_id(("object-dictionary", facts.object));
     Frame::new().inner_margin(Margin::symmetric(0, 4)).show(ui, |ui| {
         ui.set_max_height(max_height);
         ScrollArea::vertical()
             .id_salt("object-dictionary")
             .auto_shrink([false, true])
             .max_height(max_height)
-            .show_rows(ui, DICT_ROW_H, rows.len(), |ui, range| {
-                for index in range {
-                    match &rows[index] {
+            .show_viewport(ui, |ui, viewport| {
+                // The lines keep the pitch they had as list rows: their height and the gap.
+                let gap = ui.spacing().item_spacing.y;
+                let width = ui.available_width();
+                // A line is as tall as its value wraps: each one is measured, and only those in
+                // view are drawn.
+                let laid: Vec<Option<Laid>> = rows
+                    .iter()
+                    .map(|row| match row {
+                        Row::Loose(_) => None,
+                        Row::Line(number, line, _) => lay_out(ui, salt.with(number), line, width),
+                    })
+                    .collect();
+                let heights: Vec<f32> = laid
+                    .iter()
+                    .map(|laid| laid.as_ref().map_or(DICT_ROW_H, Laid::height))
+                    .collect();
+                let total: f32 = heights.iter().map(|h| h + gap).sum::<f32>() - gap;
+                let origin = ui.max_rect().min;
+                let mut top = 0.0;
+                for (index, height) in heights.iter().copied().enumerate() {
+                    let (from, to) = (top, top + height);
+                    top = to + gap;
+                    if to < viewport.min.y || from > viewport.max.y {
+                        continue;
+                    }
+                    let rect = Rect::from_min_size(origin + vec2(0.0, from), vec2(width, height));
+                    ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| match &rows[index] {
                         Row::Loose(diagnostic) => loose_row(ui, facts, diagnostic, actions),
                         Row::Line(number, line, flagged) => {
-                            line_row(ui, facts, *number, line, *flagged, actions);
+                            line_row(ui, facts, *number, line, laid[index].as_ref(), *flagged, actions);
                         }
-                    }
+                    });
                 }
+                ui.allocate_rect(Rect::from_min_size(origin, vec2(width, total)), Sense::hover());
             });
     });
+}
+
+/// A line whose value wraps: the value as one text, its lines and its id.
+struct Laid {
+    /// The line's id: whether its value was unfolded is kept under it.
+    id: egui::Id,
+    /// The value, references written out.
+    value: String,
+    /// Where the value starts, from the left edge of the line.
+    value_x: f32,
+    /// The value's lines.
+    wrapped: Wrapped,
+}
+
+impl Laid {
+    /// The line's height: its first line in a whole row, then the lines it wraps onto and the
+    /// fold line.
+    fn height(&self) -> f32 {
+        let more = self.wrapped.lines.len().saturating_sub(1);
+        DICT_ROW_H
+            + WRAP_LINE_H * f32_from_usize(more)
+            + if self.wrapped.fold.is_some() {
+                long_value::FOLD_LINE_H
+            } else {
+                0.0
+            }
+    }
+}
+
+/// The value of `line` as one text, references written out.
+fn value_text(line: &DictLine) -> String {
+    line.pieces
+        .iter()
+        .map(|piece| match piece {
+            Piece::Text(text) => text.clone(),
+            Piece::Ref(r) => r.to_string(),
+        })
+        .collect()
+}
+
+/// How `line` wraps in a dictionary `width` wide, when its value needs more than one line.
+fn lay_out(ui: &Ui, id: egui::Id, line: &DictLine, width: f32) -> Option<Laid> {
+    if line.kind != LineKind::Entry {
+        return None;
+    }
+    let font = fonts::mono(tokens::mono::LARGE);
+    let key_w = line.key.as_ref().map_or(0.0, |key| {
+        ui.painter()
+            .layout_no_wrap(format!("{key} "), font.clone(), Color32::WHITE)
+            .size()
+            .x
+    });
+    let value_x = TEXT_X + INDENT + key_w;
+    let room = (width - RIGHT_PAD - value_x).max(20.0);
+    let value = value_text(line);
+    let unfolded = long_value::is_unfolded(ui.ctx(), id);
+    let wrapped = long_value::wrap_in(ui, &value, &font, room, unfolded);
+    (wrapped.line_count() > 1).then_some(Laid {
+        id,
+        value,
+        value_x,
+        wrapped,
+    })
 }
 
 /// The text a diagnostic shows on its line.
@@ -154,15 +252,19 @@ fn line_row(
     facts: &ObjectFacts,
     number: usize,
     line: &DictLine,
+    laid: Option<&Laid>,
     flagged: Option<&DiagnosticInfo>,
     actions: &mut Actions,
 ) {
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), DICT_ROW_H), Sense::hover());
+    let height = laid.map_or(DICT_ROW_H, Laid::height);
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
     if flagged.is_some() {
         ui.painter()
             .rect_filled(rect, 0.0, tokens::WARN.gamma_multiply(0.10));
     }
-    let number_rect = Rect::from_min_size(rect.min + vec2(14.0, 0.0), vec2(NUMBER_W, rect.height()));
+    // One numbered line, however many lines its value wraps onto.
+    let first = Rect::from_min_size(rect.min, vec2(rect.width(), DICT_ROW_H));
+    let number_rect = Rect::from_min_size(first.min + vec2(14.0, 0.0), vec2(NUMBER_W, DICT_ROW_H));
     ui.scope_builder(
         UiBuilder::new()
             .max_rect(number_rect)
@@ -177,13 +279,16 @@ fn line_row(
     );
     let indent = if line.kind == LineKind::Entry { INDENT } else { 0.0 };
     let text_rect = Rect::from_min_max(
-        rect.min + vec2(TEXT_X + indent, 0.0),
+        first.min + vec2(TEXT_X + indent, 0.0),
         egui::pos2(
-            (rect.max.x - 10.0).max(rect.min.x + TEXT_X + indent + 20.0),
-            rect.max.y,
+            (first.max.x - RIGHT_PAD).max(first.min.x + TEXT_X + indent + 20.0),
+            first.max.y,
         ),
     );
     let ink = |color: Color32| if flagged.is_some() { tokens::WARN } else { color };
+    if let Some(laid) = laid {
+        wrapped_value(ui, rect, line, laid, flagged.is_some(), actions);
+    }
     ui.scope_builder(
         UiBuilder::new()
             .max_rect(text_rect)
@@ -197,7 +302,9 @@ fn line_row(
                         .color(ink(tokens::ACCENT)),
                 );
             }
-            for piece in &line.pieces {
+            // A value that wraps is drawn line by line beside the key.
+            let pieces = if laid.is_some() { &[][..] } else { &line.pieces[..] };
+            for piece in pieces {
                 match piece {
                     Piece::Text(text) => {
                         let color = match line.kind {
@@ -227,6 +334,12 @@ fn line_row(
                             .selectable(false),
                         );
                         target.widget_info(|| WidgetInfo::labeled(Role::Link, true, text.clone()));
+                        focus::ring(
+                            ui,
+                            &target,
+                            target.rect.expand2(vec2(3.0, 1.0)),
+                            tokens::RADIUS_SM,
+                        );
                         if target.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                             actions.navigate = Some(*r);
                         }
@@ -236,8 +349,94 @@ fn line_row(
         },
     );
     if let Some(diagnostic) = flagged {
-        marker(ui, rect, facts, diagnostic, actions);
+        marker(ui, first, facts, diagnostic, actions);
     }
+}
+
+/// The colour of a piece of a value's text: names in the accent, the rest as text, all of it
+/// in the warning colour on a flagged line.
+fn piece_ink(text: &str, flagged: bool) -> Color32 {
+    if flagged {
+        tokens::WARN
+    } else if text.trim_start().starts_with('/') {
+        tokens::ACCENT
+    } else {
+        tokens::TEXT
+    }
+}
+
+/// The lines of a value that wraps, from `laid.value_x` in the line's `rect`: the first one
+/// beside the key, the others under the value's first item, then the fold line. References stay
+/// links.
+fn wrapped_value(
+    ui: &mut Ui,
+    rect: Rect,
+    line: &DictLine,
+    laid: &Laid,
+    flagged: bool,
+    actions: &mut Actions,
+) {
+    let font = fonts::mono(tokens::mono::LARGE);
+    // Each piece's byte range in the value text, and the reference it is.
+    let mut spans = Vec::with_capacity(line.pieces.len());
+    let mut at = 0;
+    for piece in &line.pieces {
+        let (len, target, ink) = match piece {
+            Piece::Text(text) => (text.len(), None, piece_ink(text, flagged)),
+            Piece::Ref(r) => (r.to_string().len(), Some(*r), tokens::ACCENT),
+        };
+        spans.push((at..at + len, target, ink));
+        at += len;
+    }
+    let left = rect.min.x + laid.value_x;
+    for (n, range) in laid.wrapped.lines.iter().enumerate() {
+        let y = rect.min.y + DICT_ROW_H / 2.0 + WRAP_LINE_H * f32_from_usize(n);
+        let mut x = left + if n == 0 { 0.0 } else { laid.wrapped.indent };
+        for (piece, (span, target, ink)) in spans.iter().enumerate() {
+            let from = span.start.max(range.start);
+            let to = span.end.min(range.end);
+            if from >= to {
+                continue;
+            }
+            let text = &laid.value[from..to];
+            let drawn = ui.painter().text(
+                egui::pos2(x, y),
+                egui::Align2::LEFT_CENTER,
+                text,
+                font.clone(),
+                *ink,
+            );
+            if let Some(r) = target {
+                let hit = ui.interact(drawn, laid.id.with((n, piece)), Sense::click());
+                let name = r.to_string();
+                hit.widget_info(|| WidgetInfo::labeled(Role::Link, true, name.clone()));
+                ui.painter()
+                    .hline(drawn.x_range(), drawn.max.y - 1.0, egui::Stroke::new(1.0, *ink));
+                focus::ring(ui, &hit, drawn.expand2(vec2(3.0, 1.0)), tokens::RADIUS_SM);
+                if hit.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                    actions.navigate = Some(*r);
+                }
+            }
+            x = drawn.max.x;
+        }
+    }
+    if let Some(fold) = &laid.wrapped.fold {
+        let shown = f32_from_usize(laid.wrapped.lines.len());
+        let y = rect.min.y
+            + DICT_ROW_H / 2.0
+            + WRAP_LINE_H * shown
+            + (long_value::FOLD_LINE_H - WRAP_LINE_H) / 2.0;
+        let closer_ink = piece_ink(fold.closer, flagged);
+        long_value::fold_line(ui, laid.id, left + laid.wrapped.indent, y, fold, font, closer_ink);
+    }
+    // Assistive tech reads the whole value, however it is folded.
+    let value = ui.interact(
+        Rect::from_min_max(egui::pos2(left, rect.min.y), rect.max),
+        laid.id.with("value"),
+        Sense::hover(),
+    );
+    let text = laid.value.clone();
+    value.widget_info(|| WidgetInfo::labeled(Role::Label, true, text.clone()));
 }
 
 /// What to say about a stream whose data is neither operators nor text.

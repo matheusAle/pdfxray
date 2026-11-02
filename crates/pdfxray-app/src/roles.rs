@@ -34,7 +34,7 @@ pub const fn class_name(class: RoleClass) -> &'static str {
         RoleClass::Paragraph => "P",
         RoleClass::Figure => "Figure",
         RoleClass::Caption => "Caption",
-        RoleClass::Table => "Table…",
+        RoleClass::Table => "Table",
         RoleClass::List => "L / LI",
         RoleClass::Link => "Link",
         RoleClass::Inline => "Span",
@@ -66,5 +66,19 @@ mod tests {
             role_color(RoleClass::Heading),
             Color32::from_rgb(0xB4, 0x8C, 0xFF)
         );
+    }
+
+    #[test]
+    fn the_legend_names_tables_without_an_ellipsis() {
+        // An ellipsis promises a dialog, and a screen reader reads it as a cut word.
+        assert_eq!(class_name(RoleClass::Table), "Table");
+        let with_ellipsis: Vec<&str> = RoleClass::ALL
+            .into_iter()
+            .map(class_name)
+            .filter(|name| name.contains('…') || name.contains("..."))
+            .collect();
+        assert_eq!(with_ellipsis, Vec::<&str>::new());
+        // Smoke: the other names are untouched.
+        assert_eq!(class_name(RoleClass::List), "L / LI");
     }
 }

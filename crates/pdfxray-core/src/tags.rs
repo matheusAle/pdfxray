@@ -45,7 +45,8 @@ pub use self::speech::{
 };
 use self::table::TableAttrs;
 pub use self::table::{
-    HeaderRef, HeaderSource, IrregularRow, RowGroup, TableCell, TableModel, TableRules, TableScope,
+    HeaderPlace, HeaderRef, HeaderScope, HeaderSource, IrregularRow, RowGroup, ScopeSource, TableCell,
+    TableModel, TableRules, TableScope,
 };
 
 use crate::document::DiagnosticInfo;
@@ -299,6 +300,14 @@ impl Document {
     /// Structure elements owning the marked content in `content_hits`, innermost first.
     pub(crate) fn tag_hits(&self, content_hits: &[NodeId]) -> Vec<NodeId> {
         self.tags.hits(content_hits)
+    }
+
+    /// The element that owns marked-content sequence `mcid` of `page` (the first whose `/K`
+    /// references it), with its position in document order.
+    pub(crate) fn mcid_owner(&self, page: PageIx, mcid: i32) -> Option<(usize, NodeId)> {
+        let tree = &self.tags;
+        let &ei = tree.owners.get(&(page, mcid))?;
+        Some((ei, NodeId::StructElem(tree.elems.get(ei)?.obj)))
     }
 
     /// Page and bounding box of a structure element (its content on the first page it touches).

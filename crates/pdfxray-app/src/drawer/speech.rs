@@ -279,7 +279,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     }
     let show_skipped = state.drawer.speech.show_skipped;
     let lines = lines(&data, show_skipped);
-    let selection = state.selection.primary.clone();
+    let selection = state.selection.primary().cloned();
     let selected_line = lines.iter().position(
         |line| matches!(line, Line::Item(at) if is_selected(&data.order.items[*at], selection.as_ref())),
     );

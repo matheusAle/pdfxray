@@ -19,6 +19,7 @@ use pdfxray_core::{
 use pdfxray_fixtures::{AttributeSource, Defect, Expected, KidFacts, NodeFacts, StructElemFacts};
 
 mod hit_and_breadcrumb;
+mod hit_rect;
 mod long_doc;
 mod no_structure_tree;
 mod orphan_mcid;

@@ -11,7 +11,7 @@ use super::geometry::PageGeometry;
 use super::measure::Cursor;
 use super::overlay::{COMPARED, SELECTION};
 use super::{
-    Overlays, PointerOutput, RENDERING_TEXT, action_bar, canvas_label, footnotes, marks, overlay,
+    Overlays, PointerOutput, RENDERING_TEXT, action_bar, canvas_label, footnotes, marks, multi, overlay,
     paint_order, table_overlay, tag_overlay, validation_badges,
 };
 use crate::components::context_menu;
@@ -46,7 +46,7 @@ pub(super) fn overlays(
         comparison: state.comparison().filter(|_| selection.is_some()),
         line: state.canvas.measure.line().filter(|line| line.page == page),
         measuring: state.canvas.measure.active,
-        reveal: state.canvas.reveal && selection.is_some(),
+        reveal: state.canvas.reveal.filter(|_| selection.is_some()),
         lengths: state.lengths(),
         // The stepper walks the current page.
         ghost: if current {
@@ -59,6 +59,8 @@ pub(super) fn overlays(
         tags: tag_overlay::collect(state, page),
         table: table_overlay::collect(state, page),
         notes: footnotes::collect(state, page),
+        multi: multi::collect(state, page),
+        outline_primary: !state.selection.shows_summary(),
         info,
     }
 }
@@ -106,7 +108,14 @@ pub(super) fn draw_page(
         to_pixel: cached.page_to_pixel,
     };
 
-    let sense = if overlays.measuring {
+    // While the measure tool is on, the page itself takes drags. Otherwise a drag from empty space
+    // (or with ⌘) draws a marquee: a drag-only region under the image takes it, so the image keeps
+    // its clicks and its hover as they were (a chip on top still hides the page from the pointer).
+    // With Space held neither takes it: the scroll area pans.
+    let marquee = (!overlays.measuring && multi::takes_drag(ui, state, page, &geo))
+        // Not focusable: the page itself is the keyboard's stop; the marquee is a pointer gesture.
+        .then(|| ui.interact(rect, ui.scope_id().with(("canvas-marquee", page)), Sense::DRAG));
+    let sense = if overlays.measuring && !multi::panning(ui) {
         Sense::click_and_drag()
     } else {
         Sense::click()
@@ -118,6 +127,18 @@ pub(super) fn draw_page(
     if overlays.measuring {
         response = response.on_hover_cursor(CursorIcon::Crosshair);
     }
+    multi::cursor(ui.ctx(), &overlays.multi);
+    // A drag-only widget is dragged from the press on: the marquee starts once the pointer has
+    // really moved, so a click on a chip over the page stays a click.
+    let marquee_starts = marquee.as_ref().is_some_and(|region| {
+        region.dragged() && state.canvas.marquee.is_none() && ui.input(|i| i.pointer.is_decidedly_dragging())
+    });
+    let dragger = marquee.unwrap_or_else(|| response.clone());
+    let drag_started = if overlays.measuring {
+        dragger.drag_started()
+    } else {
+        marquee_starts
+    };
 
     let painter = ui.painter_at(rect.expand(2.0));
     overlay::draw_boxes(&painter, &geo, &overlays.info, &overlays.boxes);
@@ -125,10 +146,13 @@ pub(super) fn draw_page(
     if let Some(compared) = overlays.compared {
         overlay::draw_selection(&painter, geo.rect_to_screen(compared), COMPARED, 1.0);
     }
+    multi::draw_selection(ui, &painter, &geo, &overlays.multi);
     let outline = overlays.selection.map(|selected| {
         let outline = geo.rect_to_screen(selected);
         let grown = outline_progress(&ctx, state);
-        overlay::draw_selection(&painter, outline, SELECTION, grown);
+        if overlays.outline_primary {
+            overlay::draw_selection(&painter, outline, SELECTION, grown);
+        }
         outline
     });
     // The table's grid goes under the tags, so that its lines do not cut through their text.
@@ -136,8 +160,11 @@ pub(super) fn draw_page(
     let baseline_tag = marks::draw(&painter, &geo, &overlays.marks);
     if let Some(outline) = outline
         && !overlays.measuring
+        && !overlays.multi.marquee_on()
     {
-        action_bar::show(&ctx, state, outline, baseline_tag, ui.clip_rect());
+        // Several selected: the bar goes under all of them.
+        let anchor = multi::bar_anchor(&geo, &overlays.multi).unwrap_or(outline);
+        action_bar::show(&ctx, state, anchor, baseline_tag, ui.clip_rect());
     }
     let badge_clicked = validation_badges::draw(ui, &geo, &overlays.badges);
     let tags = tag_overlay::draw(ui, &geo, page, &overlays.tags, response.hover_pos());
@@ -153,6 +180,8 @@ pub(super) fn draw_page(
     {
         overlay::draw_crosshair(ui, pos, &overlays.info, &geo, &overlays.lengths);
     }
+    let latest = ui.input(|i| i.pointer.latest_pos());
+    multi::draw_marquee(ui, &painter, &geo, &overlays.multi, latest);
 
     right_click_menu(state, &response, &geo);
     if response.has_focus() {
@@ -180,14 +209,13 @@ pub(super) fn draw_page(
         clicked,
         tag_clicked: tags.clicked.or(table.clicked).or(box_hit),
         jump_to: notes.jump,
-        drag_started: response
-            .drag_started()
+        drag_started: drag_started
             .then(|| ui.input(|i| i.pointer.press_origin()))
             .flatten()
             .map(at),
-        dragged: response
+        dragged: dragger
             .dragged()
-            .then(|| response.interact_pointer_pos())
+            .then(|| dragger.interact_pointer_pos())
             .flatten()
             .map(at),
         cursor: response.hover_pos().map(|pos| Cursor {
@@ -204,9 +232,9 @@ pub(super) fn draw_page(
 /// changes.
 fn outline_progress(ctx: &egui::Context, state: &mut AppState) -> f32 {
     let id = Id::unique("canvas-selection-outline");
-    if state.canvas.outlined != state.selection.primary {
+    if state.canvas.outlined.as_ref() != state.selection.primary() {
         motion::reset(ctx, id);
-        state.canvas.outlined.clone_from(&state.selection.primary);
+        state.canvas.outlined = state.selection.primary().cloned();
     }
     motion::appear(ctx, id, motion::SELECTION)
 }

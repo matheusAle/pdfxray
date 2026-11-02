@@ -58,7 +58,7 @@ pub(super) fn show(ui: &mut Ui, cx: &Cx<'_>, action: &mut Action) {
         let row = PropRow::new("Resource", &resource_text(font))
             .link(font.obj.is_some())
             .show(ui);
-        if row.value.clicked() {
+        if row.followed {
             action.navigate = font.obj.map(NodeId::Object);
         }
         if let Some(base) = &font.base_font {
@@ -70,7 +70,7 @@ pub(super) fn show(ui: &mut Ui, cx: &Cx<'_>, action: &mut Action) {
             .link(font.font_file_obj.is_some())
             .warn(!font.embedded)
             .show(ui);
-        if row.value.clicked() {
+        if row.followed {
             action.navigate = font.font_file_obj.map(NodeId::Object);
         }
         if let Some(encoding) = &font.encoding {

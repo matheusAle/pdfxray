@@ -6,6 +6,8 @@ use pdfxray_core::numeric::{f32_from_f64, usize_from_u32};
 use pdfxray_core::{LayerMode, NodeId, PageIx, Point, num};
 
 use super::AppState;
+use super::canvas::Reveal;
+use super::drawer::HitStack;
 use super::path::crumb_label;
 
 /// Padding around a node when the canvas zooms to it: the node fills this fraction of the view.
@@ -28,8 +30,20 @@ impl AppState {
             self.canvas.hover = None;
             return;
         };
+        self.canvas.hover = if self.canvas.marquee.is_some() {
+            // The marquee outlines what it catches; one more outline would only blur it.
+            None
+        } else {
+            self.pick_at(page, point)
+        };
+    }
+
+    /// The topmost node of the Pick target at `point` of `page`: what the pointer hovers and a
+    /// click there selects. The page itself does not count, nor do its boxes outside the Boxes
+    /// target.
+    pub fn pick_at(&self, page: PageIx, point: Point) -> Option<NodeId> {
         let layer = self.canvas.layer_mode;
-        self.canvas.hover = self.document.as_ref().and_then(|loaded| {
+        self.document.as_ref().and_then(|loaded| {
             loaded
                 .doc
                 .hit(page, point, layer)
@@ -39,20 +53,57 @@ impl AppState {
                     NodeId::PageBox { .. } => layer == LayerMode::Boxes,
                     _ => true,
                 })
-        });
+        })
     }
 
-    /// Shift-click: makes the topmost node under `point` the second selection, to measure
-    /// against the first. The hit stack lists what is under the point as for a plain click.
+    /// True when a drag that starts at `point` of `page` draws a marquee: from empty space, where
+    /// nothing of the Pick target is. Page boxes are outlines, so with the Boxes target the whole
+    /// page counts as empty space. ⌘ starts one anywhere (the canvas checks that).
+    pub fn marquee_starts_at(&self, page: PageIx, point: Point) -> bool {
+        self.canvas.layer_mode == LayerMode::Boxes || self.pick_at(page, point).is_none()
+    }
+
+    /// Shift-click: adds the node under `point` to the selection, or takes it out when it is
+    /// already in ([`Self::select_additional`]). That is the topmost node under the point, unless
+    /// one further down the hit stack is selected (an element a marquee caught, say): then it is
+    /// that one. The hit stack lists what is under the point as for a plain click.
     pub fn shift_click_page_point(&mut self, point: Point) {
         let Some(stack) = self.collect_hit_stack(point) else {
             return;
         };
-        let top = stack.entries.first().map(|entry| entry.id.clone());
+        let id = self
+            .selected_in(&stack)
+            .or_else(|| stack.entries.first().map(|entry| entry.id.clone()));
         self.drawer.show_hits(stack);
-        if let Some(id) = top {
+        if let Some(id) = id {
             self.select_additional(id);
         }
+    }
+
+    /// Option/Alt-click: on a multi-selection, takes the selected node under `point` out of it;
+    /// otherwise goes down the hit stack ([`Self::cycle_page_point`]).
+    pub fn alt_click_page_point(&mut self, point: Point) {
+        if self.selection.len() < 2 {
+            self.cycle_page_point(point);
+            return;
+        }
+        let Some(stack) = self.collect_hit_stack(point) else {
+            return;
+        };
+        let selected = self.selected_in(&stack);
+        self.drawer.show_hits(stack);
+        if let Some(id) = selected {
+            self.deselect(&id);
+        }
+    }
+
+    /// The first node of `stack` that is selected; the page does not count, it holds everything.
+    fn selected_in(&self, stack: &HitStack) -> Option<NodeId> {
+        stack
+            .entries
+            .iter()
+            .find(|entry| !matches!(entry.id, NodeId::Page(_)) && self.selection.contains(&entry.id))
+            .map(|entry| entry.id.clone())
     }
 
     /// Option/Alt-click: goes down the hit stack under `point`, selecting the next node below
@@ -75,19 +126,15 @@ impl AppState {
         };
         let at = self
             .selection
-            .primary
-            .as_ref()
+            .primary()
             .and_then(|selected| stack.entries.iter().position(|e| &e.id == selected));
         let next = match at {
             Some(at) => (at + 1) % stack.entries.len(),
             None => 0,
         };
         if let Some(entry) = stack.entries.get(next) {
-            let id = entry.id.clone();
-            self.history.visit(&id);
-            self.selection.primary = Some(id);
-            self.selection.secondary = None;
-            self.canvas.reveal = true;
+            self.select_on_canvas(entry.id.clone());
+            self.canvas.reveal = Some(Reveal::Centre);
         }
     }
 
@@ -143,7 +190,7 @@ impl AppState {
 
     /// The tag over the selected node's box, `None` when the node has no box or no label.
     pub fn selection_label(&mut self) -> Option<SelectionLabel> {
-        let selected = self.selection.primary.clone()?;
+        let selected = self.selection.primary().cloned()?;
         let label = |text: String, warn: bool| Some(SelectionLabel { text, warn });
         match &selected {
             NodeId::Glyph { page, op, glyph } => {
@@ -197,7 +244,7 @@ impl AppState {
     /// The boxes of the glyphs of the text operator behind the selection (a glyph or the
     /// operator itself), with the index of the selected glyph. Empty for other nodes.
     pub fn selected_glyph_boxes(&self) -> (Vec<pdfxray_core::Rect>, Option<usize>) {
-        let (page, op, selected) = match self.selection.primary.as_ref() {
+        let (page, op, selected) = match self.selection.primary() {
             Some(NodeId::Glyph { page, op, glyph }) => (*page, *op, Some(*glyph)),
             Some(NodeId::Op { page, ix }) => (*page, *ix, None),
             _ => return (Vec::new(), None),

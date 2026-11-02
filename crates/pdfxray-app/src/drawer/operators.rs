@@ -59,7 +59,7 @@ pub(super) fn stream_label(doc: &Document, page: PageIx, stream: &StreamRef) -> 
 /// The operator the table is about: the selected one on this page, else the first.
 fn current_op<'a>(state: &AppState, captured: &'a CapturedPage) -> Option<&'a OpRecord> {
     let page = state.canvas.page;
-    let selected = match state.selection.primary.as_ref()? {
+    let selected = match state.selection.primary()? {
         NodeId::Op { page: p, ix } | NodeId::Glyph { page: p, op: ix, .. } if *p == page => Some(*ix),
         _ => None,
     };
@@ -95,7 +95,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
         ui.label(RichText::new(NO_OPERATORS).color(tokens::TEXT_3));
         return;
     };
-    let selected = match state.selection.primary.as_ref() {
+    let selected = match state.selection.primary() {
         Some(NodeId::Op { page: p, ix } | NodeId::Glyph { page: p, op: ix, .. }) if *p == page => Some(*ix),
         _ => None,
     };

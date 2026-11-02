@@ -5,7 +5,7 @@
 
 use egui::{Id, Label, Rect, Role, Sense, Ui, WidgetInfo, vec2};
 
-use crate::components::{Icon, PropRow, tooltip};
+use crate::components::{Icon, PropRow, focus, tooltip};
 use crate::theme::{fonts, tokens};
 
 /// A value that has its default.
@@ -63,6 +63,7 @@ pub fn show(ui: &mut Ui, key: &str, items: &[DefaultValue]) {
     if hovered {
         ui.painter().rect_filled(rect, 0.0, tokens::NEUTRAL_HOVER);
     }
+    focus::row_ring(ui, &response, rect, tokens::RADIUS_SM);
     let ink = if hovered { tokens::TEXT_2 } else { tokens::TEXT_3 };
     let icon = Rect::from_min_size(rect.min + vec2(8.0, 0.0), vec2(14.0, rect.height()));
     let chevron = if open {

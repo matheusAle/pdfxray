@@ -84,6 +84,83 @@ impl Document {
         hits
     }
 
+    /// What the rectangle `rect` (page space) touches on `page` in `layer`, one node per thing
+    /// touched, in reading order. This is what a marquee selects:
+    ///
+    /// * [`LayerMode::Tags`]: the structure element that owns each touched marked-content
+    ///   sequence (the sequence itself when no element owns it), elements in structure-tree
+    ///   order, then unowned sequences in paint order.
+    /// * [`LayerMode::Content`]: the operators, in paint order.
+    /// * [`LayerMode::Artifacts`]: the artifact sequences, in paint order.
+    /// * [`LayerMode::Boxes`]: the page boxes whose outline `rect` meets (a rectangle strictly
+    ///   inside a box does not touch it), smallest first.
+    /// * [`LayerMode::All`]: for each painted item, its element, else its artifact, else its
+    ///   operator, in the paint order of what they paint first. Page boxes are not included: they
+    ///   enclose everything.
+    /// * [`LayerMode::Annotations`]: nothing; annotations are not hit-tested yet.
+    pub fn hit_rect(&self, page: PageIx, rect: Rect, layer: LayerMode) -> Vec<NodeId> {
+        let Some(info) = self.page(page) else {
+            return Vec::new();
+        };
+        if layer == LayerMode::Boxes {
+            let mut boxes: Vec<_> = info
+                .defined_boxes()
+                .filter(|(_, b)| rect.intersects(b) && !strictly_inside(&rect, b))
+                .collect();
+            boxes.sort_by(|a, b| a.1.area().total_cmp(&b.1.area()));
+            return boxes
+                .into_iter()
+                .map(|(kind, _)| NodeId::PageBox { page, kind })
+                .collect();
+        }
+        if layer == LayerMode::Annotations {
+            return Vec::new();
+        }
+        // Each node with a sort key: elements by document order, the rest by paint order after them
+        // (Tags) or everything by paint order (the other modes).
+        let mut found: Vec<((usize, usize), NodeId)> = Vec::new();
+        let mut add = |key: (usize, usize), node: NodeId| {
+            if !found.iter().any(|(_, n)| *n == node) {
+                found.push((key, node));
+            }
+        };
+        let owned = |marked: &NodeId| match marked {
+            NodeId::MarkedContent { page, mcid } => self.mcid_owner(*page, *mcid),
+            _ => None,
+        };
+        for (order, touched) in self.content_touched(page, rect).into_iter().enumerate() {
+            match layer {
+                LayerMode::Content => add((0, order), NodeId::Op { page, ix: touched.op }),
+                LayerMode::Artifacts => {
+                    if let Some(artifact) = touched.artifact {
+                        add((0, order), artifact);
+                    }
+                }
+                LayerMode::Tags => {
+                    if let Some(marked) = touched.marked {
+                        match owned(&marked) {
+                            Some((ei, elem)) => add((0, ei), elem),
+                            None => add((1, order), marked),
+                        }
+                    }
+                }
+                LayerMode::All => {
+                    let node = match touched.innermost {
+                        Some(marked @ NodeId::MarkedContent { .. }) => {
+                            owned(&marked).map_or(marked, |(_, e)| e)
+                        }
+                        Some(other) => other,
+                        None => NodeId::Op { page, ix: touched.op },
+                    };
+                    add((0, order), node);
+                }
+                LayerMode::Boxes | LayerMode::Annotations => {}
+            }
+        }
+        found.sort_by_key(|(key, _)| *key);
+        found.into_iter().map(|(_, node)| node).collect()
+    }
+
     /// Path from the document root down to `id`, inclusive.
     pub fn breadcrumb(&self, id: &NodeId) -> Vec<NodeId> {
         let mut path = vec![NodeId::Document];
@@ -159,6 +236,11 @@ fn add_validation_badges(node: &mut TreeNode, targets: &HashSet<&NodeId>) {
     for child in &mut node.children {
         add_validation_badges(child, targets);
     }
+}
+
+/// True when `inner` lies inside `outer` without touching its edges.
+fn strictly_inside(inner: &Rect, outer: &Rect) -> bool {
+    inner.x0 > outer.x0 && inner.y0 > outer.y0 && inner.x1 < outer.x1 && inner.y1 < outer.y1
 }
 
 #[cfg(test)]

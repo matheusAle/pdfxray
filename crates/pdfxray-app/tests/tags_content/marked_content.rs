@@ -44,7 +44,10 @@ fn clicking_a_marked_content_row_does_nothing() {
     let figure = element("struct-rich", "Figure");
     named(&harness, Region::Navigator, Role::Button, "Figure")[0].click();
     harness.run();
-    assert_eq!(harness.state().state.selection.primary, Some(figure.clone()));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(figure.clone())
+    );
 
     // A click and a double click on the row of the Figure's MCID, then a click on another's.
     let at = mcid_row(&harness, "MCID 2").rect().center();
@@ -54,26 +57,26 @@ fn clicking_a_marked_content_row_does_nothing() {
     click_at(&mut harness, other);
 
     let state = &harness.state().state;
-    assert_eq!(state.selection.primary, Some(figure.clone()));
+    assert_eq!(state.selection.primary().cloned(), Some(figure.clone()));
     assert_eq!(selected_rows(&harness), ["Figure"]);
     // It neither zoomed the canvas nor was the second selection set.
     assert_eq!(state.canvas.zoom_mode, ZoomMode::Fit);
-    assert_eq!(state.selection.secondary, None);
+    assert_eq!(state.selection.other().cloned(), None);
     // Smoke: the Figure is still the one selected and the MCID rows are still listed.
     assert!(mcid_rows(&harness).contains(&"MCID 2".to_owned()));
-    assert_eq!(state.selection.primary, Some(figure));
+    assert_eq!(state.selection.primary().cloned(), Some(figure));
 }
 
 #[test]
 fn hovering_a_marked_content_row_previews_nothing_and_explains_itself() {
     let mut harness = expanded_tags();
-    let before = harness.state().state.selection.primary.clone();
+    let before = harness.state().state.selection.primary().cloned();
 
     let at = mcid_row(&harness, "MCID 2").rect().center();
     harness.hover_at(at);
     harness.run();
     assert_eq!(harness.state().state.canvas.drawn_preview, None);
-    assert_eq!(harness.state().state.selection.primary, before);
+    assert_eq!(harness.state().state.selection.primary().cloned(), before);
     // Resting on it for 400 ms says what the row is.
     harness.run_steps(3);
     assert!(has_label(
@@ -103,7 +106,7 @@ fn arrow_down_from_a_tag_steps_over_its_marked_content_to_the_next_tag() {
 
     // The Figure's MCID 2 row sits between the two, and is skipped.
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(element("struct-rich", "Table"))
     );
     assert_eq!(selected_rows(&harness), ["Table"]);
@@ -113,7 +116,7 @@ fn arrow_down_from_a_tag_steps_over_its_marked_content_to_the_next_tag() {
     assert_eq!(selected_rows(&harness), ["Figure"]);
     // Smoke: the arrow keys never selected marked content.
     assert!(!matches!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::MarkedContent { .. })
     ));
 }
@@ -127,7 +130,7 @@ fn arrow_right_on_a_tag_goes_to_its_first_child_tag_not_to_marked_content() {
     harness.run();
 
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(element("struct-rich", "TR"))
     );
     // On a tag that has only marked content below it, Right (open already) stays put.
@@ -137,7 +140,7 @@ fn arrow_right_on_a_tag_goes_to_its_first_child_tag_not_to_marked_content() {
     harness.run();
     assert_eq!(selected_rows(&harness), ["Figure"]);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(element("struct-rich", "Figure"))
     );
 }
@@ -157,7 +160,7 @@ fn selecting_marked_content_elsewhere_highlights_and_reveals_its_tag_row() {
     assert_eq!(selected_rows(&harness), [OWNER_OF_MCID_5]);
     // The inspector still shows the marked content itself.
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::MarkedContent { page: 0, mcid: 5 })
     );
     assert!(
@@ -183,7 +186,7 @@ fn a_hit_stack_row_of_marked_content_selects_it_and_the_tree_highlights_its_tag(
     harness.run_steps(3);
 
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::MarkedContent { page: 0, mcid: 2 })
     );
     assert_eq!(selected_rows(&harness), ["Figure"]);
@@ -201,7 +204,7 @@ fn a_breadcrumb_of_marked_content_selects_it_and_the_tree_highlights_its_tag() {
     harness.run_steps(3);
 
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::MarkedContent { page: 0, mcid: 2 })
     );
     assert_eq!(selected_rows(&harness), ["Figure"]);

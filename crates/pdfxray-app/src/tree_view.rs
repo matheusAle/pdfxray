@@ -5,7 +5,8 @@
 //! rows inside the scroll viewport, so a frame costs the same for 100 nodes and for 100 000.
 //!
 //! The model also does what makes a tree feel alive: it scrolls to and expands the way to the
-//! selected node when the selection changes, moves the selection with the arrow keys, and
+//! selected node when the selection changes, highlights the rest of a multi-selection, moves the
+//! selection with the arrow keys (Shift+↑/↓ extend it, ⌘+Space toggles the focused row), and
 //! reports the row under the pointer and double clicks so the canvas can preview and zoom.
 
 use std::collections::HashMap;
@@ -80,6 +81,10 @@ pub struct TreeModel {
     offset: f32,
     /// A row had the keyboard focus last frame.
     had_focus: bool,
+    /// The slot whose row had the keyboard focus last frame.
+    focused: Option<usize>,
+    /// Rows highlighted besides the selected one: the rest of a multi-selection.
+    also: Vec<NodeId>,
 }
 
 /// What happened while drawing a [`TreeModel`].
@@ -93,6 +98,11 @@ pub struct TreeOutput {
     pub hovered: Option<NodeId>,
     /// The node an arrow key moved the selection to.
     pub key_selected: Option<NodeId>,
+    /// The node Shift+↑ or Shift+↓ extends the selection to.
+    pub key_extended: Option<NodeId>,
+    /// The node whose row ⌘+Space toggled in or out of the selection: the focused row, else the
+    /// selected one.
+    pub toggled: Option<NodeId>,
     /// The node whose row was right-clicked, or whose context menu is open, with the row's
     /// response: the owner of the app state attaches the node's menu to it.
     pub context: Option<(NodeId, Response)>,
@@ -171,6 +181,8 @@ impl TreeModel {
             seen: None,
             offset: 0.0,
             had_focus: false,
+            focused: None,
+            also: Vec::new(),
         };
         model.rebuild_visible();
         model
@@ -250,6 +262,18 @@ impl TreeModel {
             }
         }
         self.visible.binary_search(&index).ok()
+    }
+
+    /// Highlights the rows of `ids` too, besides the selected one passed to [`Self::ui`]: the rest of
+    /// a multi-selection. A new set expands the way to each of them.
+    pub fn set_also_selected(&mut self, ids: Vec<NodeId>) {
+        if ids == self.also {
+            return;
+        }
+        for id in &ids {
+            self.reveal(id);
+        }
+        self.also = ids;
     }
 
     /// Expands every node.
@@ -386,7 +410,7 @@ impl TreeModel {
         let filtered = self.is_filtered();
         let viewport = ui.available_height();
 
-        output.key_selected = self.keys(ui, selected);
+        self.keys(ui, selected, &mut output);
         let mut scroll_to = None;
         if selected != self.seen.as_ref() {
             self.seen = selected.cloned();
@@ -421,7 +445,7 @@ impl TreeModel {
                     .detail_when_hot(slot.detail_when_hot.as_deref())
                     .hover_text(slot.hover_text.as_deref())
                     .dot(slot.dot)
-                    .selected(selected == Some(&slot.id))
+                    .selected(selected == Some(&slot.id) || self.also.contains(&slot.id))
                     .annotations(&annotations);
                 if slot.has_children {
                     tree_row = tree_row.expandable(expanded);
@@ -437,7 +461,10 @@ impl TreeModel {
                 if result.toggled && !filtered {
                     toggled = Some(index);
                 }
-                focused |= result.row.has_focus();
+                if result.row.has_focus() {
+                    focused = true;
+                    self.focused = Some(index);
+                }
                 if result.row.hovered() {
                     output.hovered = Some(slot.id.clone());
                 }
@@ -454,6 +481,9 @@ impl TreeModel {
         });
         self.offset = shown.state.clamped_offset().y;
         self.had_focus = focused;
+        if !focused {
+            self.focused = None;
+        }
 
         if let Some(index) = toggled {
             self.toggle_index(index);
@@ -470,18 +500,34 @@ impl TreeModel {
         (!inside).then(|| (top - (viewport - tokens::ROW_H) / 2.0).max(0.0))
     }
 
-    /// Arrow keys, while the pointer is over the tree or a row has the focus.
-    fn keys(&mut self, ui: &Ui, selected: Option<&NodeId>) -> Option<NodeId> {
+    /// Arrow keys (Shift+↑/↓ extend the selection) and ⌘+Space (toggles the focused row), while
+    /// the pointer is over the tree or a row has the focus.
+    fn keys(&mut self, ui: &Ui, selected: Option<&NodeId>, output: &mut TreeOutput) {
         let ctx = ui.ctx();
         if !(self.had_focus || ui.rect_contains_pointer(ui.max_rect())) || ctx.text_edit_focused() {
-            return None;
+            return;
+        }
+        // Taken before the rows are drawn, so the focused row does not also take the Space as a
+        // click.
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Space)) {
+            output.toggled = self
+                .focused
+                .map(|at| self.slots[at].id.clone())
+                .or_else(|| selected.cloned());
+            return;
+        }
+        for key in [Key::ArrowDown, Key::ArrowUp] {
+            if ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, key)) {
+                output.key_extended = self.key_target(selected, key);
+                return;
+            }
         }
         for key in [Key::ArrowDown, Key::ArrowUp, Key::ArrowLeft, Key::ArrowRight] {
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, key)) {
-                return self.key_target(selected, key);
+                output.key_selected = self.key_target(selected, key);
+                return;
             }
         }
-        None
     }
 }
 
@@ -524,6 +570,7 @@ pub fn badge_word(code: &str) -> &str {
         "private-hides-content" => "Private",
         "table-header-missing" | "table-header-unresolved" | "table-headers-id-missing" => "header",
         "table-irregular" => "table",
+        "table-header-scope-conflict" => "scope",
         // Otherwise the last word of the code: `mcid-orphan` → `orphan`.
         other => other.rsplit('-').next().unwrap_or(other),
     }
@@ -535,5 +582,20 @@ pub(crate) const fn severity_tone(severity: Severity) -> Tone {
         Severity::Info => Tone::Kind(tokens::KIND_CONTENT),
         Severity::Warning => Tone::Warn,
         Severity::Error => Tone::Err,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn a_header_scope_conflict_reads_as_scope_in_a_tree_row() {
+        assert_eq!(badge_word("table-header-scope-conflict"), "scope");
+        assert_eq!(badge_word("table-headers-id-missing"), "header");
+        // Smoke: any other code shows its last word.
+        assert_eq!(badge_word("mcid-orphan"), "orphan");
     }
 }

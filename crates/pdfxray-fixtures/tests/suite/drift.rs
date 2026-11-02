@@ -66,12 +66,13 @@ fn catalog_lists_the_agreed_fixtures_in_order() {
             "table-simple-pdf17",
             "table-scope-pdf2",
             "table-headers-ids",
+            "table-scope-conflict",
             "speech-lang",
             "speech-link-objr",
             "rolemap-two-hops",
         ]
     );
-    assert_eq!(names.len(), 36);
+    assert_eq!(names.len(), 37);
 }
 
 #[test]
@@ -167,7 +168,7 @@ fn generated_dir_holds_exactly_the_catalog_files() {
         .collect();
 
     assert_eq!(actual, expected, "stale or missing files in fixtures/generated");
-    assert_eq!(actual.len(), 72);
+    assert_eq!(actual.len(), 74);
 }
 
 #[test]

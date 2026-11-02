@@ -6,7 +6,7 @@ use egui::{
 };
 
 use super::icon::Icon;
-use super::tooltip;
+use super::{focus, tooltip};
 use crate::theme::{fonts, tokens};
 
 /// What a crumb shows for the crumbs that were folded away.
@@ -146,6 +146,7 @@ impl<'a> Crumb<'a> {
                 RectShape::filled(inner.response.rect, tokens::RADIUS_SM, tokens::NEUTRAL_HOVER),
             );
         }
+        focus::ring(ui, &click, inner.response.rect, tokens::RADIUS_SM);
         let click = click.on_hover_cursor(egui::CursorIcon::PointingHand);
         if cut {
             return tooltip::text(click, text);

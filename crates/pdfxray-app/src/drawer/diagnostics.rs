@@ -198,7 +198,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     };
     let info = &loaded.info;
     if let Some(error) = info.engine_error {
-        ui.label(RichText::new(format!("Rendering engine: {error:?}")).color(tokens::WARN));
+        ui.label(RichText::new(crate::center::canvas::engine_message(error)).color(tokens::WARN));
     }
     let filtered = state.drawer.page_boxes_only;
     let mut rows = if filtered {

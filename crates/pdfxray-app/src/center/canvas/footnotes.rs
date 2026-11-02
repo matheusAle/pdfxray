@@ -95,7 +95,7 @@ fn note_related(state: &mut AppState, id: &NodeId) -> bool {
 pub(super) fn collect(state: &mut AppState, page: PageIx) -> NoteLayer {
     let on =
         state.canvas.view.show.reading_order || (state.drawer.open && state.drawer.tab == DrawerTab::Speech);
-    let selection = state.selection.primary.clone();
+    let selection = state.selection.primary().cloned();
     let selected_note = !on && selection.as_ref().is_some_and(|id| note_related(state, id));
     if !on && !selected_note {
         return NoteLayer::default();

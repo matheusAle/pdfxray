@@ -15,7 +15,9 @@ use common::{Region, app, nodes_in, open_fixture, the};
 use egui::{CursorIcon, Role, Shape, pos2, vec2};
 use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::{Harness, HarnessBuilder};
-use pdfxray_app::components::{Badge, Crumb, PropRow, Tone, crumb, prop_row, section};
+use pdfxray_app::center::toolbar::PAGE_FIELD_LABEL;
+use pdfxray_app::components::{Badge, Crumb, PropRow, Tone, crumb, focus, prop_row, section};
+use pdfxray_app::navigator::{CLEAR_FILTER_LABEL, FILTER_LABEL};
 use pdfxray_app::theme::tokens;
 use pretty_assertions::assert_eq;
 
@@ -231,7 +233,7 @@ fn a_link_value_is_a_target_only_over_its_text() {
         PropRow::new("Kind", "Page").show(ui);
     });
     harness.run();
-    let link = harness.get_by_role_and_label(Role::Link, "3 0 R").rect();
+    let link = harness.get_by_role_and_label(Role::Label, "3 0 R").rect();
 
     assert!(link.width() < 60.0, "{link:?}");
     assert_eq!(cursor_over(&mut harness, link.center()), CursorIcon::PointingHand);
@@ -893,4 +895,270 @@ fn the_transform_chain_starts_where_its_label_and_the_keys_do() {
     );
     // Smoke: the keys of the rows above share that edge.
     assert!((key.min.x - label.min.x).abs() <= 1.0, "{key:?} {label:?}");
+}
+
+// ---- keyboard focus ----
+
+/// True when the last frame drew a focus ring (the accent, [`focus::RING_WIDTH`] wide) around
+/// `target`: a ring that holds its centre and is at most a few points larger or smaller.
+fn ringed<S>(harness: &Harness<'_, S>, target: egui::Rect) -> bool {
+    shapes_of(harness).iter().any(|shape| {
+        matches!(shape, Shape::Rect(r) if r.stroke.color == tokens::ACCENT
+            && r.stroke.width == focus::RING_WIDTH
+            && r.rect.contains(target.center())
+            && (r.rect.width() - target.width()).abs() <= 8.0
+            && (r.rect.height() - target.height()).abs() <= 8.0)
+    })
+}
+
+#[test]
+fn a_header_a_crumb_and_a_link_value_show_the_ring_only_while_the_keyboard_is_on_them() {
+    let mut harness = builder(vec2(340.0, 240.0)).build_ui(|ui| {
+        section::show(ui, "focus-header", "Geometry", |ui| {
+            PropRow::new("Parent", "3 0 R").link(true).show(ui);
+        });
+        three_crumbs(ui);
+    });
+    harness.run();
+
+    for (role, name) in [
+        (Role::Button, "Geometry"),
+        (Role::Link, "Parent: 3 0 R"),
+        (Role::Button, "Tj #3"),
+    ] {
+        let rect = harness.get_by_role_and_label(role, name).rect();
+        // Smoke: nothing is ringed before the keyboard arrives.
+        assert!(
+            !ringed(&harness, rect),
+            "{name} is ringed before it has the focus"
+        );
+
+        harness.get_by_role_and_label(role, name).focus();
+        harness.run_steps(2);
+
+        assert!(harness.get_by_role_and_label(role, name).is_focused(), "{name}");
+        assert!(ringed(&harness, rect), "{name} has the focus but no ring");
+    }
+}
+
+/// The accent strokes of the last frame: where each lies, its width, kind and corner radius.
+fn accent_strokes<S>(
+    harness: &Harness<'_, S>,
+    color: egui::Color32,
+) -> Vec<(egui::Rect, f32, egui::StrokeKind, u8)> {
+    shapes_of(harness)
+        .into_iter()
+        .filter_map(|shape| match shape {
+            Shape::Rect(r) if r.stroke.color == color && r.stroke.width > 0.0 => {
+                Some((r.rect, r.stroke.width, r.stroke_kind, r.corner_radius.nw))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_control_ring_stands_two_points_off_it_and_a_row_ring_sits_two_points_inside() {
+    let mut harness = builder(vec2(340.0, 240.0)).build_ui(|ui| {
+        section::show(ui, "ring-geometry", "Geometry", |ui| {
+            PropRow::new("Parent", "3 0 R").link(true).show(ui);
+        });
+        ui.add_space(8.0);
+        three_crumbs(ui);
+    });
+    harness.run();
+    let crumb = harness.get_by_role_and_label(Role::Button, "glyph 0").rect();
+    // Smoke: the current crumb's own 1 px outline is there before any focus.
+    let outline = accent_strokes(&harness, tokens::ACCENT);
+    assert!(
+        outline
+            .iter()
+            .any(|(rect, width, ..)| *width == 1.0 && crumb.contains_rect(*rect)),
+        "{outline:?}"
+    );
+
+    // A control: 2 px, outside, with a 2 px gap and the radius grown by it.
+    harness.get_by_role_and_label(Role::Button, "glyph 0").focus();
+    harness.run_steps(2);
+    let rings: Vec<_> = accent_strokes(&harness, tokens::ACCENT)
+        .into_iter()
+        .filter(|(_, width, ..)| *width == focus::RING_WIDTH)
+        .collect();
+    assert_eq!(
+        rings,
+        [(
+            crumb.expand(focus::RING_GAP),
+            2.0,
+            egui::StrokeKind::Outside,
+            // A chip's 4 grown by the 2 px gap.
+            6
+        )]
+    );
+    // The selection's outline and the ring stay two lines: the gap shows between them.
+    assert!(
+        accent_strokes(&harness, tokens::ACCENT)
+            .iter()
+            .any(|(rect, width, ..)| *width == 1.0 && crumb.contains_rect(*rect))
+    );
+
+    // A full-width row: the same ring, 2 px inside its edge.
+    harness.get_by_role_and_label(Role::Button, "Geometry").focus();
+    harness.run_steps(2);
+    let header = harness.get_by_role_and_label(Role::Button, "Geometry").rect();
+    let rings: Vec<_> = accent_strokes(&harness, tokens::ACCENT)
+        .into_iter()
+        .filter(|(_, width, ..)| *width == focus::RING_WIDTH)
+        .collect();
+    assert_eq!(
+        rings,
+        [(
+            header.shrink(focus::RING_GAP),
+            2.0,
+            egui::StrokeKind::Inside,
+            // A row's 4 less the 2 px inset.
+            2
+        )]
+    );
+}
+
+#[test]
+fn a_control_on_the_page_has_the_ring_two_points_off_with_a_two_point_halo_around_it() {
+    let chip = egui::Rect::from_min_size(pos2(60.0, 40.0), vec2(30.0, 14.0));
+    let mut harness = builder(vec2(200.0, 120.0)).build_ui(move |ui| {
+        let response = ui.interact(chip, ui.scope_id().with("page-chip"), egui::Sense::click());
+        response.widget_info(|| egui::WidgetInfo::labeled(Role::Button, true, "H1"));
+        ui.painter()
+            .rect_filled(chip, tokens::RADIUS_SM, tokens::KIND_TAG);
+        focus::page_ring(ui.painter(), &response, chip, tokens::RADIUS_SM);
+    });
+    harness.run();
+    // Smoke: no ring and no halo before the keyboard arrives.
+    assert_eq!(accent_strokes(&harness, tokens::ACCENT).len(), 0);
+    assert_eq!(accent_strokes(&harness, tokens::FOCUS_HALO).len(), 0);
+
+    harness.get_by_role_and_label(Role::Button, "H1").focus();
+    harness.run_steps(2);
+
+    assert_eq!(
+        accent_strokes(&harness, tokens::ACCENT),
+        [(chip.expand(2.0), 2.0, egui::StrokeKind::Outside, 6)]
+    );
+    assert_eq!(
+        accent_strokes(&harness, tokens::FOCUS_HALO),
+        [(chip.expand(4.0), 2.0, egui::StrokeKind::Outside, 8)]
+    );
+    assert_eq!(
+        tokens::FOCUS_HALO,
+        egui::Color32::from_rgba_unmultiplied(0x0A, 0x0C, 0x0F, 0xCC)
+    );
+}
+
+#[test]
+fn a_link_value_is_reached_and_followed_with_the_keyboard() {
+    let mut harness = builder(vec2(340.0, 120.0)).build_ui_state(
+        |ui, followed: &mut u32| {
+            if PropRow::new("Parent", "3 0 R").link(true).show(ui).followed {
+                *followed += 1;
+            }
+            // A plain value is a stop of the keyboard too, to copy it, but not a link.
+            PropRow::new("Size", "120 × 80 pt").show(ui);
+        },
+        0,
+    );
+    harness.run();
+
+    harness.get_by_role_and_label(Role::Link, "Parent: 3 0 R").focus();
+    harness.run_steps(2);
+    harness.key_press(egui::Key::Enter);
+    harness.run_steps(2);
+
+    assert_eq!(*harness.state(), 1);
+    assert!(
+        harness
+            .get_by_role_and_label(Role::Link, "Parent: 3 0 R")
+            .is_focused()
+    );
+    // Smoke: a row whose value is not a link is announced as a row, not as a control.
+    assert!(
+        harness
+            .query_by_role_and_label(Role::ListItem, "Size: 120 × 80 pt")
+            .is_some()
+    );
+    for role in [Role::Link, Role::Button] {
+        assert!(
+            harness
+                .query_by_role_and_label(role, "Size: 120 × 80 pt")
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn every_stop_of_the_tab_key_has_a_name() {
+    let mut harness = app();
+    open_fixture(&mut harness, "struct-rich");
+    harness.run_steps(3);
+
+    let mut stops = Vec::new();
+    for _ in 0..60 {
+        harness.key_press(egui::Key::Tab);
+        harness.run_steps(2);
+        #[expect(
+            clippy::redundant_closure_for_method_calls,
+            reason = "the method path is not general enough over the node's lifetime"
+        )]
+        let Some(node) = harness.query_by(|node| node.is_focused()) else {
+            continue;
+        };
+        let name = node.accesskit_node().label().unwrap_or_default();
+        stops.push((name, node.rect()));
+    }
+
+    assert!(stops.len() > 20, "{stops:?}");
+    let unnamed: Vec<_> = stops.iter().filter(|(name, _)| name.trim().is_empty()).collect();
+    assert_eq!(
+        unnamed,
+        Vec::<&(String, egui::Rect)>::new(),
+        "every stop: {stops:?}"
+    );
+    // The two text fields are named, though nothing visible names them.
+    for name in [FILTER_LABEL, PAGE_FIELD_LABEL] {
+        assert!(stops.iter().any(|(stop, _)| stop == name), "{name} in {stops:?}");
+    }
+    // Smoke: the stops include the rail.
+    assert!(stops.iter().any(|(name, _)| name == "Tags"), "{stops:?}");
+}
+
+#[test]
+fn a_filter_that_matches_nothing_offers_the_way_back() {
+    let mut harness = app();
+    open_fixture(&mut harness, "struct-rich");
+    harness.run_steps(3);
+    // Smoke: with no filter there is nothing to clear.
+    assert!(common::named(&harness, Region::Navigator, Role::Button, CLEAR_FILTER_LABEL).is_empty());
+
+    for (rail, says) in [
+        ("Tags", "No rows match “zzq”."),
+        ("Pages", "No pages match “zzq”."),
+        ("Objects", "No objects match “zzq”."),
+    ] {
+        common::click_rail(&mut harness, rail);
+        harness.state_mut().state.nav.filter = "zzq".to_owned();
+        harness.run_steps(3);
+        assert!(
+            common::has_label(&harness, says),
+            "{rail}: {:?}",
+            common::texts_in(&harness, Region::Navigator, Role::Label)
+        );
+
+        the(&harness, Region::Navigator, Role::Button, CLEAR_FILTER_LABEL).click();
+        harness.run_steps(3);
+
+        assert_eq!(harness.state().state.nav.filter, "", "{rail}");
+        assert!(!common::has_label(&harness, says), "{rail}");
+        assert!(
+            common::named(&harness, Region::Navigator, Role::Button, CLEAR_FILTER_LABEL).is_empty(),
+            "{rail}"
+        );
+    }
 }

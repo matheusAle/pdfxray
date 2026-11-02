@@ -153,6 +153,16 @@ pub(crate) fn wait_for_previews(harness: &mut Harness<'_, PdfxrayApp>) {
     wait_until(harness, "the object previews", |state| !state.previews_pending());
 }
 
+/// Validates the open file the way a user does: the rail's Validation entry, then its Validate
+/// button; waits for the report.
+pub(crate) fn validate_from_the_rail(harness: &mut Harness<'_, PdfxrayApp>) {
+    click_rail(harness, "Validation");
+    the(harness, Region::Navigator, Role::Button, "Validate").click();
+    wait_until(harness, "the validation result", |s| {
+        s.document.as_ref().is_some_and(|d| d.doc.validation().is_some()) && !s.validation.is_running()
+    });
+}
+
 /// Clicks the rail entry named `name` (`Tags`, `Content`, `Artifacts`, `Pages`, `Objects`,
 /// `Revisions`, `Validation`).
 pub(crate) fn click_rail(harness: &mut Harness<'_, PdfxrayApp>, name: &str) {
@@ -170,6 +180,17 @@ pub(crate) fn click_drawer_tab(harness: &mut Harness<'_, PdfxrayApp>, name: &str
 fn drawer_height(harness: &Harness<'_, PdfxrayApp>) -> f32 {
     let drawer = &harness.state().state.drawer;
     if drawer.open { drawer.height } else { STRIP_H }
+}
+
+/// Where the canvas shows the pages: right of the navigator and under the toolbar, each past its
+/// ruler, as big as the canvas says its view is.
+pub(crate) fn canvas_view(harness: &Harness<'_, PdfxrayApp>) -> Rect {
+    let thickness = pdfxray_app::center::canvas::rulers::THICKNESS;
+    let min = egui::pos2(
+        tokens::RAIL_W + tokens::NAVIGATOR_W + thickness,
+        tokens::TITLE_H + pdfxray_app::center::toolbar::HEIGHT + thickness,
+    );
+    Rect::from_min_size(min, harness.state().state.canvas.viewport)
 }
 
 /// The label of the title bar's one chip: it is the button that starts with the PDF version.

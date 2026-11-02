@@ -56,6 +56,10 @@ pub const MARGIN: f32 = 14.0;
 /// Width of the column of cards, margins included.
 pub const COLUMN_W: f32 = 176.0;
 
+/// Width of a wide card (the Tag roles card), margins included: 20 points more than the others,
+/// so its header fits the focus readout and *Show all*.
+pub const WIDE_W: f32 = COLUMN_W + 20.0;
+
 /// Space between two cards of the column, and between the column and a page.
 const GAP: f32 = 8.0;
 
@@ -66,15 +70,15 @@ const PADDING: f32 = 10.0;
 /// a title and a row or two.
 const MIN_CARD_H: f32 = 72.0;
 
-/// True when the column of full cards fits between the pages in view and the right edge of
-/// `canvas`. `pages` are the screen rectangles of the pages drawn.
-pub fn column_fits(canvas: Rect, pages: &[Rect]) -> bool {
+/// True when the column of full cards, `width` wide, fits between the pages in view and the right
+/// edge of `canvas`. `pages` are the screen rectangles of the pages drawn.
+pub fn column_fits(canvas: Rect, pages: &[Rect], width: f32) -> bool {
     let right = pages
         .iter()
         .filter(|page| page.intersects(canvas))
         .map(|page| page.max.x)
         .fold(f32::NEG_INFINITY, f32::max);
-    canvas.max.x - right >= COLUMN_W + MARGIN + GAP
+    canvas.max.x - right >= width + MARGIN + GAP
 }
 
 /// What a card is called and how it shows collapsed.
@@ -85,6 +89,7 @@ pub(super) struct Card<'a> {
     summary: Option<String>,
     dots: Vec<Color32>,
     chip: bool,
+    width: f32,
 }
 
 impl<'a> Card<'a> {
@@ -95,7 +100,14 @@ impl<'a> Card<'a> {
             summary: None,
             dots: Vec::new(),
             chip: false,
+            width: COLUMN_W,
         }
+    }
+
+    /// The card is [`WIDE_W`] wide instead of [`COLUMN_W`].
+    pub(super) const fn wide(mut self) -> Self {
+        self.width = WIDE_W;
+        self
     }
 
     /// The chip says `summary` instead of the name.
@@ -158,7 +170,7 @@ impl Column {
                 if chip && !open {
                     summary_chip(ui, card);
                 } else {
-                    full(ui, id, room, content);
+                    full(ui, id, room, card.width, content);
                 }
             });
         let rect = shown.response.rect;
@@ -173,13 +185,13 @@ impl Column {
     }
 }
 
-/// The frame of a card around `content`, at most `room` tall: what does not fit scrolls. `id` is
-/// the card's, under which the height `content` takes is kept.
+/// The frame of a card around `content`, `width` wide and at most `room` tall: what does not fit
+/// scrolls. `id` is the card's, under which the height `content` takes is kept.
 ///
 /// A scroll area answers with last frame's content size, which would leave the cards below a
 /// card that grew on top of it. So `content` is laid out plainly until it is known to be too tall
 /// (the frame before said so), and the scroll area only takes it over then.
-fn full(ui: &mut Ui, id: Id, room: f32, content: impl FnOnce(&mut Ui)) {
+fn full(ui: &mut Ui, id: Id, room: f32, width: f32, content: impl FnOnce(&mut Ui)) {
     let frame = effects::floating_card();
     // The frame's margins and its hairline are inside `room`.
     let inner = room - frame.total_margin().sum().y;
@@ -187,7 +199,7 @@ fn full(ui: &mut Ui, id: Id, room: f32, content: impl FnOnce(&mut Ui)) {
     let natural: Option<f32> = ui.data(|data| data.get_temp(key));
     frame.show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
-        ui.set_max_width(COLUMN_W - PADDING * 2.0);
+        ui.set_max_width(width - PADDING * 2.0);
         let height = if natural.is_some_and(|height| height > inner) {
             ScrollArea::vertical()
                 .max_height(inner)
@@ -244,7 +256,13 @@ pub(super) fn title(ui: &mut Ui, text: &str) {
 /// Draws all cards over `canvas`, the area the pages are drawn in. `pages` are the screen
 /// rectangles of the pages in view.
 pub(super) fn show(ui: &mut Ui, state: &mut AppState, canvas: Rect, info: &PageInfo, pages: &[Rect]) {
-    let mut column = Column::new(ui.ctx(), canvas, !column_fits(canvas, pages));
+    // The column is as wide as its widest card.
+    let width = if super::role_legend::shown(state) {
+        WIDE_W
+    } else {
+        COLUMN_W
+    };
+    let mut column = Column::new(ui.ctx(), canvas, !column_fits(canvas, pages, width));
     isolation_chip(&mut column, state);
     if state.nav.rail == RailItem::Validation {
         super::validation_card::show(&mut column, state);

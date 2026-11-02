@@ -49,6 +49,32 @@ pub fn most_visible(layout: &PageLayout, view: UiRect) -> Option<PageIx> {
         .and_then(|(page, _)| PageIx::try_from(page).ok())
 }
 
+/// The scroll offset that keeps the content under `at` (a point of the view, from its top-left
+/// corner) under it when the pages move from `before` to `after`, e.g. for a new zoom. `offset` is
+/// the scroll offset in `before`.
+///
+/// The point is taken relative to the page nearest to it, as a fraction of that page, and put at
+/// the same fraction of the page in `after`, so a point on a page stays exactly on the same spot
+/// of it. `None` when the layouts do not have the same pages.
+pub fn anchored_offset(before: &PageLayout, after: &PageLayout, offset: Vec2, at: Vec2) -> Option<Vec2> {
+    if before.pages.len() != after.pages.len() {
+        return None;
+    }
+    let point = (offset + at).to_pos2();
+    let distance = |rect: &UiRect| rect.distance_sq_to_pos(point);
+    let (page, old) = before
+        .pages
+        .iter()
+        .enumerate()
+        .min_by(|a, b| distance(a.1).total_cmp(&distance(b.1)))?;
+    let new = after.pages[page];
+    if old.width() <= 0.0 || old.height() <= 0.0 {
+        return None;
+    }
+    let fraction = (point - old.min) / old.size();
+    Some(new.min.to_vec2() + fraction * new.size() - at)
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -79,6 +105,47 @@ mod tests {
             [UiRect::from_min_size(pos2(100.0, 150.0), vec2(100.0, 100.0))]
         );
         assert_eq!(layout.size, vec2(300.0, 400.0));
+    }
+
+    #[test]
+    fn a_zoom_keeps_the_point_under_the_anchor_on_the_same_spot_of_its_page() {
+        let view = vec2(400.0, 300.0);
+        let before = layout_pages(&[vec2(500.0, 600.0); 3], view);
+        let after = layout_pages(&[vec2(1000.0, 1200.0); 3], view);
+        // 50 pt into page 2 across and 100 pt down it.
+        let offset = vec2(
+            before.pages[1].min.x + 50.0 - 120.0,
+            before.pages[1].min.y + 100.0 - 80.0,
+        );
+        let at = vec2(120.0, 80.0);
+
+        let anchored = anchored_offset(&before, &after, offset, at).unwrap();
+
+        // At twice the size that spot is 100 pt across and 200 pt down page 2, still under `at`.
+        let spot = (anchored + at).to_pos2();
+        assert_eq!(spot - after.pages[1].min, vec2(100.0, 200.0));
+        // Smoke: the same layout keeps the offset, and a layout of other pages has no anchor.
+        assert_eq!(anchored_offset(&before, &before, offset, at), Some(offset));
+        assert_eq!(
+            anchored_offset(&before, &layout_pages(&[vec2(500.0, 600.0)], view), offset, at),
+            None
+        );
+    }
+
+    #[test]
+    fn a_point_between_pages_goes_with_the_nearest_page() {
+        let view = vec2(400.0, 300.0);
+        let before = layout_pages(&[vec2(500.0, 600.0); 2], view);
+        let after = layout_pages(&[vec2(250.0, 300.0); 2], view);
+        // In the gap, 4 pt under page 1's bottom edge.
+        let at = vec2(200.0, 150.0);
+        let offset = vec2(before.pages[0].center().x, before.pages[0].max.y + 4.0) - at;
+
+        let anchored = anchored_offset(&before, &after, offset, at).unwrap();
+
+        // Half the size: 2 pt under page 1's bottom edge, at the middle of its width.
+        let spot = (anchored + at).to_pos2();
+        assert_eq!(spot, after.pages[0].center_bottom() + vec2(0.0, 2.0));
     }
 
     #[test]

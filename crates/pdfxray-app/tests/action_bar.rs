@@ -114,7 +114,10 @@ fn the_selection_gets_a_bar_under_its_outline_with_the_five_actions() {
     // Isolate shows its name as in the design; the others are icons with the name as tooltip.
     assert!(!is_selected(&bar_button(&harness, "Isolate")));
     // Smoke: the selection is still the heading, the bar changed nothing.
-    assert_eq!(harness.state().state.selection.primary, Some(heading(fixture)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(heading(fixture))
+    );
 }
 
 #[test]
@@ -130,7 +133,7 @@ fn isolate_from_the_bar_isolates_the_selection_and_a_second_click_brings_it_back
     wait_for_render(&mut harness);
 
     let isolation = harness.state().state.canvas.view.isolation.clone().unwrap();
-    assert_eq!((isolation.mode, isolation.node), (IsolateMode::Only, node));
+    assert_eq!((isolation.mode, isolation.nodes), (IsolateMode::Only, vec![node]));
     // The bar and the toolbar button show it is on.
     assert!(is_selected(&bar_button(&harness, "Isolate")));
     assert!(is_selected(&view_tools::toolbar_button(&harness, "Isolate")));
@@ -169,7 +172,7 @@ fn the_other_bar_actions_show_the_node_in_its_tree_open_its_object_and_copy_its_
         panic!("a structure element");
     };
     assert!(matches!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Object(_))
     ));
 
@@ -221,7 +224,10 @@ fn right_click_on_the_canvas_selects_the_node_under_the_pointer_and_opens_its_ac
         .and_then(|stack| stack.entries.first())
         .map(|entry| entry.id.clone())
         .expect("something under the pointer");
-    assert_eq!(harness.state().state.selection.primary, Some(top.clone()));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(top.clone())
+    );
     // Its actions are in the menu, in the order of the bar, with the ones the bar leaves out.
     let items = texts_in(&harness, Region::Center, Role::MenuItem);
     assert_eq!(items.first().map(String::as_str), Some("Isolate"));
@@ -239,8 +245,8 @@ fn right_click_on_the_canvas_selects_the_node_under_the_pointer_and_opens_its_ac
             .view
             .isolation
             .as_ref()
-            .map(|i| (i.mode, i.node.clone())),
-        Some((IsolateMode::Only, top))
+            .map(|i| (i.mode, i.nodes.clone())),
+        Some((IsolateMode::Only, vec![top]))
     );
     // Smoke: the menu closed with the click, and a left click elsewhere does not reopen it.
     assert_eq!(
@@ -302,7 +308,7 @@ fn the_validation_entry_keeps_the_bar_off_its_failure_badges() {
 
     // The same selection, no bar: the badges stay clickable.
     assert_eq!(bar(&harness), Vec::<String>::new());
-    assert!(harness.state().state.selection.primary.is_some());
+    assert!(harness.state().state.selection.primary().is_some());
 }
 
 #[test]

@@ -490,6 +490,41 @@ impl Document {
         }
     }
 
+    /// What `rect` (page space) touches on `page`: one entry per painted item it meets, in paint
+    /// order. See [`Document::hit_rect`].
+    pub(crate) fn content_touched(&self, page: PageIx, rect: Rect) -> Vec<Touched> {
+        let Some(data) = self.content.data(page) else {
+            return Vec::new();
+        };
+        data.index()
+            .hit_rect(rect)
+            .into_iter()
+            .filter_map(|i| data.item(i))
+            .map(|item| {
+                // Innermost first.
+                let nodes: Vec<NodeId> = item
+                    .mc_stack
+                    .iter()
+                    .rev()
+                    .filter_map(|&s| data.seq(s))
+                    .filter_map(|s| data.seq_node(page, s))
+                    .collect();
+                Touched {
+                    op: item.op,
+                    marked: nodes
+                        .iter()
+                        .find(|n| matches!(n, NodeId::MarkedContent { .. }))
+                        .cloned(),
+                    artifact: nodes
+                        .iter()
+                        .find(|n| matches!(n, NodeId::Artifact { .. }))
+                        .cloned(),
+                    innermost: nodes.into_iter().next(),
+                }
+            })
+            .collect()
+    }
+
     /// Content nodes under `point`, most specific first: glyph or operator, then enclosing
     /// marked-content sequences / artifacts from innermost outwards. Filtered by `layer`. Each
     /// glyph is followed by its operator.
@@ -672,6 +707,20 @@ impl Document {
             d.seqs_text_each(d.mc_seqs(mcid, |s| stream_form(&s.stream) == stream), f);
         }
     }
+}
+
+/// One painted item a rectangle touches: the operator that painted it and the sequences around
+/// it. See [`Document::content_touched`].
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Touched {
+    /// The operator that painted the item.
+    pub(crate) op: u32,
+    /// The innermost marked-content sequence with an MCID around the item.
+    pub(crate) marked: Option<NodeId>,
+    /// The innermost artifact sequence around the item.
+    pub(crate) artifact: Option<NodeId>,
+    /// The innermost addressable sequence around the item, of either kind.
+    pub(crate) innermost: Option<NodeId>,
 }
 
 #[cfg(test)]

@@ -3,8 +3,10 @@
 //! ⌘N new window · ⌘O open · ⌘W close window (the macOS menu bar has these, so there the window
 //! leaves them to it; ⌘Q is egui's own quit shortcut, or the menu's) · ⌘F navigator filter · ⌘1 to ⌘5 drawer tabs · ⌘[ and ⌘] object history (previous and
 //! next finding on the Validation entry) · 1 to 6 the toolbar's Pick menu (layer mode) · X I H P C
-//! A the View menu's modes · ⇧T L R its tag overlay options · M B tools · Esc: popover, then the
-//! measured line, then the second selection, then the selection.
+//! A the View menu's modes · ⇧T L R its tag overlay options · M B tools · ⌘A selects all of the
+//! Pick target on the page · `[` and `]` step through a multi-selection · Esc: popover, then the
+//! marquee being drawn, then the measured line, then the tag roles focus, then every selected node
+//! but the primary, then the selection.
 
 use egui::{Context, Key, Modifiers, Popup, Ui};
 
@@ -108,23 +110,37 @@ fn plain_keys(ctx: &Context, state: &mut AppState) {
     if pressed(Key::B) {
         state.canvas.show_boxes = !state.canvas.show_boxes;
     }
+    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::A)) {
+        state.select_all();
+    }
+    // Step through a multi-selection the inspector stepped into.
+    if pressed(Key::OpenBracket) {
+        state.step_selection(false);
+    }
+    if pressed(Key::CloseBracket) {
+        state.step_selection(true);
+    }
     crate::stepper::keys(ctx, state);
     if pressed(Key::Escape) {
         escape(ctx, state);
     }
 }
 
-/// Esc closes the innermost thing: an open popover (egui closes it itself), the measured line,
-/// the second selection, the selection.
+/// Esc closes the innermost thing: an open popover (egui closes it itself), the marquee being
+/// drawn, the measured line, the tag roles focus (every role shows again), every selected node
+/// but the primary, the selection.
 fn escape(ctx: &Context, state: &mut AppState) {
     if Popup::is_any_open(ctx) {
         return;
     }
+    if state.canvas.marquee.take().is_some() {
+        return;
+    }
     if state.canvas.measure.line().is_some() {
         state.canvas.measure.clear();
-    } else if state.selection.secondary.is_some() {
-        state.selection.secondary = None;
-    } else {
+    } else if state.shown_roles().is_some() {
+        state.show_all_roles();
+    } else if !state.keep_primary() {
         state.clear_selection();
     }
 }

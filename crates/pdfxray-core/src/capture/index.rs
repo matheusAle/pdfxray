@@ -3,7 +3,7 @@
 use rstar::{AABB, RTree, RTreeObject};
 
 use super::types::{CapturedPage, PaintKind};
-use crate::Point;
+use crate::{Point, Rect};
 
 /// One indexed item.
 #[derive(Debug, Clone, Copy)]
@@ -63,5 +63,18 @@ impl PageIndex {
             .collect();
         found.sort_by(|a, b| a.area.total_cmp(&b.area).then(b.ix.cmp(&a.ix)));
         found.into_iter().map(|e| e.ix).collect()
+    }
+
+    /// Items whose box meets `r` (edges count), in paint order. An item painted under a clip is
+    /// only met where the clip meets `r` too. The values are [`PaintItem::ix`](super::PaintItem::ix).
+    pub fn hit_rect(&self, r: Rect) -> Vec<u32> {
+        let mut found: Vec<u32> = self
+            .tree
+            .locate_in_envelope_intersecting(AABB::from_corners([r.x0, r.y0], [r.x1, r.y1]))
+            .filter(|e| e.clip.is_none_or(|c| c.intersects(&r)))
+            .map(|e| e.ix)
+            .collect();
+        found.sort_unstable();
+        found
     }
 }

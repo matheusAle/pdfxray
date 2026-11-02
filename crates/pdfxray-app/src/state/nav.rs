@@ -25,13 +25,14 @@ pub enum RailItem {
 
 impl RailItem {
     /// The entries at the top of the rail, in order.
-    pub const TOP: [Self; 6] = [
+    pub const TOP: [Self; 7] = [
         Self::Tags,
         Self::Content,
         Self::Artifacts,
         Self::Pages,
         Self::Objects,
         Self::Revisions,
+        Self::Validation,
     ];
 
     /// Name of the entry: its tooltip and accessible name.

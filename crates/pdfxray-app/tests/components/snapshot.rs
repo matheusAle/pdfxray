@@ -25,7 +25,6 @@ fn components_sheet(ui: &mut egui::Ui) {
             ToolButton::new("Validate")
                 .icon(Icon::Validation)
                 .primary()
-                .tall()
                 .show(ui);
             Keycap::new("X").show(ui);
             Keycap::new("⇧T").show(ui);

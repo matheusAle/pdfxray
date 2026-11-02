@@ -72,7 +72,7 @@ fn the_empty_shell_offers_the_drop_zone_the_rail_and_the_units() {
     // Smoke: the defaults of the state.
     let state = &harness.state().state;
     assert!(state.document.is_none());
-    assert_eq!(state.selection.primary, None);
+    assert_eq!(state.selection.primary().cloned(), None);
     assert_eq!(state.status, "Ready");
     assert_eq!(state.nav.rail, RailItem::Tags);
     assert_eq!(state.drawer.tab, DrawerTab::HitStack);
@@ -115,7 +115,10 @@ fn dropping_a_file_opens_it_and_names_it_in_the_title_bar() {
     let _tab = the(&harness, Region::Drawer, Role::Button, "Hit stack");
     assert!(has_label(&harness, "Structure"));
     // Opening selects the document: the inspector shows its file facts.
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Document));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Document)
+    );
 }
 
 #[test]
@@ -519,25 +522,25 @@ fn escape_closes_the_popover_then_the_line_then_the_second_selection_then_the_se
     harness.run();
     assert!(harness.query_by_role_and_label(Role::Button, "rev 1").is_none());
     assert!(harness.state().state.canvas.measure.line().is_some());
-    assert!(harness.state().state.selection.secondary.is_some());
+    assert!(harness.state().state.selection.other().is_some());
 
     // 2. The measured line (the tool stays on).
     harness.key_press(Key::Escape);
     harness.run();
     assert!(harness.state().state.canvas.measure.line().is_none());
     assert!(harness.state().state.canvas.measure.active);
-    assert!(harness.state().state.selection.secondary.is_some());
+    assert!(harness.state().state.selection.other().is_some());
 
     // 3. The second selection.
     harness.key_press(Key::Escape);
     harness.run();
-    assert_eq!(harness.state().state.selection.secondary, None);
-    assert_eq!(harness.state().state.selection.primary, Some(media(0)));
+    assert_eq!(harness.state().state.selection.other().cloned(), None);
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(media(0)));
 
     // 4. The selection.
     harness.key_press(Key::Escape);
     harness.run();
-    assert_eq!(harness.state().state.selection.primary, None);
+    assert_eq!(harness.state().state.selection.primary().cloned(), None);
     assert!(has_label(&harness, "Nothing selected."));
 }
 
@@ -751,13 +754,22 @@ fn cmd_brackets_walk_the_object_history() {
 
     harness.key_press_modifiers(Modifiers::COMMAND, Key::OpenBracket);
     harness.run_steps(2);
-    assert_eq!(harness.state().state.selection.primary, Some(object(2)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(object(2))
+    );
     harness.key_press_modifiers(Modifiers::COMMAND, Key::OpenBracket);
     harness.run_steps(2);
-    assert_eq!(harness.state().state.selection.primary, Some(object(1)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(object(1))
+    );
     harness.key_press_modifiers(Modifiers::COMMAND, Key::CloseBracket);
     harness.run_steps(2);
-    assert_eq!(harness.state().state.selection.primary, Some(object(2)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(object(2))
+    );
 }
 
 /// The labels between the `FILE` header and the `REVISIONS` header of the open popover.
@@ -956,10 +968,7 @@ fn the_status_bar_keeps_the_cursor_file_info_units_and_problems_and_nothing_else
         .filter_map(|node| node.accesskit_node().label())
         .skip_while(|label| label.starts_with("PDF "))
         .collect();
-    assert_eq!(
-        buttons,
-        ["file info", "pt", "mm", "in", "px", "0 diagnostics", "Validate"]
-    );
+    assert_eq!(buttons, ["file info", "pt", "mm", "in", "px", "0 diagnostics"]);
     assert!(
         !bar.iter()
             .any(|t| t.starts_with("opened in") || t.starts_with("veraPDF"))

@@ -67,6 +67,10 @@ const DOT_X: f32 = 32.0;
 const TEXT_X: f32 = 48.0;
 const PICKER_H: f32 = 34.0;
 const TILE_H: f32 = 54.0;
+/// Space left of a tile's number and caption, and the least right of them: a caption that
+/// names what it counts ("checks passed") reaches nearly to the tile's right edge, as designed.
+const TILE_PAD_LEFT: i8 = 8;
+const TILE_PAD_RIGHT: i8 = 2;
 
 /// The standard a profile checks, shown after its name in the picker.
 pub fn standard_of(profile: &Profile) -> &'static str {
@@ -212,7 +216,7 @@ fn profile_row(ui: &mut Ui, profile: &Profile, chosen: bool) -> bool {
         ui.painter()
             .rect_filled(rect, tokens::RADIUS_SM, tokens::NEUTRAL_HOVER);
     }
-    focus::ring(ui, &response, rect, tokens::RADIUS_SM);
+    focus::row_ring(ui, &response, rect, tokens::RADIUS_SM);
     ui.painter().text(
         pos2(rect.min.x + 8.0, rect.center().y),
         Align2::LEFT_CENTER,
@@ -295,12 +299,14 @@ fn install_row(ui: &mut Ui, state: &mut AppState) {
 }
 
 fn location_row(ui: &mut Ui, state: &mut AppState) {
-    ui.label("veraPDF path:");
+    // The visible label names the field for screen readers too.
+    let label = ui.label("veraPDF path:");
     ui.add(
         TextEdit::singleline(&mut state.validation.explicit_path)
             .desired_width(ui.available_width())
             .hint_text("verapdf launcher, jar or install folder"),
-    );
+    )
+    .labelled_by(label.id);
     ui.horizontal(|ui| {
         let used = ToolButton::new(USE_LABEL).show(ui).clicked();
         let rechecked = ToolButton::new(RECHECK_LABEL).show(ui).clicked();
@@ -347,15 +353,20 @@ fn run_controls(ui: &mut Ui, state: &mut AppState) {
         return;
     }
     ui.horizontal(|ui| {
-        let enabled = state.validation.is_ready() && state.document.is_some();
-        ui.add_enabled_ui(enabled, |ui| {
+        // While veraPDF is still being looked for, a press queues the run: it starts as soon as
+        // the search finds it.
+        let usable = matches!(
+            state.validation.environment,
+            Environment::Unchecked | Environment::Checking | Environment::Known(Availability::Ready { .. })
+        );
+        ui.add_enabled_ui(usable && state.document.is_some(), |ui| {
             if ToolButton::new(VALIDATE_LABEL)
                 .icon(Icon::Validation)
                 .primary()
                 .show(ui)
                 .clicked()
             {
-                state.validate(ui.ctx());
+                state.request_validation(ui.ctx());
             }
         });
     });
@@ -395,9 +406,7 @@ fn results(ui: &mut Ui, state: &mut AppState) {
         })
         .collect();
     if groups.is_empty() {
-        ui.label(
-            RichText::new(format!("No findings match “{}”.", state.nav.filter.trim())).color(tokens::TEXT_3),
-        );
+        super::no_match_in(ui, state, "findings");
         return;
     }
     let current = state.current_finding();
@@ -478,23 +487,36 @@ struct GroupList<'a> {
     reveal: bool,
 }
 
+/// What a tile counts, under its number: `checks failed`, `rule failed`, `checks passed`. Each
+/// tile names what it counts, so none reads as a bare number.
+fn tile_caption(count: usize, one: &str, many: &str, verb: &str) -> String {
+    format!("{} {verb}", if count == 1 { one } else { many })
+}
+
 /// The three tiles: failed checks, failed rules, passed checks.
 fn counters(ui: &mut Ui, run: &ValidationRun) {
     let rules = findings::groups(run).len();
+    let failed = to_usize(run.checks_failed);
+    let passed = to_usize(run.checks_passed);
     let tiles = [
         (
-            crate::navigator::thousands(to_usize(run.checks_failed)),
-            "failed",
+            crate::navigator::thousands(failed),
+            tile_caption(failed, "check", "checks", "failed"),
             tokens::ERR,
         ),
-        (crate::navigator::thousands(rules), "rules", tokens::WARN),
         (
-            crate::navigator::thousands(to_usize(run.checks_passed)),
-            "passed",
+            crate::navigator::thousands(rules),
+            tile_caption(rules, "rule", "rules", "failed"),
+            tokens::WARN,
+        ),
+        (
+            crate::navigator::thousands(passed),
+            tile_caption(passed, "check", "checks", "passed"),
             tokens::OK,
         ),
     ];
-    let gap = 6.0;
+    // Tight gaps, so "1,284 checks passed" fits its tile on one line.
+    let gap = 4.0;
     let width = (ui.available_width() - gap * 2.0) / 3.0;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = gap;
@@ -503,17 +525,31 @@ fn counters(ui: &mut Ui, run: &ValidationRun) {
                 .fill(tokens::SURFACE_2)
                 .stroke(Stroke::new(1.0, tokens::BORDER))
                 .corner_radius(tokens::RADIUS_MD)
-                .inner_margin(Margin::symmetric(10, 6))
+                .inner_margin(Margin {
+                    left: TILE_PAD_LEFT,
+                    right: TILE_PAD_RIGHT,
+                    top: 6,
+                    bottom: 6,
+                })
                 .show(ui, |ui| {
-                    ui.set_width(width - 20.0 - 2.0);
+                    let inner = width - f32::from(TILE_PAD_LEFT + TILE_PAD_RIGHT) - 2.0;
+                    ui.set_width(inner);
                     ui.set_min_height(TILE_H - 12.0 - 2.0);
-                    ui.spacing_mut().item_spacing.y = 0.0;
-                    ui.label(RichText::new(number).font(fonts::mono_bold(18.0)).color(color));
-                    ui.label(
-                        RichText::new(caption)
-                            .font(fonts::ui(tokens::text::SMALL))
-                            .color(tokens::TEXT_3),
-                    );
+                    // A caption that names what it counts is longer than a word: it stays in its
+                    // tile, wrapping if the panel is narrow.
+                    ui.vertical(|ui| {
+                        ui.set_max_width(inner);
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        ui.label(RichText::new(number).font(fonts::mono_bold(18.0)).color(color));
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(caption)
+                                    .font(fonts::ui(tokens::text::SMALL))
+                                    .color(tokens::TEXT_3),
+                            )
+                            .wrap(),
+                        );
+                    });
                 });
         }
     });
@@ -611,6 +647,7 @@ fn group_row(ui: &mut Ui, id: Id, group: &RuleGroup, count: usize, open: bool) -
     };
     ui.painter()
         .rect_filled(rect.shrink2(vec2(1.0, 0.0)), tokens::RADIUS_MD, fill);
+    focus::row_ring(ui, &response, rect.shrink2(vec2(1.0, 0.0)), tokens::RADIUS_MD);
     let chevron = if open {
         Icon::ChevronDown
     } else {
@@ -675,6 +712,7 @@ fn node_row(
     } else if response.hovered() {
         painter.rect_filled(rect.shrink2(vec2(2.0, 0.5)), tokens::RADIUS_SM, tokens::SURFACE_2);
     }
+    focus::row_ring(ui, &response, rect.shrink2(vec2(2.0, 0.5)), tokens::RADIUS_SM);
     painter.circle_filled(pos2(rect.min.x + DOT_X, rect.center().y), 3.0, kind);
     let mut x = rect.min.x + TEXT_X;
     let galley = painter.layout_no_wrap(label, fonts::mono(tokens::mono::BODY), kind);
@@ -693,7 +731,17 @@ fn node_row(
     response.clicked()
 }
 
-/// `+4 more p2-p5`: lists the rest of the nodes when clicked.
+/// The more row's text: how many nodes are hidden and the pages they are on (zero-based), a range
+/// with an en dash.
+fn more_text(hidden: usize, pages: &[u32]) -> String {
+    match (pages.iter().min(), pages.iter().max()) {
+        (Some(low), Some(high)) if low == high => format!("+{hidden} more p{}", low + 1),
+        (Some(low), Some(high)) => format!("+{hidden} more p{}–p{}", low + 1, high + 1),
+        _ => format!("+{hidden} more"),
+    }
+}
+
+/// `+4 more p2–p5`: lists the rest of the nodes when clicked.
 fn more_row(ui: &mut Ui, id: Id, list: &GroupList<'_>, hidden: usize) -> bool {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), NODE_H), Sense::hover());
     let response = ui
@@ -705,16 +753,13 @@ fn more_row(ui: &mut Ui, id: Id, list: &GroupList<'_>, hidden: usize) -> bool {
         .skip(list.shown.len() - hidden)
         .filter_map(|index| findings::page_of(list.doc, &list.run.findings[usize_from_u32(*index)]))
         .collect();
-    let text = match (pages.iter().min(), pages.iter().max()) {
-        (Some(low), Some(high)) if low == high => format!("+{hidden} more p{}", low + 1),
-        (Some(low), Some(high)) => format!("+{hidden} more p{}-p{}", low + 1, high + 1),
-        _ => format!("+{hidden} more"),
-    };
+    let text = more_text(hidden, &pages);
     response.widget_info(|| WidgetInfo::labeled(Role::Button, true, text.clone()));
     if response.hovered() {
         ui.painter()
             .rect_filled(rect.shrink2(vec2(2.0, 0.5)), tokens::RADIUS_SM, tokens::SURFACE_2);
     }
+    focus::row_ring(ui, &response, rect.shrink2(vec2(2.0, 0.5)), tokens::RADIUS_SM);
     ui.painter().circle_filled(
         pos2(rect.min.x + DOT_X, rect.center().y),
         3.0,
@@ -735,6 +780,25 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    #[test]
+    fn each_tile_names_what_it_counts() {
+        assert_eq!(tile_caption(9, "check", "checks", "failed"), "checks failed");
+        assert_eq!(tile_caption(3, "rule", "rules", "failed"), "rules failed");
+        assert_eq!(tile_caption(1_284, "check", "checks", "passed"), "checks passed");
+        assert_eq!(tile_caption(1, "rule", "rules", "failed"), "rule failed");
+        // Smoke: no tile is a bare noun any more.
+        assert_ne!(tile_caption(3, "rule", "rules", "failed"), "rules");
+    }
+
+    #[test]
+    fn the_more_row_names_a_page_range_with_an_en_dash() {
+        assert_eq!(more_text(4, &[4, 1, 2]), "+4 more p2–p5");
+        assert_eq!(more_text(2, &[1, 1]), "+2 more p2");
+        assert_eq!(more_text(3, &[]), "+3 more");
+        // Smoke: never a hyphen between the pages.
+        assert!(!more_text(4, &[1, 4]).contains('-'));
+    }
 
     #[test]
     fn the_picker_names_the_standard_after_the_profile() {

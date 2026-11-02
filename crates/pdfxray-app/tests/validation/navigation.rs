@@ -9,7 +9,7 @@ fn next_and_previous_walk_the_findings_in_the_lists_order_and_wrap() {
     let fake = FakeValidator::ready();
     let mut harness = app_with(&fake);
     open_fixture(&mut harness, "orphan-mcid");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
     the(&harness, Region::Navigator, Role::Button, "Font /F1").click();
     harness.run();
     let shown = |harness: &Harness<'_, PdfxrayApp>| harness.state().state.current_finding();
@@ -24,7 +24,7 @@ fn next_and_previous_walk_the_findings_in_the_lists_order_and_wrap() {
     // Report order is list order here; after the last one it starts over.
     assert_eq!(seen, [Some(1), Some(2), Some(3), Some(0)]);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Resource {
             owner: pdfxray_core::ObjRef::new(3, 0),
             kind: pdfxray_core::ResKind::Font,
@@ -37,7 +37,7 @@ fn next_and_previous_walk_the_findings_in_the_lists_order_and_wrap() {
     harness.run();
     assert_eq!(shown(&harness), Some(3));
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::MarkedContent { page: 0, mcid: 1 })
     );
 
@@ -62,10 +62,10 @@ fn next_and_previous_walk_the_findings_in_the_lists_order_and_wrap() {
 
     // On the Objects entry the same keys are the object history.
     click_rail(&mut harness, "Objects");
-    let before = harness.state().state.selection.primary.clone();
+    let before = harness.state().state.selection.primary().cloned();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::CloseBracket);
     harness.run();
-    assert_eq!(harness.state().state.selection.primary, before);
+    assert_eq!(harness.state().state.selection.primary().cloned(), before);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn a_rule_with_more_nodes_than_fit_folds_into_more_and_shows_the_page_of_the_res
     fake.run_gate.open();
     let mut harness = app_with(&Arc::new(fake));
     open_fixture(&mut harness, "struct-rich");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
 
     let list = findings_list(&harness);
     assert_eq!(
@@ -97,7 +97,7 @@ fn a_rule_with_more_nodes_than_fit_folds_into_more_and_shows_the_page_of_the_res
     let labels = labels_in(&harness, Region::Navigator);
     assert_eq!(
         labels[labels.len() - 6..],
-        ["7", "failed", "3", "rules", "300", "passed"]
+        ["7", "checks failed", "3", "rules failed", "300", "checks passed"]
     );
 
     // Opening the rest lists the other two, on page 2.
@@ -112,7 +112,7 @@ fn a_rule_with_more_nodes_than_fit_folds_into_more_and_shows_the_page_of_the_res
     harness.run();
     assert_eq!(harness.state().state.canvas.page, 1);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::StructElem(pdfxray_core::ObjRef::new(23, 0)))
     );
     wait_for_render(&mut harness);
@@ -154,7 +154,10 @@ fn a_finding_on_another_page_brings_that_page_to_the_canvas() {
     the(&harness, Region::Navigator, Role::Button, "Page 3 p3").click();
     harness.run();
 
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Page(2)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Page(2))
+    );
     assert_eq!(harness.state().state.canvas.page, 2);
     assert!(has_label(&harness, "/ 3"));
     // The page is rendered in the background; its image is there once it arrives.
@@ -179,7 +182,7 @@ fn a_finding_without_a_node_selects_the_finding_itself() {
     // The failed check list only keeps resolved-or-not findings in report order; the second
     // finding is the one that lost its target.
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Validation(1))
     );
 }

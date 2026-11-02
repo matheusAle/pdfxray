@@ -37,7 +37,7 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
 
 /// What to say when there is nothing to show.
 fn placeholder(ui: &mut Ui, state: &AppState) {
-    let text = match (&state.selection.primary, state.viewed_revision()) {
+    let text = match (state.selection.primary(), state.viewed_revision()) {
         (Some(pdfxray_core::NodeId::Object(r)), Some(rev)) => {
             format!("{r} does not exist in revision {}.", rev + 1)
         }

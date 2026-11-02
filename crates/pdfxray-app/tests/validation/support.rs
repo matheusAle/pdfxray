@@ -53,14 +53,6 @@ pub(crate) fn labels_in(harness: &Harness<'_, PdfxrayApp>, region: Region) -> Ve
     texts_in(harness, region, Role::Label)
 }
 
-/// Presses the Validate button of the title bar and waits for the report.
-pub(crate) fn title_bar_validate(harness: &mut Harness<'static, PdfxrayApp>) {
-    the(harness, Region::Chrome, Role::Button, "Validate").click();
-    wait_until(harness, "the validation result", |s| {
-        s.document.as_ref().unwrap().doc.validation().is_some() && !s.validation.is_running()
-    });
-}
-
 /// Rests the pointer on the chip of the "On this page" card, which opens it.
 pub(crate) fn open_page_card(harness: &mut Harness<'_, PdfxrayApp>) {
     the(harness, Region::Center, Role::Label, "On this page").hover();

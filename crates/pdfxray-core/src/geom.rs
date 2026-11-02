@@ -65,6 +65,11 @@ impl Rect {
     pub fn contains_rect(&self, other: &Rect) -> bool {
         other.x0 >= self.x0 && other.y0 >= self.y0 && other.x1 <= self.x1 && other.y1 <= self.y1
     }
+
+    /// True when `self` and `other` share at least one point; touching edges count.
+    pub fn intersects(&self, other: &Rect) -> bool {
+        self.x0 <= other.x1 && other.x0 <= self.x1 && self.y0 <= other.y1 && other.y0 <= self.y1
+    }
 }
 
 #[cfg(test)]
@@ -97,5 +102,17 @@ mod tests {
         assert!(!r.contains(Point::new(10.1, 5.0)));
         assert!(r.contains_rect(&Rect::new(1.0, 1.0, 10.0, 10.0)));
         assert!(!r.contains_rect(&Rect::new(-1.0, 1.0, 5.0, 5.0)));
+    }
+
+    #[test]
+    fn rectangles_that_share_an_edge_intersect_and_apart_ones_do_not() {
+        let r = Rect::new(0.0, 0.0, 10.0, 10.0);
+
+        assert!(r.intersects(&Rect::new(10.0, 10.0, 20.0, 20.0)));
+        assert!(r.intersects(&Rect::new(-5.0, 2.0, 5.0, 3.0)));
+        assert!(!r.intersects(&Rect::new(10.1, 0.0, 20.0, 10.0)));
+        assert!(!r.intersects(&Rect::new(0.0, -3.0, 10.0, -0.5)));
+        // Smoke: a rectangle inside another meets it, both ways round.
+        assert!(r.intersects(&Rect::new(2.0, 2.0, 3.0, 3.0)) && Rect::new(2.0, 2.0, 3.0, 3.0).intersects(&r));
     }
 }

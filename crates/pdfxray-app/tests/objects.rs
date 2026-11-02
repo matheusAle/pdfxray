@@ -84,7 +84,7 @@ fn a_content_stream_shows_its_instructions_with_a_plain_language_note_each() {
 
     assert!(center.contains(&"4 0 obj".to_owned()), "{center:?}");
     assert!(
-        center.contains(&"Page 1's drawing instructions · 67 operators".to_owned()),
+        center.contains(&"Page 1’s drawing instructions · 67 operators".to_owned()),
         "{center:?}"
     );
     assert!(
@@ -154,23 +154,23 @@ fn clicking_a_reference_navigates_and_back_and_forward_walk_the_history() {
     // The page refers to its content stream; the arrow is on the line of /Contents.
     the(&harness, Region::Center, Role::Link, "4 0 R").click();
     harness.run_steps(3);
-    assert_eq!(harness.state().state.selection.primary, Some(obj(4)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(obj(4)));
     assert_eq!(harness.state().state.history.visited(), [obj(3), obj(4)]);
     assert!(center(&harness).contains(&"4 0 obj".to_owned()));
 
     // Back, with the arrow of the header.
     the(&harness, Region::Center, Role::Button, "Back").click();
     harness.run_steps(3);
-    assert_eq!(harness.state().state.selection.primary, Some(obj(3)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(obj(3)));
     assert!(center(&harness).contains(&"3 0 obj".to_owned()));
     // Forward, with the key.
     harness.key_press_modifiers(Modifiers::COMMAND, Key::CloseBracket);
     harness.run_steps(3);
-    assert_eq!(harness.state().state.selection.primary, Some(obj(4)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(obj(4)));
     // Back, with the key; the history keeps its order.
     harness.key_press_modifiers(Modifiers::COMMAND, Key::OpenBracket);
     harness.run_steps(3);
-    assert_eq!(harness.state().state.selection.primary, Some(obj(3)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(obj(3)));
     assert_eq!(harness.state().state.history.visited(), [obj(3), obj(4)]);
 }
 
@@ -287,7 +287,7 @@ fn references_list_who_uses_the_object_and_the_resources_it_uses() {
     // A reference in the drawer navigates, and the history follows.
     the(&harness, Region::Drawer, Role::Link, "3 0 R").click();
     harness.run_steps(3);
-    assert_eq!(harness.state().state.selection.primary, Some(obj(3)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(obj(3)));
     assert_eq!(harness.state().state.history.visited(), [obj(4), obj(3)]);
 }
 
@@ -426,7 +426,7 @@ fn the_inspector_describes_the_object_and_right_click_on_its_title_opens_the_raw
     assert_eq!(harness.state().state.objects.highlight, None);
     // Smoke: the object stays selected.
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Object(ObjRef::new(4, 0)))
     );
 }
@@ -524,7 +524,7 @@ fn the_resources_of_the_page_are_listed_by_category_and_open_their_object() {
     // A font row opens the font object: /F1 of page 1 is 9 0 obj.
     the(&harness, Region::Navigator, Role::Button, "/F1").click();
     harness.run_steps(3);
-    assert_eq!(harness.state().state.selection.primary, Some(obj(9)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(obj(9)));
     let shown = center(&harness);
     assert!(shown.contains(&"9 0 obj".to_owned()), "{shown:?}");
     assert!(shown.contains(&"Font · Helvetica".to_owned()), "{shown:?}");
@@ -569,12 +569,15 @@ fn the_filter_narrows_every_section_and_the_document_rows_open_the_catalog_and_t
     harness.run_steps(3);
     the(&harness, Region::Navigator, Role::Button, "/Catalog").click();
     harness.run_steps(3);
-    assert_eq!(harness.state().state.selection.primary, Some(obj(1)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(obj(1)));
     assert!(center(&harness).contains(&"1 0 obj".to_owned()));
     assert_eq!(title_of_inspector(&harness), "Catalog");
     the(&harness, Region::Navigator, Role::Button, "trailer").click();
     harness.run_steps(3);
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Trailer));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Trailer)
+    );
     let shown = center(&harness);
     assert!(shown.contains(&"Trailer".to_owned()), "{shown:?}");
     assert!(shown.contains(&"/Size ".to_owned()), "{shown:?}");
@@ -641,7 +644,7 @@ fn right_click_on_an_object_row_lists_the_actions_and_copy_id_copies_its_id() {
     assert_eq!(copied, Some("obj:3:0".to_owned()));
     // Smoke: the menu is for the row that was clicked, not for the selected object.
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Object(ObjRef::new(4, 0)))
     );
 }
@@ -677,7 +680,7 @@ fn stream_bytes_opens_the_raw_view_with_the_streams_data_marked_and_only_streams
         object.start < range.start && range.end <= object.end,
         "{object:?} {range:?}"
     );
-    assert_eq!(harness.state().state.selection.primary, Some(obj(4)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(obj(4)));
     // Smoke: the range really is the bytes between `stream` and `endstream`.
     let data = &doc(&harness).bytes()[range];
     assert!(data.starts_with(b"BT"), "{:?}", String::from_utf8_lossy(data));

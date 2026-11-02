@@ -79,7 +79,7 @@ const ROWS: &[Row] = &[
         "5",
         None,
         "File does not declare PDF/UA",
-        "Checkers and assistive software look for a PDF/UA declaration in the document's XMP metadata to know which rules the author promised to follow.",
+        "Checkers and assistive software look for a PDF/UA declaration in the document’s XMP metadata to know which rules the author promised to follow.",
         "Add the PDF/UA identification (pdfuaid:part = 1) to the XMP metadata, or export again with the PDF/UA option on.",
     ),
     // ---- 7.1 general ----
@@ -97,7 +97,7 @@ const ROWS: &[Row] = &[
         Some(1),
         "Artifact inside tagged content",
         "Decoration that is marked as an artifact but sits inside tagged content confuses the reading order: assistive technology cannot tell whether to read it.",
-        "Close the tagged content before the decoration, or tag the decoration's text as real content if it should be read.",
+        "Close the tagged content before the decoration, or tag the decoration’s text as real content if it should be read.",
     ),
     row(
         Ua1,
@@ -128,7 +128,7 @@ const ROWS: &[Row] = &[
         "7.1",
         Some(8),
         "Document has no XMP metadata",
-        "The metadata stream carries the document's identification, such as its title and the PDF/UA declaration. Checkers and assistive software read it to know what they are dealing with.",
+        "The metadata stream carries the document’s identification, such as its title and the PDF/UA declaration. Checkers and assistive software read it to know what they are dealing with.",
         "Add an XMP metadata stream to the catalog (/Metadata with /Type /Metadata and /Subtype /XML); most export tools do this when you fill in the document properties.",
     ),
     row(
@@ -238,7 +238,7 @@ const ROWS: &[Row] = &[
         "7.18.1",
         Some(2),
         "Annotation has no description",
-        "A screen reader reads an annotation's description. With none, a comment or highlight is announced as an unnamed object.",
+        "A screen reader reads an annotation’s description. With none, a comment or highlight is announced as an unnamed object.",
         "Add /Contents to the annotation or an /Alt to its structure element.",
     ),
     row(
@@ -247,7 +247,7 @@ const ROWS: &[Row] = &[
         Some(1),
         "Link is not tagged as a Link",
         "Screen readers list the links on a page only when the link annotation sits inside a Link structure element.",
-        "Put the link's annotation (and the text it covers) inside a Link element in the structure tree.",
+        "Put the link’s annotation (and the text it covers) inside a Link element in the structure tree.",
     ),
     // ---- 7.20 XObjects ----
     row(
@@ -256,7 +256,7 @@ const ROWS: &[Row] = &[
         Some(2),
         "Form content is not tied to the structure correctly",
         "Content that comes from a reusable form must be reached from the structure tree exactly once, or it is read twice or not at all.",
-        "Reference the form's marked content from one structure element, and tag or hide the repeats.",
+        "Reference the form’s marked content from one structure element, and tag or hide the repeats.",
     ),
     // ---- 7.21 fonts ----
     row(
@@ -272,7 +272,7 @@ const ROWS: &[Row] = &[
         "7.21.4.1",
         Some(1),
         "Font is not embedded",
-        "A font that is not embedded is replaced by another one on the reader's computer, so the text can change shape, spacing or even characters.",
+        "A font that is not embedded is replaced by another one on the reader’s computer, so the text can change shape, spacing or even characters.",
         "Re-export with 'embed all fonts' on, or embed the font in a PDF editor.",
     ),
     row(
@@ -329,8 +329,8 @@ const ROWS: &[Row] = &[
         "8.2.5.12",
         Some(1),
         "Unnumbered heading (H) is used",
-        "PDF 2.0 wants numbered headings so assistive technology knows each heading's level. An unnumbered H gives no outline position.",
-        "Replace H with H1–H6 matching the heading's level.",
+        "PDF 2.0 wants numbered headings so assistive technology knows each heading’s level. An unnumbered H gives no outline position.",
+        "Replace H with H1–H6 matching the heading’s level.",
     ),
     row(
         Ua2,
@@ -346,7 +346,7 @@ const ROWS: &[Row] = &[
         None,
         "List structure is inconsistent",
         "Lists are announced with their item count and numbering. Inconsistent list attributes change what a reader hears.",
-        "Make the list's numbering attribute match what is shown, and use L, LI, Lbl and LBody correctly.",
+        "Make the list’s numbering attribute match what is shown, and use L, LI, Lbl and LBody correctly.",
     ),
     row(
         Ua2,

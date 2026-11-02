@@ -393,7 +393,7 @@ fn shift_click_in_the_hit_stack_compares_two_boxes() {
         .click();
     harness.run();
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::PageBox {
             page: 0,
             kind: BoxKind::Art
@@ -405,7 +405,7 @@ fn shift_click_in_the_hit_stack_compares_two_boxes() {
 
     // The first selection stays; the MediaBox is the second one.
     assert_eq!(
-        harness.state().state.selection.secondary,
+        harness.state().state.selection.other().cloned(),
         Some(NodeId::PageBox {
             page: 0,
             kind: BoxKind::Media
@@ -618,8 +618,8 @@ fn shift_clicking_a_second_node_shows_the_gap_the_alignment_and_the_print_boxes(
     let origin = page_origin(&harness, 0);
     shift_click_page(&mut harness, origin, 190.0, 140.0);
 
-    assert_eq!(harness.state().state.selection.primary, Some(op(49)));
-    assert_eq!(harness.state().state.selection.secondary, Some(op(38)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(op(49)));
+    assert_eq!(harness.state().state.selection.other().cloned(), Some(op(38)));
     let inspector = texts_in(&harness, Region::Inspector, Role::Label);
     let from = inspector.iter().position(|t| t == "2 selected · gap").unwrap();
     assert_eq!(
@@ -663,7 +663,7 @@ fn shift_clicking_a_second_node_shows_the_gap_the_alignment_and_the_print_boxes(
 
     // Shift-clicking the second node again removes it: back to the single-node inspector.
     shift_click_page(&mut harness, origin, 190.0, 140.0);
-    assert_eq!(harness.state().state.selection.secondary, None);
+    assert_eq!(harness.state().state.selection.other().cloned(), None);
     assert!(!has_label(&harness, "2 selected · gap"));
 }
 

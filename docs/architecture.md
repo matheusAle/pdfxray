@@ -20,8 +20,8 @@ pdfxray-fixtures (tests only)        xtask (dev tasks)
 | Crate | Responsibility |
 |-------|----------------|
 | `pdfxray-raw` | Lossless lexer and object parser with byte spans; xref tables/streams, hybrid files, object streams, `/Prev` revision chain; stream filters; 40+ raw diagnostics. Never repairs. |
-| `pdfxray-core` | `Document`: object index, page tree with box provenance, content capture, structure tree, resources, diagnostics, veraPDF mapping. Exposes `info / tree / node / hit / bbox / breadcrumb / marked_content / captured`. |
-| `pdfxray-render` | hayro rasterisation, page↔pixel transform, overlays, X-ray, clip/alpha views, isolate/hide/stepper filtering, optional PDFium reference renderer and image diff. |
+| `pdfxray-core` | `Document`: object index, page tree with box provenance, content capture, structure tree, resources, diagnostics, veraPDF mapping. Exposes `info / tree / node / hit / hit_rect / bbox / breadcrumb / marked_content / captured`. |
+| `pdfxray-render` | hayro rasterisation, page↔pixel transform, overlays, X-ray, clip/alpha views, isolate/hide (of one node or a set)/stepper filtering, optional PDFium reference renderer and image diff. |
 | `pdfxray-verapdf` | Finds or installs veraPDF (pinned, SHA-256 checked), runs it as a separate Java process, parses its XML report, parses context paths into locators. |
 | `pdfxray-cli` | `pdfxray` binary: JSON over the core API. |
 | `pdfxray-app` | egui desktop app. |

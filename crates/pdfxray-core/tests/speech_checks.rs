@@ -14,7 +14,7 @@ use pdfxray_fixtures::{PdfVersion, PdfWriter, Trailer};
 use pretty_assertions::assert_eq;
 
 /// The codes this milestone adds.
-const CODES: [&str; 10] = [
+const CODES: [&str; 11] = [
     "alt-hides-content",
     "figure-alt-missing",
     "alt-and-actualtext",
@@ -24,6 +24,7 @@ const CODES: [&str; 10] = [
     "table-header-missing",
     "table-header-unresolved",
     "table-headers-id-missing",
+    "table-header-scope-conflict",
     "table-irregular",
 ];
 
@@ -100,7 +101,8 @@ fn defects_doc() -> Document {
         node(32, 31, "P", "", "15"),
         // A role that needs two hops.
         node(33, 7, "Hdg", "", "16"),
-        // A data cell no header reaches: its row's header is a column header.
+        // A data cell no header reaches: its row's header is a column header, which its place in
+        // the first column of a row of data contradicts.
         node(34, 7, "Table", "", "[35 0 R]"),
         node(35, 34, "TR", "", "[36 0 R 37 0 R]"),
         node(36, 35, "TH", "/A << /O /Table /Scope /Column >>", "17"),
@@ -167,6 +169,7 @@ fn every_check_fires_once_with_its_severity_on_the_element_it_is_about() {
             ("table-header-missing", Severity::Warning, Some(16)),
             ("table-irregular", Severity::Warning, Some(23)),
             ("table-header-unresolved", Severity::Info, Some(37)),
+            ("table-header-scope-conflict", Severity::Warning, Some(36)),
             ("table-headers-id-missing", Severity::Warning, Some(40)),
         ]
     );
@@ -200,6 +203,7 @@ fn the_messages_name_what_is_wrong_in_figures() {
             "16 0 R is a table of 2 rows and 2 columns with no header cell (TH)",
             "23 0 R is 3 columns wide, but row 2 covers 2",
             "37 0 R (row 1, column 2) has no header cell",
+            "36 0 R has /Scope /Column, but sits in the first column, where it reads as a row header",
             "40 0 R lists /Headers ID (nope), which no cell of its table has",
         ]
     );
@@ -243,7 +247,7 @@ fn the_checks_show_as_badges_in_the_tags_tree_and_as_rows_of_the_diagnostics_tre
         .map(|n| n.label.clone())
         .filter(|label| CODES.contains(&label.as_str()))
         .collect();
-    assert_eq!(rows.len(), 11);
+    assert_eq!(rows.len(), 12);
     // Smoke: the Inspector of the element lists its diagnostic.
     let props = doc.node(&elem(8)).unwrap();
     assert_eq!(props.get("Diagnostics", "figure-alt-missing").is_some(), true);
@@ -266,7 +270,7 @@ fn every_check_explains_itself_with_the_standard_it_comes_from() {
         })
         .collect();
 
-    assert_eq!(explained.len(), 11);
+    assert_eq!(explained.len(), 12);
     assert_eq!(explained.iter().filter(|(_, cites)| !cites).count(), 0);
     for code in CODES {
         let text = explain::diagnostic(code).unwrap();
@@ -294,6 +298,7 @@ fn the_speech_fixtures_raise_exactly_the_checks_they_were_made_for() {
         "table-simple-pdf17",
         "table-scope-pdf2",
         "table-headers-ids",
+        "table-scope-conflict",
         "reading-order",
     ]
     .into_iter()
@@ -320,6 +325,10 @@ fn the_speech_fixtures_raise_exactly_the_checks_they_were_made_for() {
             (
                 "table-headers-ids",
                 vec![("table-headers-id-missing", Severity::Warning, Some(22))]
+            ),
+            (
+                "table-scope-conflict",
+                vec![("table-header-scope-conflict", Severity::Warning, Some(20))]
             ),
             ("reading-order", vec![]),
         ]

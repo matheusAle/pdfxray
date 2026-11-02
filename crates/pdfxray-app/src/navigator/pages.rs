@@ -13,7 +13,7 @@ use pdfxray_core::{BoxKind, BoxSource, NodeId, PageBox, PageInfo, PageIx, num};
 
 use super::select_with_modifiers;
 use crate::center::canvas::overlay::box_color;
-use crate::components::{Icon, PropRow, context_menu, tooltip};
+use crate::components::{Icon, PropRow, context_menu, focus, tooltip};
 use crate::state::AppState;
 use crate::theme::{fonts, tokens};
 use crate::units::{Lengths, Unit};
@@ -247,9 +247,7 @@ fn visible_slots(min: f32, max: f32, count: usize) -> (usize, usize) {
 
 fn strip(ui: &mut Ui, state: &mut AppState, matches: &[PageIx]) {
     if matches.is_empty() {
-        ui.label(
-            RichText::new(format!("No pages match “{}”.", state.nav.filter.trim())).color(tokens::TEXT_3),
-        );
+        super::no_match_in(ui, state, "pages");
         return;
     }
     let current = matches.iter().position(|page| *page == state.canvas.page);
@@ -336,6 +334,7 @@ fn thumbnail(ui: &mut Ui, state: &mut AppState, page: PageIx, slot: Rect) {
         (Stroke::new(1.0, tokens::BORDER_STRONG), StrokeKind::Outside)
     };
     painter.rect_stroke(body, 2.0, stroke, kind);
+    focus::ring(ui, &response, slot, tokens::RADIUS_SM);
 
     let caption = if rotate == 0 {
         number.to_string()
@@ -377,7 +376,7 @@ const EYE: f32 = 26.0;
 fn box_row(ui: &mut Ui, state: &mut AppState, page: PageIx, page_box: &PageBox, lengths: &Lengths) {
     let kind = page_box.kind;
     let id = NodeId::PageBox { page, kind };
-    let selected = state.selection.primary.as_ref() == Some(&id);
+    let selected = state.selection.primary() == Some(&id);
     let shown = state.canvas.box_shown(kind);
     let defaulted = matches!(page_box.source, BoxSource::Default(_));
     let color = box_color(kind);
@@ -409,6 +408,8 @@ fn box_row(ui: &mut Ui, state: &mut AppState, page: PageIx, page_box: &PageBox, 
         ui.painter()
             .rect_filled(rect.shrink2(vec2(0.0, 1.0)), tokens::RADIUS_MD, tokens::SURFACE_2);
     }
+    focus::row_ring(ui, &row, rect.shrink2(vec2(0.0, 1.0)), tokens::RADIUS_MD);
+    focus::ring(ui, &eye, eye_rect, tokens::RADIUS_SM);
     let name_ink = if defaulted { tokens::TEXT_3 } else { tokens::TEXT };
     let text_rect = Rect::from_min_max(
         pos2(rect.min.x + 32.0, rect.min.y + 5.0),
@@ -517,6 +518,10 @@ fn transform(ui: &mut Ui, info: &PageInfo, lengths: &Lengths) {
         );
         PropRow::new("Display size", &shown).copy_text(&size).show(ui);
     });
+    // The value menu of these rows has no node actions: only the copy lines.
+    if let Some(target) = crate::components::prop_row::take_context(ui.ctx()) {
+        context_menu::attach_value(&target, None);
+    }
 }
 
 #[cfg(test)]

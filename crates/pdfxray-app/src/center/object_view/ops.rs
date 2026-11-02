@@ -8,7 +8,7 @@ use egui::{
 };
 
 use super::put;
-use crate::components::switch;
+use crate::components::{focus, switch};
 use crate::object_facts::{OpLine, TextBody, thousands};
 use crate::state::AppState;
 use crate::theme::{fonts, tokens};
@@ -157,6 +157,7 @@ fn op_row(ui: &mut Ui, line: &OpLine, explain: bool, selected: bool) -> bool {
     } else if response.hovered() {
         ui.painter().rect_filled(rect, 0.0, tokens::SURFACE_2);
     }
+    focus::row_ring(ui, &response, rect, tokens::RADIUS_SM);
     let number = Rect::from_min_size(rect.min + vec2(10.0, 0.0), vec2(32.0, rect.height()));
     ui.scope_builder(
         UiBuilder::new()

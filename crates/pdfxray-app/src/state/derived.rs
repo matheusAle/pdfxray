@@ -212,6 +212,7 @@ pub(crate) struct Derived {
     speech: HashMap<SpeechPreset, Arc<SpeechData>>,
     speech_pages: HashMap<(PageIx, SpeechPreset), Arc<ReadingOrder>>,
     tables: HashMap<NodeId, Option<Arc<TableData>>>,
+    page_tables: HashMap<PageIx, Arc<[NodeId]>>,
 }
 
 impl Derived {
@@ -225,6 +226,7 @@ impl Derived {
         self.speech.clear();
         self.speech_pages.clear();
         self.tables.clear();
+        self.page_tables.clear();
     }
 
     pub(crate) fn decoded_len(&mut self, doc: &Document, stream: ObjRef) -> Option<usize> {
@@ -300,6 +302,15 @@ impl Derived {
             .clone()
     }
 
+    /// The `Table` elements with content on `page`, read once.
+    pub(crate) fn page_tables(&mut self, doc: &Document, page: PageIx) -> Arc<[NodeId]> {
+        Arc::clone(
+            self.page_tables
+                .entry(page)
+                .or_insert_with(|| doc.tables(page).into()),
+        )
+    }
+
     pub(crate) fn comparison(&mut self, doc: &Document, page: PageIx) -> OrderComparison {
         self.comparisons
             .entry(page)
@@ -350,6 +361,17 @@ impl AppState {
     pub fn order_comparison(&mut self, page: PageIx) -> Option<OrderComparison> {
         let doc = &self.document.as_ref()?.doc;
         Some(self.derived.comparison(doc, page))
+    }
+
+    /// The tables with content on `page`, each with its grid and the text of its cells; empty
+    /// without a document. Read once per page.
+    pub fn tables_on(&mut self, page: PageIx) -> Vec<Arc<TableData>> {
+        let Some(loaded) = self.document.as_ref() else {
+            return Vec::new();
+        };
+        let doc = &loaded.doc;
+        let ids = self.derived.page_tables(doc, page);
+        ids.iter().filter_map(|id| self.derived.table(doc, id)).collect()
     }
 
     /// The structure tree indexed; `None` without a document.

@@ -10,11 +10,11 @@
 | **Artifacts** | Artifact sequences per page with `/Type` and `/Subtype`. |
 | **Resources** | Fonts, images, forms, colour spaces, patterns, shadings and graphics states per page or form, with usage counts and an "unused" badge. |
 | **Objects** | Trailer, revisions and every indirect object; the toggle switches to a Pages view with all five boxes. Images, fonts, forms, colour spaces, shadings, patterns and pages show a picture of themselves (see [Object previews](#object-previews)). |
-| **Canvas** | Every page in one vertical scroll. The page that fills most of the view is the *current* page (page field, Content tree, Operators, stepper, isolation follow it); clicking a page also makes it current. The page arrows and field scroll to a page. Fit fits the largest page. Click to select what is under the cursor. |
-| **Inspector** | Breadcrumb (long paths fold into "…"), a summary strip, the selection's problem first, then its properties; default values fold into "+ n default values" and sections that do not matter in the current view start collapsed. Blue values are links. Right-click the title or a value for actions (Object, Raw bytes, Copy id, Copy JSON). |
+| **Canvas** | Every page in one vertical scroll. The page that fills most of the view is the *current* page (page field, Content tree, Operators, stepper, isolation follow it); clicking a page also makes it current. While Paint order is on, scrolling leaves the current page and the step alone. The page arrows and field scroll to a page. Fit fits the largest page. ⌘ + scroll or a pinch zooms smoothly at the pointer: what is under it stays under it. The zoom buttons, ⌘=, ⌘− and ⌘0 zoom at the centre of the view. Click to select what is under the cursor. |
+| **Inspector** | Breadcrumb (long paths fold into "…"), a summary strip, the selection's problem first, then its properties; default values fold into "+ n default values" and sections that do not matter in the current view start collapsed. Blue values are links. Right-click the title for actions (Object, Raw bytes, Copy id, Copy JSON); a value has its own menu first (see [Copying values](#copying-values)). Long arrays and strings wrap and fold (see [Long values](#long-values)). |
 | **Diagnostics** | Problems found while reading the file, with severity. |
 | **Drawer** | A 34 pt strip of tabs until it is needed: a click on the page opens the Hit stack, a finished validation opens Validation, a tab click opens that tab (click the active tab to fold it). It starts open in Content, Objects, Validation, Paint order and for damaged files. |
-| **Hit stack** | Everything under the last click, most specific first. Shift-click adds a second selection for comparison. |
+| **Hit stack** | Everything under the last click, most specific first. Shift-click adds to the selection (two make the comparison). |
 | **Speech** (`⌘5`) | What a screen reader would announce, in order, for a chosen reader: Structure (spec), Acrobat (NVDA/JAWS), Firefox or Chrome/Edge. The readers are labelled approximations (their rules and sources are in the tooltip); "Show skipped" lists artifacts, Private content and content hidden by alternate text, with the reason. |
 | **Validation** | veraPDF results mapped onto the nodes they concern. |
 | **Status bar** | Cursor, "file info" (hover: counts, open time, veraPDF), units, diagnostics. |
@@ -26,6 +26,50 @@ change its height.
 Tree badges mark problems only: a red dot for a validation finding, a warning mark and a short
 word (`Alt`, `order`, `header`) for a diagnostic.
 
+The filter at the top of the navigator narrows the list as you type (`⌘F` puts the cursor in it).
+When nothing matches, the list says so (`No rows match “…”.`) and offers **Clear filter**, which
+brings the whole list back. A file without a structure tree says so in Tags and points to
+Content, which lists what each page draws. If a recent file was moved, opening it says where it
+was and to find it again with **Open file…** (`⌘O`).
+
+`Tab` moves through the controls. Every control shows the same focus ring: a 2 px accent line
+standing 2 px off it, so on a selected item (the current crumb, a selected cell) the selection's
+1 px outline and the ring stay two lines. Full-width rows (tree, property and drawer rows, menu
+lines) draw the same ring 2 px inside their edge. On the page, the ring of a tag chip or a badge
+has a dark halo around it so it reads on white. The ring only appears from the keyboard, never
+after a click. The page field and the filter are named for screen readers (“Page number”,
+“Filter”).
+
+### Copying values
+
+Every property row of the inspector is a `Tab` stop. The focused row looks like a hovered one,
+with its copy icon, plus the ring:
+
+| Key | Does |
+|-----|------|
+| `⌘C` | Copies the value, all of it (a folded array is copied whole). |
+| `⇧⌘C` | Copies the key and the value: `Key: value`. |
+| `Enter` | Follows a link value (blue), like a click on it. |
+| `⇧F10`, the context-menu key, or a right-click | Opens the value menu. |
+
+The value menu lists **Copy value** `⌘C`, **Copy key and value** `⇧⌘C` and **Follow link** `↩`
+(dimmed when the value is not a link); in the inspector the selection's actions (Object, Copy id,
+Copy JSON…) follow under a line. Opened from the keyboard, its first line has the focus; `Esc`
+closes it. With the pointer, the copy icon still shows only on the hovered row.
+
+After a copy, a toast at the foot of the panel says **✓ Copied** and what was copied, for 1.6 s;
+VoiceOver announces it.
+
+### Long values
+
+A value never runs off the right edge. An array wraps at the column width with its lines hanging
+under its first item, after `[`; a line never splits a reference such as `12 0 R`. Literal
+strings `( )` wrap between words and hex strings `< >` anywhere. Past three lines the value
+folds behind a **⌄ 194 more values** button (characters for a string, bytes for a hex string);
+the closing bracket and a quiet count such as *224 numbers* stay visible after it, so the end of
+the value is never hidden. `Enter` on the button, or a click, unfolds it in place. In the object
+view it stays one numbered line. This applies in the inspector and in the decoded object view.
+
 ## Selecting things
 
 A click selects the smallest painted item under the cursor (a glyph, a path, an image). A small
@@ -35,6 +79,37 @@ breadcrumb climbs from it through its operator, marked content and structure ele
 document. The **Pick** menu of the canvas toolbar (keys `1`–`6`) restricts what a click may
 select: Tags, Content, Boxes or Artifacts. The Hit stack drawer names the mode while it is not
 All. Annotations are listed but not hit-tested before v1.1.
+
+### Selecting several things
+
+* **Marquee.** Drag from empty space on the page to draw a rectangle; it selects everything of
+  the Pick target it touches: elements (Tags), operators (Content), artifact sequences
+  (Artifacts), the page boxes whose outline it crosses (Boxes), and for All each painted item's
+  element, else its artifact, else its operator. A chip at the cursor counts what it will catch
+  (`4 · Tags`), which is outlined in the accent while you drag; the canvas scrolls when you drag
+  past its edge. `⌘`-drag starts a marquee even over an element; with the Boxes target the whole
+  page counts as empty space. `Esc` while dragging drops the marquee.
+* **Add and subtract.** `Shift`-drag adds what the marquee touches, `⌥`-drag removes it.
+  `Shift`-click adds the node under the pointer, or removes it when it is already selected;
+  `⌥`-click removes it (with one node or none selected, `⌥`-click still goes down the hit stack).
+* **Pan.** Hold `Space` and drag, or scroll with two fingers. While **Measure** is on a plain drag
+  measures and there is no marquee.
+* **Keys.** `⌘A` selects all of the Pick target on the current page. `Esc` first keeps only the
+  primary node, then clears the selection. `I` and `H` isolate or hide the whole selection.
+* **On the canvas** every selected node is outlined, a hairline with an "N selected" badge
+  frames them, and the action bar under them reads `N elements` · Isolate · Hide · Show in tree
+  (opens the tree and highlights every row) · Copy ids (one per line) · × (clear, `Esc`). The
+  Object and crumb actions are for one node and are not on it. `Tab` reaches the bar's buttons.
+* **The primary** is the node the single-node views show (crumbs, overlays, stepper): the one you
+  clicked, or the first in reading order after a marquee. Shift-click adds without moving it.
+* **Two nodes** are the comparison: the inspector shows "2 selected · gap", measured from the
+  primary.
+* **Three or more** show a summary in the inspector: the count, the Pick target and pages, chips
+  for roles, pages and problems, BY ROLE (with **Only P** to keep one role) and ELEMENTS. Click an
+  element to inspect it: the normal inspector opens under "← N elements · 2 of N ‹ ›", `[` and
+  `]` step through the others, and the canvas keeps all of them selected with that one marked.
+* **In the trees** every selected row is highlighted. `Shift+↑`/`↓` extend the selection from the
+  row, going back shrinks it, and `⌘+Space` adds or removes the focused row.
 
 ## Measuring
 
@@ -46,6 +121,8 @@ All. Annotations are listed but not hit-tested before v1.1.
 * **Measure** (`M`): drag or click twice to get the distance, Δx and Δy. Hold `Shift` after the
   first point to snap the line to 45° (horizontal, vertical or diagonal; Δy or Δx becomes exactly
   0). `Esc` clears.
+* `Esc` steps back one thing at a time: the measured line, then the tag roles focus, then every
+  selected node but the primary, then the selection.
 * Select one node, then Shift-click a second to see the gaps and edge alignment between them.
 * **Page boxes** draws Media, Crop, Bleed, Trim and Art boxes; dashed ones are defaults the
   file does not define.
@@ -66,7 +143,10 @@ they leave the toolbar; the selection's action bar and their keys still have the
 * **Isolate** (`I`) paints only the selection's content; **Hide** (`H`) paints everything else.
   Both are also on the selection's action bar.
 * **Paint order** (`P`) replays the page operator by operator; the Inspector shows each
-  operator's state.
+  operator's state. It stays on its page while you scroll the canvas. **Follow step** (on by
+  default, in the Paint order tab next to **Skip state-only ops**) scrolls the canvas to what a
+  step paints when it is out of view, whether you step, jump, scrub or play; turn it off to keep
+  the view where it is.
 * **Clip** (`C`) shows the clip in effect for the selected operator.
 * **Alpha** (`A`) tints transparent, soft-masked and blended content.
 
@@ -78,6 +158,15 @@ fold into chips when there is no room beside the page.
 * **All tag boxes** (`⇧T`) outlines every structure element in its role colour; **Tag labels**
   (`L`) adds a role chip; **Nesting** shows grouping elements; **Artifacts** marks artifacts.
   Each role has one fixed colour, shown in the Tag roles legend, the tree dots and the x-ray.
+* **Focus on roles.** While the tag boxes are on, the Tag roles card picks which roles stand
+  out. Click a row to focus that role, click it again to release; `Shift`-click adds or removes
+  a role (removing the last releases). The other roles stay as faint boxes (15 %) without labels,
+  and the reading-order path goes faint (30 %) where it runs through them; its badges stay.
+  Focus is a view, not a filter: clicking a faint box still selects it, and hovering it outlines
+  it at full strength. The card's header says how many roles are shown (`2 of 10 shown`); **Show
+  all** or `Esc` releases the focus. A role the page does not use cannot be picked. With the
+  keyboard: `Tab` to the rows, `↑`/`↓` between them, `Space` to click, `Shift+Space` to
+  Shift-click. The focus is kept per document for the session.
 * **Reading order** (`R`) numbers the page's elements and joins them with a path, read from the
   structure tree, from paint order (roughly what Chrome/Edge read) or from the Speech reader.
   A step that goes back up the page is amber and becomes the `reading-order-backtrack`
@@ -86,6 +175,17 @@ fold into chips when there is no room beside the page.
 * Selecting a table cell outlines the table and links the cell to its headers, labelled by the
   rule that found them (`Headers`, `Scope`, `position`; PDF 2.0 algorithm or PDF 1.7 rules).
   Cells without a header are amber. The Inspector shows the grid.
+* **Header scope.** A `TH` chip has an arrow for the direction the header heads: → `/Scope /Row`
+  (the cells to its right), ↓ `/Scope /Column` (the cells below), two arrows from one corner for
+  `/Scope /Both`. Without `/Scope` the chip is outlined and its arrow faint: the direction is
+  inferred from where the cell sits (a header row or the table head reads as column headers, the
+  first column of a row of data as row headers). A `/Scope` that the position contradicts gets an
+  amber ring and `!`, and the `table-header-scope-conflict` diagnostic. A `#` means cells name
+  the header by `/ID` in their `/Headers`, which decides what it heads. Hover a chip for the
+  explanation. Hovering or selecting a `TH` shades the cells it governs, fading away from the
+  header, with a chevron on each row or column. With a `TH` selected, the Inspector's Table
+  section says its scope (`Column · declared`, `Column · inferred`, `Row · declared, conflicts
+  with position`), how many cells it governs and which cells name it.
 * References and their footnotes are linked by a dashed connector with the distance in reading
   steps.
 
@@ -116,7 +216,7 @@ factor says so. The Inspector's card is always fitted.
 
 A preview never fakes a font. A font with no embedded program gets an amber **Not embedded**
 frame: readers substitute their own font, so text can reflow or lose glyphs. The dimmed
-specimen in it is drawn with pdfxray's own font and labelled *fallback specimen · not the file's
+specimen in it is drawn with pdfxray's own font and labelled *fallback specimen · not the file’s
 font*; it is the only text on the card not drawn by the file. A program the renderer cannot
 read, a font kind it does not support, or a mesh shading without `/BBox` (whose extent is only
 known by decoding the mesh) says **No preview** and why.
@@ -127,11 +227,16 @@ revision only: an older revision opened read-only has no Preview section.
 
 ## Validation
 
-Pick a profile (PDF/UA-1, PDF/UA-2, WCAG 2.2, PDF/A, …) and press **Validate**. veraPDF runs
+Open **Validation**, the last entry of the top group in the left rail (under Revisions), pick a
+profile (PDF/UA-1, PDF/UA-2, WCAG 2.2, PDF/A, …) and press **Validate**; File ▸ Validate (⇧⌘V)
+does the same. A press while pdfxray is still looking for veraPDF starts the run as soon as it is
+found. veraPDF runs
 as a separate Java process (Java 11+). If it is not installed, the tab offers a one-time
 download of the pinned release (about 34 MB, checksum verified) into
-`~/Library/Application Support/pdfxray/verapdf`. Clicking a finding selects the node it
-concerns.
+`~/Library/Application Support/pdfxray/verapdf`. If the download fails, the tab says why and
+offers it again; a veraPDF you installed yourself can be given in the **veraPDF path** field.
+Clicking a finding selects the node it concerns. Three tiles above the findings each name what
+they count: *9 checks failed* · *3 rules failed* · *1,284 checks passed*.
 
 ## Using pdfxray on macOS
 

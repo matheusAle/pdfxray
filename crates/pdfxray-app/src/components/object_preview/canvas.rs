@@ -4,8 +4,9 @@
 
 use egui::epaint::{PathShape, RectShape};
 use egui::{
-    Align, Color32, CornerRadius, Frame, Id, Label, Layout, Margin, Pos2, Rect, RichText, Role, ScrollArea,
-    Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, Ui, UiBuilder, Vec2, WidgetInfo, pos2, vec2,
+    Align, Color32, CornerRadius, FontId, Frame, Id, Label, Layout, Margin, Pos2, Rect, RichText, Role,
+    ScrollArea, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, Ui, UiBuilder, Vec2, WidgetInfo,
+    pos2, vec2,
 };
 use pdfxray_core::numeric::{f32_from_f64, f32_from_u32, f32_from_usize, usize_from_f32_trunc};
 use pdfxray_core::{CharCode, ColorSpaceVisual, ImageVisual, ObjRef, ShadingVisual, Visual, VisualKind};
@@ -428,10 +429,49 @@ fn cell_ui(ui: &mut Ui, cell: Rect, code: &CharCode, mask: &Mask) {
 }
 
 /// A font without its program: the amber frame that says so, and a dimmed specimen in the app's
-/// own font, labelled as not the file's.
+/// own font, labelled as not the file's. The frame hugs what it holds ([`FRAME_PAD`] under the
+/// caption) and is centred in the canvas, so no empty band is left under the specimen.
 fn not_embedded(ui: &mut Ui, viewport: Vec2, variant: Variant) {
     let (area, _) = ui.allocate_exact_size(viewport, Sense::hover());
-    let frame = area.shrink(FRAME_INSET);
+    let inspector = variant == Variant::Inspector;
+    let title_size = if inspector { 13.0 } else { 14.0 };
+    let specimen_size = if inspector { FALLBACK_PT_SMALL } else { FALLBACK_PT };
+    let frame_x = area.x_range().shrink(FRAME_INSET);
+    let text_w = frame_x.span() - FRAME_TEXT_X - FRAME_PAD;
+    let inner_w = frame_x.span() - 2.0 * FRAME_PAD;
+
+    let title = (NOT_EMBEDDED, fonts::semibold(title_size), tokens::WARN);
+    let why = (!inspector).then(|| (NOT_EMBEDDED_WHY, fonts::ui(WHY_PT), tokens::TEXT_2));
+    let specimen = (
+        pdfxray_core::SPECIMEN,
+        fonts::ui(specimen_size),
+        tokens::FALLBACK_INK,
+    );
+    let label = (FALLBACK_LABEL, fonts::mono(tokens::mono::CAPTION), tokens::TEXT_3);
+
+    // Where each block starts, from the frame's top edge, measured before anything is painted.
+    let height = |(text, font, _): &(&str, FontId, Color32), wrap: f32| {
+        ui.painter()
+            .layout((*text).to_owned(), font.clone(), Color32::WHITE, wrap)
+            .size()
+            .y
+    };
+    let icon_y = FRAME_PAD;
+    let title_y = icon_y + 8.0 - title_size * 0.62;
+    // The inspector has no room for why: the title says enough.
+    let mut y = title_y + height(&title, f32::INFINITY) + if inspector { 12.0 } else { 6.0 };
+    let why_y = y;
+    if let Some(why) = &why {
+        y += height(why, text_w) + BLOCK_GAP;
+    }
+    let specimen_y = y;
+    y += height(&specimen, f32::INFINITY) + 6.0;
+    let label_y = y;
+    y += height(&label, f32::INFINITY);
+    let frame_h = y + FRAME_PAD;
+
+    let top = (area.center().y - frame_h / 2.0).max(area.min.y + FRAME_INSET);
+    let frame = Rect::from_x_y_ranges(frame_x, top..=top + frame_h);
     ui.painter().rect(
         frame,
         tokens::RADIUS_LG,
@@ -439,56 +479,29 @@ fn not_embedded(ui: &mut Ui, viewport: Vec2, variant: Variant) {
         Stroke::new(1.0, tokens::WARN_FRAME_HAIRLINE),
         StrokeKind::Inside,
     );
-    let inspector = variant == Variant::Inspector;
-    let icon = Rect::from_min_size(frame.min + Vec2::splat(FRAME_PAD), Vec2::splat(16.0));
+    let icon = Rect::from_min_size(frame.min + vec2(FRAME_PAD, icon_y), Vec2::splat(16.0));
     Icon::Warning.paint(ui, icon, 16.0, tokens::WARN);
-    let title_size = if inspector { 13.0 } else { 14.0 };
+    let rich = |(text, font, color): (&str, FontId, Color32)| RichText::new(text).font(font).color(color);
     let text_x = frame.min.x + FRAME_TEXT_X;
-    let text_w = frame.max.x - FRAME_PAD - text_x;
-    let title = text_at(
-        ui,
-        pos2(text_x, icon.center().y - title_size * 0.62),
-        text_w,
-        RichText::new(NOT_EMBEDDED)
-            .font(fonts::semibold(title_size))
-            .color(tokens::WARN),
-        false,
-    );
-    let mut y = title.max.y + 6.0;
-    if inspector {
-        // No room for why: the title says enough.
-        y += 6.0;
-    } else {
-        let why = text_at(
-            ui,
-            pos2(text_x, y),
-            text_w,
-            RichText::new(NOT_EMBEDDED_WHY)
-                .font(fonts::ui(WHY_PT))
-                .color(tokens::TEXT_2),
-            true,
-        );
-        y = why.max.y + BLOCK_GAP;
-    }
-    let size = if inspector { FALLBACK_PT_SMALL } else { FALLBACK_PT };
-    let specimen = text_at(
-        ui,
-        pos2(frame.min.x + FRAME_PAD, y),
-        frame.width() - 2.0 * FRAME_PAD,
-        RichText::new(pdfxray_core::SPECIMEN)
-            .font(fonts::ui(size))
-            .color(tokens::FALLBACK_INK),
-        false,
-    );
     text_at(
         ui,
-        pos2(frame.min.x + FRAME_PAD, specimen.max.y + 6.0),
-        frame.width() - 2.0 * FRAME_PAD,
-        RichText::new(FALLBACK_LABEL)
-            .font(fonts::mono(tokens::mono::CAPTION))
-            .color(tokens::TEXT_3),
+        pos2(text_x, frame.min.y + title_y),
+        text_w,
+        rich(title),
         false,
     );
+    if let Some(why) = why {
+        text_at(ui, pos2(text_x, frame.min.y + why_y), text_w, rich(why), true);
+    }
+    let left = frame.min.x + FRAME_PAD;
+    text_at(
+        ui,
+        pos2(left, frame.min.y + specimen_y),
+        inner_w,
+        rich(specimen),
+        false,
+    );
+    text_at(ui, pos2(left, frame.min.y + label_y), inner_w, rich(label), false);
 }
 
 /// An axial shading: its bar, the stops on its lower edge, and (on the centre card) their values.

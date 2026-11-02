@@ -4,6 +4,7 @@
 use egui::{Color32, CursorIcon, Rect, Sense, Stroke, Ui, WidgetInfo, pos2, vec2};
 use pdfxray_core::numeric::{f32_from_u32, u32_from_f32_round};
 
+use super::focus;
 use crate::theme::tokens;
 
 /// Accessible name of the track.
@@ -89,6 +90,7 @@ impl<'a> StepTrack<'a> {
         let response = response.on_hover_cursor(CursorIcon::PointingHand);
         if ui.is_rect_visible(rect) {
             self.paint(ui, rect);
+            focus::row_ring(ui, &response, rect, tokens::RADIUS_SM);
         }
         let picked = (response.clicked() || response.dragged() || response.drag_started())
             .then(|| response.interact_pointer_pos())

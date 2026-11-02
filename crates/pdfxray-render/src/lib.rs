@@ -43,7 +43,7 @@ use pdfxray_core::numeric::{u32_from_f32_trunc, usize_from_u32};
 use pdfxray_core::{Document, EngineError, PageIx, Point};
 
 pub use diff::{Diff, diff};
-pub use filter::{ContentFilter, ops_for};
+pub use filter::{ContentFilter, ops_for, ops_for_all};
 pub use overlay::Overlay;
 pub use preview::{
     FontPreview, GLYPH_EM, IMAGE_PREVIEW_SIDE, InkMask, PREVIEW_SIDE, Preview, PreviewError, SPECIMEN_EM,

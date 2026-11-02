@@ -47,7 +47,7 @@ fn the_ctm_label_explains_the_matrix_after_400_ms_and_the_value_opens_nothing() 
     assert!(!has_label(&harness, "Rotation 0° · no skew · uniform: yes"));
     // Smoke: the selection did not move and the value can still be copied.
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 2 })
     );
     let _copy = the(&harness, Region::Inspector, Role::Button, "Copy CTM");
@@ -203,7 +203,7 @@ fn clicking_an_operator_row_selects_it_and_the_current_one_is_highlighted() {
     harness.run();
 
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 1 })
     );
     assert!(is_selected(&the(&harness, Region::Drawer, Role::Button, "Tf")));

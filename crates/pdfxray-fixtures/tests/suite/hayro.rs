@@ -125,6 +125,7 @@ fn non_defective_fixtures_parse_and_render() {
             "table-simple-pdf17",
             "table-scope-pdf2",
             "table-headers-ids",
+            "table-scope-conflict",
             "speech-lang",
             "speech-link-objr",
             "rolemap-two-hops",

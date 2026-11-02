@@ -10,7 +10,7 @@ use std::sync::Arc;
 use common::fake::{FakeValidator, struct_rich_report};
 use common::{
     Region, app, buttons_in, click_at, click_drawer_tab, click_rail, has_label, is_selected, named,
-    open_fixture, the, wait_until,
+    open_fixture, the,
 };
 use egui::{Role, vec2};
 use egui_kittest::Harness;
@@ -278,10 +278,7 @@ fn failed_validation_checks_make_the_validation_badge_an_error() {
     let mut harness = app();
     harness.state_mut().state.validator = Arc::new(fake);
     open_fixture(&mut harness, "struct-rich");
-    the(&harness, Region::Chrome, Role::Button, "Validate").click();
-    wait_until(&mut harness, "the validation result", |s| {
-        s.document.as_ref().unwrap().doc.validation().is_some() && !s.validation.is_running()
-    });
+    common::validate_from_the_rail(&mut harness);
 
     let state = &harness.state().state;
     assert_eq!(badge_tone(state, DrawerTab::Validation), Tone::Err);

@@ -66,6 +66,13 @@ pub const CARD_FILL: Color32 = Color32::from_rgba_unmultiplied_const(0x12, 0x16,
 pub const ACCENT: Color32 = Color32::from_rgb(0x3D, 0xD6, 0xF5);
 /// Accent at 12 % opacity (`#3DD6F51F`): fill of selected rows.
 pub const ACCENT_DIM: Color32 = Color32::from_rgba_unmultiplied_const(0x3D, 0xD6, 0xF5, 0x1F);
+/// Fill of a focused row of the Tag roles card: the accent at 10 % (`#3DD6F51A`).
+pub const ROLE_FOCUS: Color32 = Color32::from_rgba_unmultiplied_const(0x3D, 0xD6, 0xF5, 0x1A);
+/// Text of a role row of the Tag roles card while no role is focused: `#C9D0D9`.
+pub const ROLE_ROW_TEXT: Color32 = Color32::from_rgb(0xC9, 0xD0, 0xD9);
+/// Text of a role row that is out of focus: `#8A93A3`, 6:1 on the card, so the row stays
+/// readable while the hollow swatch says it is out of focus.
+pub const ROLE_UNFOCUSED_TEXT: Color32 = Color32::from_rgb(0x8A, 0x93, 0xA3);
 /// Top of the primary button's gradient: `#6FE3F9`.
 pub const PRIMARY_TOP: Color32 = Color32::from_rgb(0x6F, 0xE3, 0xF9);
 /// Bottom of the primary button's gradient: `#2CC6E8`.
@@ -107,7 +114,7 @@ pub const OK: Color32 = Color32::from_rgb(0x4A, 0xDE, 0x80);
 pub const WARN: Color32 = Color32::from_rgb(0xFB, 0xBF, 0x24);
 /// Error.
 pub const ERR: Color32 = Color32::from_rgb(0xF8, 0x71, 0x71);
-/// The second selection (shift-click) and the measure tool.
+/// The other node of a two-node selection (the compare view) and the measure tool.
 pub const PINK: Color32 = Color32::from_rgb(0xFF, 0x50, 0xC8);
 
 // ---- Object preview cards ("2.9 Objects · Preview cards"). ----
@@ -148,6 +155,39 @@ pub const WARN_CHIP: Color32 = Color32::from_rgba_unmultiplied_const(0xFB, 0xBF,
 pub const WARN_CHIP_HAIRLINE: Color32 = Color32::from_rgba_unmultiplied_const(0xFB, 0xBF, 0x24, 0x40);
 /// Outline of a colour swatch and of a gradient bar: `#FFFFFF1A`.
 pub const SWATCH_HAIRLINE: Color32 = Color32::from_rgba_unmultiplied_const(0xFF, 0xFF, 0xFF, 0x1A);
+
+// ---- Keyboard focus ----
+
+/// The 2 px halo outside the focus ring of a control drawn on the page (a tag chip, a badge),
+/// so the ring reads on a white page as well as on the dark canvas: `#0A0C0F` at 80 %.
+pub const FOCUS_HALO: Color32 = Color32::from_rgba_unmultiplied_const(0x0A, 0x0C, 0x0F, 0xCC);
+
+// ---- Long values ("2.13 Spec · long arrays: wrap, then fold"). ----
+
+/// Outline of the "⌄ 194 more values" button of a folded value: `#FFFFFF14`.
+pub const FOLD_HAIRLINE: Color32 = NEUTRAL_ACTIVE;
+/// Corner radius of that button.
+pub const RADIUS_FOLD: f32 = 5.0;
+
+// ---- Marquee multi-selection ("2.12 Canvas · Marquee multi-selection"). ----
+
+/// Fill of the marquee: the accent at 8 %, `#3DD6F514`.
+pub const MARQUEE_FILL: Color32 = Color32::from_rgba_unmultiplied_const(0x3D, 0xD6, 0xF5, 0x14);
+/// The 1 px halo outside the marquee's accent stroke, so it reads on a white page (the accent
+/// alone is 1.7:1 on white): `#0A0C0F` at 45 %.
+pub const MARQUEE_HALO: Color32 = Color32::from_rgba_unmultiplied_const(0x0A, 0x0C, 0x0F, 0x73);
+/// Corner radius of the marquee.
+pub const MARQUEE_RADIUS: f32 = 2.0;
+/// Outline of what the marquee will catch: the accent at 60 %, `#3DD6F599`.
+pub const MARQUEE_CATCH: Color32 = Color32::from_rgba_unmultiplied_const(0x3D, 0xD6, 0xF5, 0x99);
+/// Fill of the count chip that trails the cursor while a marquee is drawn: `#0A0C0F` at 90 %.
+pub const MARQUEE_CHIP: Color32 = Color32::from_rgba_unmultiplied_const(0x0A, 0x0C, 0x0F, 0xE6);
+/// Stroke width of the outline of each node of a multi-selection.
+pub const MULTI_STROKE: f32 = 1.5;
+/// Fill of each node of a multi-selection: the accent at 6 %, `#3DD6F50F`.
+pub const MULTI_FILL: Color32 = Color32::from_rgba_unmultiplied_const(0x3D, 0xD6, 0xF5, 0x0F);
+/// The hairline around the bounds of a multi-selection: the accent at 33 %, `#3DD6F554`.
+pub const GROUP_HAIRLINE: Color32 = Color32::from_rgba_unmultiplied_const(0x3D, 0xD6, 0xF5, 0x54);
 
 /// Corner radius of chips and rows.
 pub const RADIUS_SM: f32 = 4.0;

@@ -77,7 +77,6 @@ fn the_primary_button_is_the_cyan_gradient_with_a_glow_and_dark_ink() {
             ToolButton::new("Validate")
                 .icon(Icon::Validation)
                 .primary()
-                .tall()
                 .show(ui);
         });
     });

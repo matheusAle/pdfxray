@@ -1,6 +1,7 @@
 //! What can be done with a node, wherever it is shown: the canvas selection bar, right-click
 //! menus on tree rows, the canvas and inspector values all list [`Action::for_node`] and run
-//! [`run`], so the same node offers the same actions everywhere.
+//! [`run`], so the same node offers the same actions everywhere. A selection of several nodes has
+//! its own, smaller set on the action bar: [`SelectionAction`], run by [`run_on_selection`].
 
 use std::ops::Range;
 
@@ -97,6 +98,102 @@ impl Action {
     }
 }
 
+/// Something to do with a multi-selection, on the action bar while two or more nodes are
+/// selected. The object and breadcrumb actions are for one node only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionAction {
+    /// Paint only the selected nodes' content.
+    Isolate,
+    /// Paint everything except the selected nodes' content.
+    Hide,
+    /// Show the tree that lists the primary, with every selected row expanded and highlighted.
+    ShowInTree,
+    /// Copy every selected node's id, one per line.
+    CopyIds,
+    /// Forget the selection.
+    Clear,
+}
+
+impl SelectionAction {
+    /// The actions of the bar, in order.
+    pub const ALL: [Self; 5] = [
+        Self::Isolate,
+        Self::Hide,
+        Self::ShowInTree,
+        Self::CopyIds,
+        Self::Clear,
+    ];
+
+    /// The text and accessible name of the button.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Isolate => "Isolate",
+            Self::Hide => "Hide",
+            Self::ShowInTree => "Show in tree",
+            Self::CopyIds => "Copy ids",
+            Self::Clear => "Clear selection (Esc)",
+        }
+    }
+
+    /// The icon of the button.
+    pub const fn icon(self) -> Icon {
+        match self {
+            Self::Isolate => Icon::Isolate,
+            Self::Hide => Icon::Hide,
+            Self::ShowInTree => Icon::Tags,
+            Self::CopyIds => Icon::Copy,
+            Self::Clear => Icon::Close,
+        }
+    }
+
+    /// What the action does, for its tooltip.
+    pub const fn detail(self) -> &'static str {
+        match self {
+            Self::Isolate => "Paint only the selected nodes' content",
+            Self::Hide => "Paint everything except the selected nodes' content",
+            Self::ShowInTree => "Expand and highlight every selected row in the tree",
+            Self::CopyIds => "Copy the ids of the selected nodes, one per line",
+            Self::Clear => "Clear the selection",
+        }
+    }
+
+    /// The key that does the same.
+    pub const fn shortcut(self) -> Option<&'static str> {
+        match self {
+            Self::Isolate => Some("I"),
+            Self::Hide => Some("H"),
+            Self::Clear => Some("Esc"),
+            Self::ShowInTree | Self::CopyIds => None,
+        }
+    }
+}
+
+/// The ids of the selected nodes, one per line, in selection order.
+pub fn selection_ids(state: &AppState) -> String {
+    state
+        .selection
+        .nodes()
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Does `action` with the whole selection.
+pub fn run_on_selection(state: &mut AppState, ctx: &Context, action: SelectionAction) {
+    match action {
+        SelectionAction::Isolate => state.toggle_isolation(IsolateMode::Only),
+        SelectionAction::Hide => state.toggle_isolation(IsolateMode::Hide),
+        SelectionAction::ShowInTree => {
+            if let Some(rail) = state.selection.primary().and_then(tree_of) {
+                state.set_rail(rail);
+            }
+        }
+        SelectionAction::CopyIds => ctx.copy_text(selection_ids(state)),
+        SelectionAction::Clear => state.clear_selection(),
+    }
+}
+
 /// True for nodes whose content can be isolated or hidden on the canvas.
 fn paints(id: &NodeId) -> bool {
     matches!(
@@ -167,7 +264,7 @@ pub fn object_of(state: &AppState, id: &NodeId) -> Option<ObjRef> {
 pub fn run(state: &mut AppState, ctx: &Context, id: &NodeId, action: Action) {
     match action {
         Action::Isolate | Action::Hide => {
-            if state.selection.primary.as_ref() != Some(id) {
+            if state.selection.primary() != Some(id) {
                 state.select(id.clone());
             }
             let mode = if action == Action::Isolate {

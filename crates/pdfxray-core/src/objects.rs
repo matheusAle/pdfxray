@@ -10,7 +10,8 @@ use pdfxray_raw::{EntryState, IndirectObject, ObjLocation, Object, RawDocument, 
 use crate::numeric::usize_from_u32;
 use crate::{Document, NodeId, ObjRef, PropGroup, Props, TreeNode};
 
-/// Longest value shown inline before it is cut.
+/// Longest one-line summary (a tree row's detail, the encryption dictionary) before it is cut.
+/// The values of an object are never cut: the app wraps and folds them, and copies them whole.
 const VALUE_PREVIEW: usize = 160;
 /// Bytes of a decoded stream shown in the inspector.
 const STREAM_PREVIEW: usize = 1024;
@@ -427,7 +428,7 @@ fn value_group(obj: &Object) -> PropGroup {
                 g = add_value_row(g, format!("[{i}]"), &v.value);
             }
         }
-        (None, other) => g = g.row("Value", truncate(&other.to_string())),
+        (None, other) => g = g.row("Value", other.to_string()),
     }
     g
 }
@@ -435,7 +436,7 @@ fn value_group(obj: &Object) -> PropGroup {
 fn add_value_row(g: PropGroup, key: String, v: &Object) -> PropGroup {
     match v {
         Object::Ref(r) => g.link(key, r.to_string(), NodeId::Object(*r)),
-        other => g.row(key, truncate(&other.to_string())),
+        other => g.row(key, other.to_string()),
     }
 }
 
@@ -522,6 +523,30 @@ mod tests {
 
     fn r(num: u32) -> ObjRef {
         ObjRef::new(num, 0)
+    }
+
+    #[test]
+    fn a_long_value_is_kept_whole_and_only_the_tree_summary_is_cut() {
+        let widths: Vec<String> = (0..224).map(|i| (500 + i).to_string()).collect();
+        let source = format!("<< /Type /Font /Widths [{}] >>", widths.join(" "));
+        let (parsed, _) = pdfxray_raw::parse_object(source.as_bytes(), 0);
+        let object = parsed.expect("a dictionary").value;
+
+        let group = value_group(&object);
+
+        let row = group
+            .rows
+            .iter()
+            .find(|row| row.key == "/Widths")
+            .expect("the /Widths row");
+        assert_eq!(row.value, format!("[{}]", widths.join(" ")));
+        assert!(!row.value.contains('…'));
+        // Smoke: a one-line summary of the same array is still short.
+        let array = pdfxray_raw::parse_object(format!("[{}]", widths.join(" ")).as_bytes(), 0)
+            .0
+            .expect("an array")
+            .value;
+        assert_eq!(summary(&array), "[224 items]");
     }
 
     #[test]

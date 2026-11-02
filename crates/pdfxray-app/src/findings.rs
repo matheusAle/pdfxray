@@ -161,7 +161,7 @@ impl AppState {
 
     /// The finding of the selected node, if it has one.
     pub fn current_finding(&self) -> Option<u32> {
-        self.finding_for(self.selection.primary.as_ref()?)
+        self.finding_for(self.selection.primary()?)
     }
 
     /// Selects the finding after (`delta` 1) or before (`delta` -1) the current one in the

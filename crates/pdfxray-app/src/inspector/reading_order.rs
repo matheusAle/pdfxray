@@ -15,7 +15,7 @@ use pdfxray_core::{NodeId, OrderComparison, OrderStep, PageIx, ReadingOrder, Rea
 
 use super::Action;
 use crate::center::canvas::tag_overlay::chip_text;
-use crate::components::{Icon, PropRow, section, tooltip};
+use crate::components::{Icon, PropRow, focus, section, tooltip};
 use crate::modes::OrderSource;
 use crate::roles::role_color;
 use crate::state::{AppState, RailItem};
@@ -205,6 +205,7 @@ fn row(ui: &mut Ui, step: &OrderStep, chip: &str) -> egui::Response {
     if let Some(fill) = fill {
         painter.rect_filled(rect, tokens::RADIUS_SM, fill);
     }
+    focus::row_ring(ui, &response, rect, tokens::RADIUS_SM);
     let y = rect.center().y;
     let center = pos2(rect.min.x + 14.0, y);
     let badge = if step.backtrack { amber } else { tokens::ACCENT };

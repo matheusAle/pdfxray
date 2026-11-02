@@ -85,7 +85,7 @@ pub(super) fn row_background(ui: &Ui, rect: Rect, response: Response, selected: 
         ui.painter()
             .rect_filled(inset, tokens::RADIUS_SM, tokens::NEUTRAL_HOVER);
     }
-    focus::ring(ui, &response, inset, tokens::RADIUS_SM);
+    focus::row_ring(ui, &response, inset, tokens::RADIUS_SM);
     response.on_hover_cursor(CursorIcon::PointingHand)
 }
 

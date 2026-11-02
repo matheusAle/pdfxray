@@ -14,7 +14,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     (
         "startxref-wrong",
-        "The file's final pointer (startxref) does not lead to the object index. Readers that trust it fail; many silently search for the index instead.",
+        "The file’s final pointer (startxref) does not lead to the object index. Readers that trust it fail; many silently search for the index instead.",
     ),
     (
         "xref-rebuilt",
@@ -70,7 +70,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     (
         "trailer-size-inconsistent",
-        "The trailer's /Size is smaller than the highest object number in use. Strict readers may ignore the objects above it.",
+        "The trailer’s /Size is smaller than the highest object number in use. Strict readers may ignore the objects above it.",
     ),
     (
         "xref-offset-wrong",
@@ -82,7 +82,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     (
         "stream-length-wrong",
-        "The stream's declared length does not match its real length. Acrobat silently fixes this; other readers may drop the last command. pdfxray shows it as-is.",
+        "The stream’s declared length does not match its real length. Acrobat silently fixes this; other readers may drop the last command. pdfxray shows it as-is.",
     ),
     (
         "stream-keyword-eol",
@@ -199,7 +199,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     (
         "box-outside-mediabox",
-        "A print box (crop, bleed, trim or art) sticks out of the page's paper (MediaBox). Viewers clip it to the paper, so the intended edges may be cut off.",
+        "A print box (crop, bleed, trim or art) sticks out of the page’s paper (MediaBox). Viewers clip it to the paper, so the intended edges may be cut off.",
     ),
     // ---- tagged structure ----
     (
@@ -268,7 +268,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     (
         "pg-not-a-page",
-        "A structure element's /Pg does not point at a page, so its content cannot be placed.",
+        "A structure element’s /Pg does not point at a page, so its content cannot be placed.",
     ),
     (
         "struct-elem-direct",
@@ -296,7 +296,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     (
         "struct-elem-parent-mismatch",
-        "An element's /P parent link disagrees with the element that lists it as a child, so walking upward leads somewhere else.",
+        "An element’s /P parent link disagrees with the element that lists it as a child, so walking upward leads somewhere else.",
     ),
     (
         "non-standard-type",
@@ -312,7 +312,7 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     (
         "alt-hides-content",
-        "An element with alternate text (/Alt) or actual text (/ActualText) still has content below it. Acrobat, and so NVDA and JAWS in it, say only that text and skip everything below, so a section described this way goes silent. A figure's description belongs on the figure. Related: Matterhorn 13-004 context, PDF/UA-1 section 7.3, PDF/UA-2 section 8.2.5.28, WCAG 1.3.1 and 1.1.1.",
+        "An element with alternate text (/Alt) or actual text (/ActualText) still has content below it. Acrobat, and so NVDA and JAWS in it, say only that text and skip everything below, so a section described this way goes silent. A figure’s description belongs on the figure. Related: Matterhorn 13-004 context, PDF/UA-1 section 7.3, PDF/UA-2 section 8.2.5.28, WCAG 1.3.1 and 1.1.1.",
     ),
     (
         "figure-alt-missing",
@@ -344,7 +344,11 @@ pub(super) const TABLE: &[(&str, &str)] = &[
     ),
     (
         "table-headers-id-missing",
-        "A cell's /Headers list names an ID that no cell of its table has, so that header is silently dropped. Give the header cell the /ID, or correct the list. Matterhorn 15-005, PDF/UA-2 section 8.2.5.26, WCAG 1.3.1.",
+        "A cell’s /Headers list names an ID that no cell of its table has, so that header is silently dropped. Give the header cell the /ID, or correct the list. Matterhorn 15-005, PDF/UA-2 section 8.2.5.26, WCAG 1.3.1.",
+    ),
+    (
+        "table-header-scope-conflict",
+        "A header cell’s /Scope says Row or Column, but where it sits says the other: a header in the first column of a row of data reads as a row header, one in the top row or the table head as a column header. Screen readers follow the /Scope, so they announce the header for cells the layout does not put under it. Correct the /Scope, or move the cell. PDF/UA-1 section 7.5, PDF/UA-2 section 8.2.5.26, WCAG 1.3.1.",
     ),
     (
         "table-irregular",
@@ -437,7 +441,7 @@ fn startxref(message: &str, nums: &[u64]) -> Option<String> {
         return None;
     };
     Some(format!(
-        "The file's final pointer (startxref) says the index is at byte {} but it starts at byte {}. Readers that trust the pointer fail; many silently search for the index instead.",
+        "The file’s final pointer (startxref) says the index is at byte {} but it starts at byte {}. Readers that trust the pointer fail; many silently search for the index instead.",
         thousands(*recorded),
         thousands(*actual)
     ))

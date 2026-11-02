@@ -210,14 +210,14 @@ fn right_click_on_a_tags_row_lists_the_actions_and_show_in_tree_and_object_work(
         .click();
     harness.run_steps(3);
     assert_eq!(selected_rows(&harness), ["Figure"]);
-    assert_eq!(harness.state().state.selection.primary, Some(figure));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(figure));
 
     the(&harness, Region::Navigator, Role::Button, "Figure").click_secondary();
     harness.run_steps(3);
     harness.get_by_role_and_label(Role::MenuItem, "Object").click();
     harness.run_steps(3);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Object(ObjRef::new(14, 0)))
     );
     // Smoke: the Objects entry is showing.

@@ -4,22 +4,25 @@
 //! One sub-struct per area, so work on one panel does not touch another's state:
 //!
 //! * [`NavState`]: rail entry, navigator filter and view ([`nav`]).
-//! * [`SelectionState`]: the selected node and the second one ([`selection`]).
+//! * [`SelectionState`]: the selected nodes and their primary ([`selection`]).
 //! * [`ObjectHistory`]: back and forward through objects ([`history`]).
 //! * [`ObjectsState`]: the object view, the revision being looked at and the Objects lists
 //!   ([`objects`]).
 //! * [`DrawerState`]: drawer tab, height and the hit stack ([`drawer`]); the Speech tab's settings
 //!   and what it reads are in [`speech`], the table behind the selection in [`tables`].
-//! * [`CanvasState`]: page, zoom, layer mode and debug tools ([`canvas`]).
+//! * [`CanvasState`]: page, zoom, layer mode and debug tools ([`canvas`]); the tag roles the
+//!   canvas focuses on are in [`role_focus`].
 
 pub mod canvas;
 pub mod derived;
 pub mod drawer;
 pub mod history;
+pub mod marquee;
 pub mod nav;
 pub mod objects;
 pub mod path;
 pub mod pointer;
+pub mod role_focus;
 pub mod selection;
 pub mod speech;
 pub mod tables;
@@ -38,11 +41,13 @@ pub use canvas::CanvasState;
 pub use derived::{PageStats, RoleMapEntry, TagIndex};
 pub use drawer::{DrawerState, DrawerTab, HitEntry, HitStack};
 pub use history::ObjectHistory;
+pub use marquee::Marquee;
 pub use nav::{NavState, RailItem};
 pub use objects::{
     DocumentRow, ObjectMode, ObjectRow, ObjectsState, PreviewScale, ResourceGroup, ResourceRow,
 };
-pub use selection::SelectionState;
+pub use role_focus::RoleFocus;
+pub use selection::{Combine, SelectionState};
 pub use speech::{NoteLink, SpeechData, SpeechState};
 pub use tables::{TableContext, TableData};
 
@@ -134,6 +139,8 @@ pub struct AppState {
     pub validator: Arc<dyn Validator>,
     /// State of the validation run.
     pub validation: ValidationState,
+    /// The tag roles the canvas focuses on, per document, for the session.
+    pub role_focus: RoleFocus,
     trees: HashMap<NavTree, TreeModel>,
     pages: PageCache,
     thumbnails: Thumbnails,
@@ -164,6 +171,7 @@ impl Default for AppState {
             explainer: false,
             validator: Arc::new(VeraPdfValidator::default()),
             validation: ValidationState::default(),
+            role_focus: RoleFocus::default(),
             trees: HashMap::new(),
             pages: PageCache::default(),
             thumbnails: Thumbnails::default(),
@@ -224,8 +232,7 @@ impl AppState {
             self.drawer.page_boxes_only = false;
         }
         self.reset_drawer(self.nav.rail);
-        self.selection.secondary = None;
-        self.selection.pinned = None;
+        self.selection = SelectionState::default();
         self.select(NodeId::Document);
     }
 

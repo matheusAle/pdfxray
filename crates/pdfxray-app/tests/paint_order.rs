@@ -1,6 +1,8 @@
 //! The paint-order stepper, end to end: the toolbar and the P key, the drawer tab with its
 //! buttons, track and cards, the keys, the canvas texture and the inspector's Paint order
-//! section. The fixtures are `graphics-state` (80 operators, known overlaps) and `text-state`.
+//! section, and how the stepper and the scroll of pages leave each other alone or follow each
+//! other. The fixtures are `graphics-state` (80 operators, known overlaps) and `text-state`,
+//! and `long-doc` (40 pages) for the scroll.
 
 #![allow(
     clippy::unwrap_used,
@@ -15,15 +17,16 @@ mod common;
 mod view_tools;
 
 use common::{
-    Region, app, builder, buttons_in, click_at, click_rail, digest, expected_digest, fixture_path, has_label,
-    is_selected, open_fixture, texts_in, the, wait_for_render,
+    Region, app, builder, buttons_in, canvas_view, click_at, click_rail, digest, expected_digest,
+    fixture_path, has_label, is_selected, open_fixture, texts_in, the, wait_for_render,
 };
-use egui::{Key, Modifiers, Role, pos2};
+use egui::{Event, Key, Modifiers, MouseWheelUnit, Rect, Role, Vec2, pos2, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::NodeT;
+use egui_kittest::kittest::{NodeT, Queryable};
+use pdfxray_app::center::canvas::cards::mini_text;
 use pdfxray_app::center::canvas::paint_order::{LEGEND_ENTRIES, LEGEND_TITLE, painting_now};
 use pdfxray_app::components::StepTrack;
-use pdfxray_app::drawer::paint_order::{card_label, position_text};
+use pdfxray_app::drawer::paint_order::{FOLLOW_LABEL, SKIP_LABEL, card_label, position_text};
 use pdfxray_app::inspector::paint_order as section;
 use pdfxray_app::{DrawerTab, PdfxrayApp, RailItem};
 use pdfxray_core::{Document, NodeId};
@@ -69,7 +72,7 @@ fn step(harness: &Harness<'_, PdfxrayApp>) -> u32 {
 }
 
 fn selected_op(harness: &Harness<'_, PdfxrayApp>) -> Option<NodeId> {
-    harness.state().state.selection.primary.clone()
+    harness.state().state.selection.primary().cloned()
 }
 
 fn press(harness: &mut Harness<'_, PdfxrayApp>, key: Key) {
@@ -592,7 +595,7 @@ fn the_inspector_lists_what_covers_the_operator_and_how_much_stays_visible() {
     assert_eq!(stack, ["#53 S", "#49 f"]);
 
     // The link moves the stepper to the covering operator, whose own facts then show.
-    the(&harness, Region::Inspector, Role::Link, "op #53 S").click();
+    the(&harness, Region::Inspector, Role::Label, "op #53 S").click();
     settle(&mut harness);
     assert_eq!(step(&harness), 53);
     assert_eq!(selected_op(&harness), Some(op(53)));
@@ -657,4 +660,164 @@ fn the_canvas_has_the_legend_the_label_and_a_stepper_that_follows_the_drawer() {
     press(&mut harness, Key::P);
     assert!(!texts_in(&harness, Region::Center, Role::Label).contains(&LEGEND_TITLE.to_owned()));
     assert_eq!(painting_now(&harness.state().state), None);
+}
+
+/// A plain scroll of the canvas by `dy` points (negative scrolls down), with the pointer in the
+/// middle of the canvas.
+fn scroll_canvas(harness: &mut Harness<'_, PdfxrayApp>, dy: f32) {
+    harness.hover_at(canvas_view(harness).center());
+    harness.event(Event::MouseWheel {
+        unit: MouseWheelUnit::Point,
+        delta: vec2(0.0, dy),
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
+        modifiers: Modifiers::NONE,
+    });
+    settle(harness);
+    wait_for_render(harness);
+}
+
+fn offset(harness: &Harness<'_, PdfxrayApp>) -> Vec2 {
+    harness.state().state.canvas.scroll_offset
+}
+
+/// The first two operators of page 1 that paint something: a jump goes from one to the other.
+fn two_painting_ops(doc: &Document) -> (u32, u32) {
+    let last = doc.captured(0).unwrap().ops.last().unwrap().ix;
+    let first = (0..=last).find(|ix| !doc.is_state_only(0, *ix)).unwrap();
+    (first, doc.next_visible_change(0, first, true).unwrap())
+}
+
+/// Where operator `ix` of page 1 is drawn on screen, from where the page is drawn and the
+/// operator's box. `None` while page 1 is not drawn.
+fn op_on_screen(harness: &Harness<'_, PdfxrayApp>, doc: &Document, ix: u32) -> Option<Rect> {
+    let page = harness
+        .query_by_role_and_label(Role::Image, "Page 1 canvas")?
+        .rect();
+    let info = doc.page(0).unwrap();
+    assert_eq!(info.rotate, 0, "the mapping below is for an upright page");
+    let (_, bbox) = doc.bbox(&op(ix)).unwrap();
+    let crop = info.crop_box;
+    // Page space is y-up from the crop box's corner; the screen is y-down from the page's.
+    let at = |x: f64, y: f64| {
+        let fx = ((x - crop.x0) / crop.width()) as f32;
+        let fy = ((crop.y1 - y) / crop.height()) as f32;
+        page.min + vec2(fx * page.width(), fy * page.height())
+    };
+    Some(Rect::from_two_pos(at(bbox.x0, bbox.y0), at(bbox.x1, bbox.y1)))
+}
+
+#[test]
+fn scrolling_the_canvas_leaves_the_stepper_on_its_page_and_step() {
+    let mut harness = opened("long-doc");
+    start_at(&mut harness, 5);
+    let total = harness.state().state.op_total();
+    assert!(has_label(&harness, &mini_text(6, total)));
+
+    // Far enough down that page 1 is out of view and another page fills it.
+    scroll_canvas(&mut harness, -3000.0);
+
+    let state = &harness.state().state;
+    assert!(
+        state.canvas.scroll_offset.y > 2000.0,
+        "{:?}",
+        state.canvas.scroll_offset
+    );
+    assert!(
+        harness
+            .query_by_role_and_label(Role::Image, "Page 1 canvas")
+            .is_none()
+    );
+    // The stepper stays where it was: on page 1, at operator 5, painting page 1 up to it.
+    assert_eq!(state.canvas.page, 0);
+    assert_eq!(step(&harness), 5);
+    assert_eq!(selected_op(&harness), Some(op(5)));
+    let doc = doc("long-doc");
+    let filter = |page| state.canvas.view.content_filter(&doc, page, state.canvas.page);
+    assert_eq!(filter(0), ContentFilter::UpTo(5));
+    assert_eq!(filter(5), ContentFilter::All);
+    assert!(has_label(&harness, &mini_text(6, total)));
+    assert!(has_label(&harness, &position_text(6, total)));
+    // Smoke: the stepper is still on and still steps.
+    the(&harness, Region::Center, Role::Button, "Next operator").click();
+    settle(&mut harness);
+    assert_eq!(step(&harness), 6);
+}
+
+#[test]
+fn with_follow_step_a_step_out_of_view_scrolls_to_what_it_paints() {
+    let doc = doc("long-doc");
+    let (first, second) = two_painting_ops(&doc);
+    let mut harness = opened("long-doc");
+    start_at(&mut harness, first);
+    // The switch sits next to "Skip state-only ops" in the Paint order tab, on from the start.
+    let follow = the(&harness, Region::Drawer, Role::Switch, FOLLOW_LABEL);
+    let skip = the(&harness, Region::Drawer, Role::Switch, SKIP_LABEL);
+    assert!(is_selected(&follow));
+    assert!((follow.rect().center().y - skip.rect().center().y).abs() < 1.0);
+    assert!(harness.state().state.canvas.view.follow_step);
+
+    // A step to what is already in view leaves the view alone, wherever it is in the view.
+    scroll_canvas(&mut harness, -40.0);
+    let still = offset(&harness);
+    assert!(still.y > 0.0);
+    assert!(canvas_view(&harness).contains_rect(op_on_screen(&harness, &doc, second).unwrap()));
+    harness.key_press_modifiers(Modifiers::SHIFT, Key::ArrowRight);
+    settle(&mut harness);
+    assert_eq!(step(&harness), second);
+    assert_eq!(offset(&harness), still);
+
+    // Scrolled away, a step back brings it into view.
+    scroll_canvas(&mut harness, -3000.0);
+    assert!(op_on_screen(&harness, &doc, first).is_none());
+    let away = offset(&harness);
+    harness.key_press_modifiers(Modifiers::SHIFT, Key::ArrowLeft);
+    settle(&mut harness);
+    wait_for_render(&mut harness);
+    settle(&mut harness);
+
+    assert_eq!(step(&harness), first);
+    let shown = op_on_screen(&harness, &doc, first).expect("page 1 is in view again");
+    let view = canvas_view(&harness);
+    assert!(view.contains_rect(shown), "{shown:?} is not inside {view:?}");
+    // Smoke: the stepper's page stayed the current one, and the canvas scrolled back up to it.
+    assert_eq!(harness.state().state.canvas.page, 0);
+    assert!(
+        offset(&harness).y < away.y - 2000.0,
+        "{away:?} -> {:?}",
+        offset(&harness)
+    );
+}
+
+#[test]
+fn without_follow_step_stepping_leaves_the_view_where_it_is() {
+    let doc = doc("long-doc");
+    let (first, second) = two_painting_ops(&doc);
+    let mut harness = opened("long-doc");
+    start_at(&mut harness, first);
+    the(&harness, Region::Drawer, Role::Switch, FOLLOW_LABEL).click();
+    settle(&mut harness);
+    assert!(!harness.state().state.canvas.view.follow_step);
+    assert!(!is_selected(&the(
+        &harness,
+        Region::Drawer,
+        Role::Switch,
+        FOLLOW_LABEL
+    )));
+    scroll_canvas(&mut harness, -3000.0);
+    let away = offset(&harness);
+
+    harness.key_press_modifiers(Modifiers::SHIFT, Key::ArrowRight);
+    settle(&mut harness);
+    wait_for_render(&mut harness);
+
+    assert_eq!(step(&harness), second);
+    assert_eq!(selected_op(&harness), Some(op(second)));
+    assert_eq!(offset(&harness), away);
+    assert!(op_on_screen(&harness, &doc, second).is_none());
+    // Smoke: playing (another way to change the step) does not move the view either.
+    harness.key_press(Key::Space);
+    settle(&mut harness);
+    assert!(step(&harness) > second);
+    assert_eq!(offset(&harness), away);
 }

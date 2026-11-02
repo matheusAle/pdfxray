@@ -56,7 +56,7 @@ fn opened() -> App {
 // ---- title bar ----
 
 #[test]
-fn a_long_file_name_is_cut_and_never_runs_under_the_chip_or_validate() {
+fn a_long_file_name_is_cut_and_never_pushes_the_chip_out_of_the_window() {
     let dir = std::env::temp_dir().join(format!("pdfxray-polish-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let name = format!("{}.pdf", "a-very-long-file-name-".repeat(8));
@@ -78,11 +78,9 @@ fn a_long_file_name_is_cut_and_never_runs_under_the_chip_or_validate() {
         &common::title_chip(&harness),
     )
     .rect();
-    let validate = the(&harness, Region::Chrome, Role::Button, "Validate").rect();
-    // The name ends before the chip, the chip before Validate, and nothing leaves the window.
+    // The name ends before the chip, and the chip stays inside the window.
     assert!(name_rect.max.x <= chip.min.x, "{name_rect:?} vs {chip:?}");
-    assert!(chip.max.x <= validate.min.x, "{chip:?} vs {validate:?}");
-    assert!(validate.max.x <= common::WINDOW.x, "{validate:?}");
+    assert!(chip.max.x <= common::WINDOW.x, "{chip:?}");
     // Smoke: it is still a name, not a stub, and the file is the one that was opened.
     assert!(name_rect.width() > 200.0, "{name_rect:?}");
     assert_eq!(harness.state().state.document.as_ref().unwrap().info.name, name);
@@ -90,6 +88,55 @@ fn a_long_file_name_is_cut_and_never_runs_under_the_chip_or_validate() {
 }
 
 // ---- rail ----
+
+#[test]
+fn validation_is_the_last_rail_entry_after_revisions_and_the_title_bar_has_no_validate() {
+    let mut harness = app();
+    open_fixture(&mut harness, "minimal-one-page");
+
+    // Top to bottom: the six views, then Validation; Diagnostics and Settings stay at the foot.
+    let mut rail = nodes_in(&harness, Region::Rail, Role::Button);
+    rail.sort_by(|a, b| a.rect().min.y.total_cmp(&b.rect().min.y));
+    let names: Vec<String> = rail
+        .iter()
+        .filter_map(|node| node.accesskit_node().label())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "Tags",
+            "Content",
+            "Artifacts",
+            "Pages",
+            "Objects",
+            "Revisions",
+            "Validation",
+            "Diagnostics",
+            "Settings"
+        ]
+    );
+    // Validation sits right under Revisions, not apart at the foot of the rail.
+    let revisions = the(&harness, Region::Rail, Role::Button, "Revisions").rect();
+    let validation = the(&harness, Region::Rail, Role::Button, "Validation").rect();
+    assert!(
+        validation.min.y - revisions.max.y < 10.0,
+        "{revisions:?} {validation:?}"
+    );
+    // The title bar only has the file and its chip.
+    assert!(
+        !common::texts_in(&harness, Region::Chrome, Role::Button)
+            .iter()
+            .any(|name| name == "Validate")
+    );
+    // Smoke: the entry still opens the Validation panel with its own Validate button.
+    the(&harness, Region::Rail, Role::Button, "Validation").click();
+    harness.run_steps(3);
+    assert!(
+        harness
+            .query_by_role_and_label(Role::Button, "Validate")
+            .is_some()
+    );
+}
 
 #[test]
 fn rail_entries_that_do_nothing_are_not_selected_and_the_ones_that_work_show_a_hand() {

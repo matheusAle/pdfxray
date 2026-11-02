@@ -2,7 +2,8 @@
 //!
 //! The canvas is one vertical scroll of every page. The *current* page is the one the page
 //! field, the Content tree, the Operators drawer, the stepper and isolation work on: the page
-//! that fills most of the view, or the one last clicked.
+//! that fills most of the view, or the one last clicked. While the paint-order stepper is on,
+//! scrolling does not change it: the stepper stays on its page and keeps its step.
 
 use std::collections::BTreeSet;
 
@@ -10,9 +11,19 @@ use egui::Vec2;
 use pdfxray_core::{BoxKind, LayerMode, NodeId, PageIx};
 
 use super::AppState;
+use super::marquee::Marquee;
 use crate::measure::{Cursor, MeasureTool};
 use crate::modes::{SelectedOps, ViewMode};
 use crate::view::{ZoomMode, clamp_zoom, zoom_in, zoom_out};
+
+/// How the canvas brings the selection into view once it is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Reveal {
+    /// Centre it, wherever it is: a selection made elsewhere.
+    Centre,
+    /// Centre it only when it is not already in view: the operator the stepper moved to.
+    IntoView,
+}
 
 /// State of the canvas.
 #[derive(Debug)]
@@ -54,6 +65,9 @@ pub struct CanvasState {
     pub(crate) scroll_anim: Option<Vec2>,
     /// Size of the scrolled content and of the view as of the last frame.
     pub(crate) last_layout: (Vec2, Vec2),
+    /// The zoom the pages were drawn at last frame (it eases towards [`Self::zoom`]); 0 before the
+    /// first frame.
+    pub(crate) shown_zoom: f32,
     /// The node a tree or table row under the pointer asks the canvas to preview; the canvas
     /// takes it each frame.
     pub preview: Option<NodeId>,
@@ -63,8 +77,8 @@ pub struct CanvasState {
     pub hover: Option<NodeId>,
     /// Size of the canvas area as of the last frame, for zooming to a node.
     pub viewport: Vec2,
-    /// The selection should be scrolled into view the next time it is drawn.
-    pub(crate) reveal: bool,
+    /// The selection should be scrolled into view the next time it is drawn, and how.
+    pub(crate) reveal: Option<Reveal>,
     /// The operators behind the selection, for the isolate and hide buttons.
     pub(crate) selected_ops: Option<SelectedOps>,
     /// The selection whose outline the canvas is growing in, or has grown in.
@@ -72,6 +86,8 @@ pub struct CanvasState {
     /// The node the right-click menu of the canvas acts on: the one under the pointer when the
     /// menu was opened.
     pub(crate) context_node: Option<NodeId>,
+    /// The marquee being drawn, if any.
+    pub marquee: Option<Marquee>,
 }
 
 impl Default for CanvasState {
@@ -92,6 +108,7 @@ impl Default for CanvasState {
             last_offset: Vec2::ZERO,
             settle: 0,
             last_layout: (Vec2::ZERO, Vec2::ZERO),
+            shown_zoom: 0.0,
             reveal_to: None,
             scroll_anim: None,
             scroll_view: Vec2::ZERO,
@@ -99,10 +116,11 @@ impl Default for CanvasState {
             drawn_preview: None,
             hover: None,
             viewport: Vec2::ZERO,
-            reveal: false,
+            reveal: None,
             selected_ops: None,
             outlined: None,
             context_node: None,
+            marquee: None,
         }
     }
 }
@@ -130,12 +148,13 @@ impl CanvasState {
 
     /// True when a selection is waiting to be scrolled into view.
     pub const fn reveal_pending(&self) -> bool {
-        self.reveal
+        self.reveal.is_some()
     }
 
     /// Back to the start for a new document: first page, fitted, no isolation or stepper.
     pub(crate) fn reset_for_document(&mut self) {
         self.measure.clear();
+        self.marquee = None;
         self.cursor = None;
         self.preview = None;
         self.hover = None;

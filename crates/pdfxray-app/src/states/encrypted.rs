@@ -17,7 +17,7 @@ pub const SUBTITLE: &str = "Its file structure is readable; page content is not.
 
 /// The paragraph of the card.
 pub const EXPLANATION: &str = "Encrypted PDFs scramble their streams and strings. pdfxray can still show the \
-    objects, page boxes and encryption settings, but it can't draw the pages or read tags and text in \
+    objects, page boxes and encryption settings, but it can’t draw the pages or read tags and text in \
     this version.";
 
 /// What can and cannot be done with an encrypted file, in the order the card lists it.

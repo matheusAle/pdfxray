@@ -30,6 +30,7 @@ mod speech_link_objr;
 mod startxref_broken;
 mod struct_rich;
 mod table_headers_ids;
+mod table_scope_conflict;
 mod table_scope_pdf2;
 mod table_simple_pdf17;
 mod tables;
@@ -41,7 +42,7 @@ mod xref_stream;
 
 use crate::Fixture;
 
-static ALL: [Fixture; 36] = [
+static ALL: [Fixture; 37] = [
     Fixture::new(
         "minimal-one-page",
         "One page showing Helvetica text; classic xref, no tags.",
@@ -206,6 +207,11 @@ static ALL: [Fixture; 36] = [
         "table-headers-ids",
         "PDF 1.7 table with RowSpan and ColSpan header cells, Headers lists of IDs (one recursive, one dangling) on the data cells.",
         table_headers_ids::build,
+    ),
+    Fixture::new(
+        "table-scope-conflict",
+        "PDF 1.7 table whose header cells all declare a Scope: Both on the merged corner, Column on the merged header and the quarters, Row on North, and Column on South, which sits in the first column of a row of data.",
+        table_scope_conflict::build,
     ),
     Fixture::new(
         "speech-lang",

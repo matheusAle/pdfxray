@@ -18,7 +18,7 @@ mod common;
 mod view_tools;
 
 use common::fake::FakeValidator;
-use common::{Region, builder, click_at, fixture_path, open_fixture, the, wait_for_render, wait_until};
+use common::{Region, builder, click_at, fixture_path, open_fixture, the, wait_for_render};
 use egui::{Role, vec2};
 use egui_kittest::kittest::Queryable;
 use pdfxray_app::PdfxrayApp;
@@ -85,10 +85,7 @@ fn snapshot_validation_findings() {
     fake.run_gate.open();
     harness.state_mut().state.validator = std::sync::Arc::new(fake);
     open_fixture(&mut harness, "struct-rich");
-    the(&harness, Region::Chrome, Role::Button, "Validate").click();
-    wait_until(&mut harness, "the report", |s| {
-        s.document.as_ref().is_some_and(|d| d.doc.validation().is_some()) && !s.validation.is_running()
-    });
+    common::validate_from_the_rail(&mut harness);
     the(&harness, Region::Navigator, Role::Button, "H1 12 0 R p1").click();
     harness.run();
     wait_for_render(&mut harness);

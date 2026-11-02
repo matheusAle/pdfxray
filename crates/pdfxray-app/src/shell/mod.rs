@@ -32,6 +32,7 @@ pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
     keys::handle(ui, state);
     state.refresh_object_facts();
     layout::show(ui, state);
+    crate::components::toast::show(ui.ctx());
 }
 
 /// The hairline between a bar and the body, drawn inside the bar's rectangle along `edge` (its

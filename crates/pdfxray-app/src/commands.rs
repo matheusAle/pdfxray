@@ -126,8 +126,9 @@ fn open_recent(state: &mut AppState, index: usize) {
         let path = recent.path.clone();
         state.open_files([path]);
     } else {
+        // The error says where to go next: the file was moved, so it is found again by hand.
         state.status = format!(
-            "Cannot open {}: it is no longer at {}",
+            "Cannot open {}: it is no longer at {}. Find it with Open file… (⌘O).",
             recent.name,
             recent.path.display()
         );

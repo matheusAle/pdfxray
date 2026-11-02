@@ -283,7 +283,7 @@ fn a_font_without_its_program_shows_the_amber_frame_and_a_labelled_fallback() {
         NOT_EMBEDDED_WHY,
         "Readers substitute their own font, so text can reflow or lose glyphs."
     );
-    assert_eq!(FALLBACK_LABEL, "fallback specimen · not the file's font");
+    assert_eq!(FALLBACK_LABEL, "fallback specimen · not the file’s font");
     // The inspector card has no room for why, but keeps the label of the fallback.
     for (text, n) in [
         (NOT_EMBEDDED, 1),
@@ -309,6 +309,151 @@ fn a_font_without_its_program_shows_the_amber_frame_and_a_labelled_fallback() {
     assert!(title.bottom() < fallback.top() && fallback.bottom() <= label.top());
     // Smoke: nothing was sent to the renderer.
     assert_eq!(harness.state().state.preview_digest(obj(5)), None);
+}
+
+/// Every rectangle and text the last frame painted, groups flattened.
+fn painted(harness: &Harness<'_, PdfxrayApp>) -> Vec<egui::Shape> {
+    fn flatten(shape: &egui::Shape, out: &mut Vec<egui::Shape>) {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| flatten(shape, out)),
+            other => out.push(other.clone()),
+        }
+    }
+    let mut out = Vec::new();
+    for clipped in &harness.output().shapes {
+        flatten(&clipped.shape, &mut out);
+    }
+    out
+}
+
+#[test]
+fn the_not_embedded_frame_hugs_what_it_holds_and_sits_in_the_middle_of_the_canvas() {
+    let mut harness = app();
+    objects_at(&mut harness, Source::Fixture("text-state"), 5);
+    harness.remove_cursor();
+    harness.run_steps(2);
+    let shapes = painted(&harness);
+    let rects: Vec<Rect> = shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Rect(r) => Some(r.clone()),
+            _ => None,
+        })
+        .filter(|r| r.fill == tokens::WARN_FRAME && r.stroke.color == tokens::WARN_FRAME_HAIRLINE)
+        .map(|r| r.rect)
+        .collect();
+    let canvases: Vec<Rect> = shapes
+        .iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Rect(r) if r.fill == tokens::FONT_CANVAS => Some(r.rect),
+            _ => None,
+        })
+        .collect();
+
+    // One frame on the centre card, one on the inspector's.
+    assert_eq!(rects.len(), 2, "{rects:?}");
+    for region in [Region::Center, Region::Inspector] {
+        let caption = named(&harness, region, Role::Label, FALLBACK_LABEL)[0].rect();
+        let frame = rects
+            .iter()
+            .find(|frame| frame.contains_rect(caption))
+            .unwrap_or_else(|| panic!("the frame around {caption:?}"));
+        let canvas = canvases
+            .iter()
+            .filter(|canvas| canvas.contains_rect(*frame))
+            .min_by(|a, b| a.height().total_cmp(&b.height()))
+            .unwrap_or_else(|| panic!("the canvas around {frame:?}"));
+        // 16 px under the caption, and no more: the frame hugs it.
+        assert!(
+            (frame.bottom() - caption.bottom() - 16.0).abs() <= 1.0,
+            "{region:?}: frame {frame:?}, caption {caption:?}"
+        );
+        // Centred in the preview body, so no empty band is left under it.
+        assert!(
+            (frame.center().y - canvas.center().y).abs() <= 1.0,
+            "{region:?}: frame {frame:?} in {canvas:?}"
+        );
+        // Smoke: the frame is shorter than its canvas.
+        assert!(frame.height() < canvas.height() - 20.0, "{region:?}");
+    }
+}
+
+#[test]
+fn a_long_array_of_the_decoded_view_wraps_folds_and_unfolds_in_place() {
+    let mut harness = app();
+    objects_at(&mut harness, Source::Gallery, GALLERY_EMBEDDED_FONT);
+    harness.remove_cursor();
+    harness.run_steps(2);
+    let lines = |harness: &Harness<'_, PdfxrayApp>| -> Vec<(String, egui::Pos2)> {
+        let mut lines: Vec<(String, egui::Pos2)> = painted(harness)
+            .into_iter()
+            .filter_map(|shape| match shape {
+                egui::Shape::Text(t)
+                    if t.galley.text().starts_with("[600") || t.galley.text().starts_with("600") =>
+                {
+                    Some((t.galley.text().to_owned(), t.pos))
+                }
+                _ => None,
+            })
+            .collect();
+        lines.sort_by(|a, b| a.1.y.total_cmp(&b.1.y));
+        lines
+    };
+
+    let folded = lines(&harness);
+    assert_eq!(folded.len(), 3, "three lines, then the fold: {folded:?}");
+    let shown: usize = folded
+        .iter()
+        .map(|(text, _)| text.split_whitespace().count())
+        .sum();
+    let more = format!("{} more values", 95 - shown);
+    let button = the(&harness, Region::Center, Role::Button, &more).rect();
+    let texts: Vec<String> = painted(&harness)
+        .into_iter()
+        .filter_map(|shape| match shape {
+            egui::Shape::Text(t) => Some(t.galley.text().to_owned()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        texts.contains(&"95 numbers".to_owned()),
+        "the count stays in view"
+    );
+    assert!(
+        texts.contains(&"]".to_owned()),
+        "the closing bracket stays in view"
+    );
+    // The lines after the first hang under its first item, after `[`; the button under them.
+    let bracket = folded[1].1.x - folded[0].1.x;
+    assert!((5.0..9.0).contains(&bracket), "{folded:?}");
+    assert_eq!(folded[1].1.x, folded[2].1.x);
+    assert!(
+        (button.min.x - folded[1].1.x).abs() < 0.5,
+        "{button:?} {folded:?}"
+    );
+    // One numbered line: the line numbers run on without a gap.
+    let numbers: Vec<String> = texts_in(&harness, Region::Center, Role::Label)
+        .into_iter()
+        .filter(|t| t.parse::<u32>().is_ok_and(|n| n <= 10))
+        .collect();
+    assert_eq!(numbers[..7], ["1", "2", "3", "4", "5", "6", "7"]);
+
+    // The button is a stop of the keyboard, and Enter unfolds the value in place.
+    the(&harness, Region::Center, Role::Button, &more).focus();
+    harness.run_steps(2);
+    harness.key_press(egui::Key::Enter);
+    harness.run_steps(2);
+
+    let open = lines(&harness);
+    assert!(open.len() > 3, "{open:?}");
+    assert_eq!(
+        open.iter()
+            .map(|(text, _)| text.split_whitespace().count())
+            .sum::<usize>(),
+        95
+    );
+    // Smoke: the button is gone once the value is open.
+    assert!(named(&harness, Region::Center, Role::Button, &more).is_empty());
 }
 
 #[test]

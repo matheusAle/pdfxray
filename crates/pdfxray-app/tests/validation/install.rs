@@ -84,8 +84,12 @@ fn a_failed_install_says_why_and_offers_it_again() {
 
     assert!(has_label(
         &harness,
-        "Installing veraPDF failed: SHA-256 mismatch for verapdf-installer.zip"
+        "Installing veraPDF failed: SHA-256 mismatch for verapdf-installer.zip. Try again, or \
+         enter the path of a veraPDF you installed yourself."
     ));
+    // The path field the error points to is there, and named by its visible label.
+    let field = the(&harness, Region::Navigator, Role::TextInput, "veraPDF path:");
+    assert!(field.rect().width() > 100.0);
     let _again = the(
         &harness,
         Region::Navigator,

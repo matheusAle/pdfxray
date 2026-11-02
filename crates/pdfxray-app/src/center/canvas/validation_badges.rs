@@ -4,6 +4,7 @@
 use egui::{Color32, CursorIcon, Rect, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo, vec2};
 
 use super::geometry::PageGeometry;
+use crate::components::focus;
 use crate::findings::{FAIL, PageBadge, pill_position};
 use crate::theme::{fonts, tokens};
 
@@ -48,6 +49,7 @@ pub(super) fn draw(ui: &Ui, geo: &PageGeometry, badges: &[PageBadge]) -> Option<
         };
         painter.rect_filled(pill, tokens::RADIUS_SM, fill);
         painter.galley(pill.min + vec2(6.0, 3.0), galley, tokens::BG);
+        focus::page_ring(&painter, &response, pill, tokens::RADIUS_SM);
         if response.clicked() {
             clicked = Some(badge.finding);
         }

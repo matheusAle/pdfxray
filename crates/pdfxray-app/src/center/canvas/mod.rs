@@ -4,8 +4,9 @@
 //! above it is [`super::toolbar`].
 //!
 //! Only the pages in view are rendered and drawn; the others only take their space. The page
-//! that fills most of the view becomes the current page when the user scrolls, and a click on a
-//! page makes that page current (see [`crate::CanvasState`]).
+//! that fills most of the view becomes the current page when the user scrolls (unless the
+//! paint-order stepper is on), and a click on a page makes that page current (see
+//! [`crate::CanvasState`]).
 //!
 //! This module draws the host (toolbar, rulers, the scroll of pages, the cards) in [`ui`] and
 //! applies what the pointer did. The page layout is in `layout`, the scroll of pages and its
@@ -17,9 +18,11 @@ pub mod cards;
 mod connector;
 pub mod footnotes;
 pub mod geometry;
+pub mod header_scope;
 mod layout;
 pub mod marks;
 pub mod measure;
+pub mod multi;
 pub mod overlay;
 mod page;
 pub mod paint_order;
@@ -40,7 +43,7 @@ use pdfxray_core::{BoxKind, EngineError, NodeId, PageInfo, PageIx, Point};
 use pdfxray_render::{RenderError, page_dimensions};
 
 use self::geometry::PageGeometry;
-pub use self::layout::{PAGE_GAP, PageLayout, layout_pages, most_visible};
+pub use self::layout::{PAGE_GAP, PageLayout, anchored_offset, layout_pages, most_visible};
 use self::measure::{Comparison, Cursor, Line};
 use self::pointer::apply_pointer;
 use self::rulers::Strips;
@@ -48,21 +51,33 @@ use self::scroll::pages_view;
 use super::toolbar;
 use crate::findings::PageBadge;
 use crate::state::AppState;
+use crate::state::canvas::Reveal;
 use crate::theme::{effects, fonts, tokens};
 use crate::units::Lengths;
 
-/// Shown instead of the page for encrypted documents.
-pub const ENCRYPTED_NOT_RENDERED: &str = "Encrypted: not rendered in v1";
+/// Shown instead of the page for encrypted documents, in the words of the encrypted state.
+pub const ENCRYPTED_NOT_RENDERED: &str =
+    "This file is encrypted: pdfxray can’t draw its pages in this version.";
 
-/// Shown instead of the page when the engine cannot read the file.
-pub const ENGINE_FAILED: &str = "The rendering engine could not read this document.";
+/// Shown instead of the page when the engine cannot read the file. pdfxray's own reader still
+/// lists its objects, so the message says where to go.
+pub const ENGINE_FAILED: &str =
+    "The rendering engine could not read this document. Its objects are still in the Objects view.";
+
+/// Why the engine draws no page, as the canvas and the Diagnostics tab say it.
+pub const fn engine_message(error: EngineError) -> &'static str {
+    match error {
+        EngineError::Encrypted => ENCRYPTED_NOT_RENDERED,
+        EngineError::Invalid => ENGINE_FAILED,
+    }
+}
 
 /// Shown by the measure tool before anything is measured.
 pub const MEASURE_HINT: &str =
     "Measure: drag across the page, or click two points. Hold Shift to snap to 45°.";
 
 /// Shown while a bitmap is being rendered.
-pub const RENDERING_TEXT: &str = "Rendering...";
+pub const RENDERING_TEXT: &str = "Rendering…";
 
 /// Accessible name of the page image; clicking it picks the nodes under the pointer.
 pub fn canvas_label(page: u32) -> String {
@@ -79,8 +94,8 @@ struct Overlays {
     comparison: Option<Comparison>,
     line: Option<Line>,
     measuring: bool,
-    /// Scroll the selection into view on this page.
-    reveal: bool,
+    /// Scroll the selection into view on this page, and how.
+    reveal: Option<Reveal>,
     lengths: Lengths,
     /// The operators the stepper has not reached yet.
     ghost: paint_order::Ghost,
@@ -94,6 +109,11 @@ struct Overlays {
     table: table_overlay::TableLayer,
     /// The connectors from footnote references to their notes.
     notes: footnotes::NoteLayer,
+    /// The other selected nodes, their group and the marquee being drawn.
+    multi: multi::MultiLayer,
+    /// The primary gets the single selection's outline: not while the inspector summarises a
+    /// multi-selection, where every node gets the same.
+    outline_primary: bool,
 }
 
 /// What the pointer did on one page this frame.
@@ -151,20 +171,13 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
         no_pages(ui, state);
         return;
     }
-    match state
+    if let Some(error) = state
         .document
         .as_ref()
         .and_then(|loaded| loaded.doc.engine_error())
     {
-        Some(EngineError::Encrypted) => {
-            message(ui, ENCRYPTED_NOT_RENDERED);
-            return;
-        }
-        Some(EngineError::Invalid) => {
-            message(ui, ENGINE_FAILED);
-            return;
-        }
-        None => {}
+        message(ui, engine_message(error));
+        return;
     }
     let Some(loaded) = state.document.as_ref() else {
         return;
@@ -200,7 +213,7 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
     // The canvas tone with the faint grid, which pans with the pages.
     ui.painter().rect_filled(avail, 0.0, tokens::CANVAS);
     effects::grid(ui.painter(), content, -state.canvas.scroll_offset);
-    if state.selection.primary.is_none() {
+    if state.selection.primary().is_none() {
         // A selection made again grows in again.
         state.canvas.outlined = None;
     }
@@ -219,8 +232,10 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
         state.canvas.settle -= 1;
     } else if let Some(page) = output.most_visible
         && output.offset != state.canvas.last_offset
+        && !state.canvas.view.stepper
     {
-        // The user scrolled: the page that fills the view is the one they are looking at.
+        // The user scrolled: the page that fills the view is the one they are looking at. Not
+        // while the stepper is on: it walks its page, and a page change would move its step.
         state.set_current_page(page);
     }
     state.canvas.last_offset = output.offset;
@@ -230,6 +245,10 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
     } else {
         state.canvas.cursor = None;
         state.update_hover(None);
+    }
+    // The button was let go: the marquee selects what it touches.
+    if state.canvas.marquee.is_some() && !ui.input(|i| i.pointer.primary_down()) {
+        state.finish_marquee();
     }
     if let Some(geo) = output.current {
         let corner_label = Label::new(
@@ -264,11 +283,10 @@ fn message(ui: &mut Ui, text: &str) {
 
 fn no_pages(ui: &mut Ui, state: &AppState) {
     let reason = match &state.document {
-        Some(loaded) => match loaded.doc.engine_error() {
-            Some(EngineError::Encrypted) => ENCRYPTED_NOT_RENDERED,
-            Some(EngineError::Invalid) => ENGINE_FAILED,
-            None => "This document has no pages.",
-        },
+        Some(loaded) => loaded
+            .doc
+            .engine_error()
+            .map_or("This document has no pages.", engine_message),
         None => "Open a PDF to see its pages.",
     };
     message(ui, reason);

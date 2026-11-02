@@ -27,7 +27,7 @@ fn the_title_bar_claims_a_ua_level_only_after_a_run_proved_it() {
         "PDF 1.7 · Tagged · rev 1/1",
     );
 
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
 
     // The verdict replaces the tagged run: UA-1 is proven.
     let _chip = the(&harness, Region::Chrome, Role::Button, "PDF 1.7 · UA-1 · rev 1/1");
@@ -54,7 +54,7 @@ fn changing_the_profile_after_a_run_runs_again_with_the_chosen_one() {
     let fake = FakeValidator::ready();
     let mut harness = app_with(&fake);
     open_fixture(&mut harness, "orphan-mcid");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
     assert_eq!(fake.calls().len(), 2);
 
     harness.get_by_label("Profile").click();

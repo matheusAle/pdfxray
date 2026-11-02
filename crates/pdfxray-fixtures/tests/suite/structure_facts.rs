@@ -73,6 +73,7 @@ fn rich_outlines_equal_what_the_objects_say() {
             "table-simple-pdf17",
             "table-scope-pdf2",
             "table-headers-ids",
+            "table-scope-conflict",
             "speech-lang",
             "speech-link-objr",
         ]

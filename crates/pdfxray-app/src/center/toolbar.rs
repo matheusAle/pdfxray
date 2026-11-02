@@ -14,6 +14,9 @@ use crate::view::ZoomMode;
 /// Accessible name of the previous-page button.
 pub const PREV_LABEL: &str = "Prev";
 
+/// Accessible name of the field that jumps to a page: nothing visible names it.
+pub const PAGE_FIELD_LABEL: &str = "Page number";
+
 /// Accessible name of the next-page button.
 pub const NEXT_LABEL: &str = "Next";
 
@@ -187,13 +190,15 @@ fn pages(ui: &mut Ui, state: &mut AppState, count: usize) {
         }
         tooltip::named(prev, PREV_LABEL, "Previous page", None);
     });
-    let field = ui.add(
-        TextEdit::singleline(&mut state.canvas.page_field)
-            .desired_width(page_field_width(ui, count))
-            .font(fonts::mono(tokens::mono::BODY))
-            .align(Align2::CENTER_CENTER)
-            .hint_text("Go to page"),
-    );
+    let field = ui
+        .add(
+            TextEdit::singleline(&mut state.canvas.page_field)
+                .desired_width(page_field_width(ui, count))
+                .font(fonts::mono(tokens::mono::BODY))
+                .align(Align2::CENTER_CENTER)
+                .hint_text("Go to page"),
+        )
+        .accessible_name(PAGE_FIELD_LABEL);
     if field.lost_focus() {
         state.commit_page_field();
     } else if !field.has_focus() {

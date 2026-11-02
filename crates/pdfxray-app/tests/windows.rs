@@ -359,6 +359,15 @@ fn open_recent_follows_the_window_rules_and_clear_menu_empties_the_list() {
         "{}",
         harness.state().state.status
     );
+    // Smoke: it names the way back to the file.
+    assert_eq!(
+        harness.state().state.status,
+        format!(
+            "Cannot open {}: it is no longer at {}. Find it with Open file… (⌘O).",
+            gone.file_name().unwrap().to_string_lossy(),
+            gone.display()
+        )
+    );
 
     // With a document: a new window.
     let struct_rich = harness

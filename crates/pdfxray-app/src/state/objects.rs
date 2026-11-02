@@ -226,7 +226,7 @@ impl AppState {
     /// Builds the facts of the selected object, when it changed since the last frame. Called once
     /// per frame before any panel draws.
     pub fn refresh_object_facts(&mut self) {
-        let wanted = match &self.selection.primary {
+        let wanted = match self.selection.primary() {
             Some(NodeId::Object(r)) => Some(FactsKey {
                 object: Some(*r),
                 revision: self.objects.revision,

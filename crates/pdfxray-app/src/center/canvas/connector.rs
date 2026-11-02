@@ -8,6 +8,7 @@ use egui::{
 };
 
 use super::tag_overlay::clear_of;
+use crate::components::focus;
 use crate::theme::{fonts, tokens};
 
 /// Width of a connector.
@@ -157,6 +158,7 @@ pub(super) fn label(
         StrokeKind::Inside,
     );
     painter.galley(rect.min + vec2(5.0, 2.5), galley, label.ink);
+    focus::page_ring(painter, &response, rect, tokens::RADIUS_SM);
     response
 }
 

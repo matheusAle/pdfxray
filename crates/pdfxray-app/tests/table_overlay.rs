@@ -1,5 +1,6 @@
-//! The table overlay (grid, selected cell, header connectors, cells without a header), the
-//! inspector's Table section and the footnote connectors.
+//! The table overlay (grid, selected cell, header connectors, cells without a header), header
+//! scope (the `TH` chips, the echo and the inspector's Scope rows), the inspector's Table section
+//! and the footnote connectors.
 //!
 //! Update the snapshot with `UPDATE_SNAPSHOTS=1 cargo test -p pdfxray-app --test table_overlay snapshot_table_overlay`.
 
@@ -22,7 +23,10 @@ use common::{Region, app, buttons_in, is_selected, open_fixture, open_path, text
 use egui::epaint::{ClippedShape, Shape};
 use egui::{Key, Modifiers, Role};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
+use pdfxray_app::center::canvas::header_scope;
+use pdfxray_app::inspector::table;
+use pdfxray_app::theme::tokens;
 use pdfxray_app::{DrawerTab, PdfxrayApp};
 use pdfxray_core::{NodeId, ObjRef};
 use pdfxray_fixtures::{PdfVersion, PdfWriter, Trailer};
@@ -135,7 +139,7 @@ fn a_selected_table_shows_its_grid_and_marks_without_connectors_and_a_click_on_a
     assert_eq!(unresolved(&harness), ["No header: 1.1"]);
     the(&harness, Region::Center, Role::Button, "No header: 1.1").click();
     settle(&mut harness);
-    assert_eq!(harness.state().state.selection.primary, Some(elem(22)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(22)));
     // Now it has its connectors as well.
     assert_eq!(connectors(&harness).len(), 3);
 }
@@ -201,7 +205,7 @@ fn clicking_a_connector_label_selects_the_header_it_points_to() {
     the(&harness, Region::Center, Role::Button, "Header via Scope: Q1").click();
     settle(&mut harness);
 
-    assert_eq!(harness.state().state.selection.primary, Some(elem(14)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(14)));
     // Selecting a header cell keeps the table: its own headers show.
     assert_eq!(connectors(&harness), Vec::<String>::new());
 }
@@ -312,7 +316,10 @@ fn the_inspector_draws_the_grid_with_headers_and_the_selection_and_names_the_pdf
     assert!(labels.contains(&"PDF 1.7 rules".to_owned()), "{labels:?}");
     // The header read with the cell, and the rule that found it.
     let links = texts_in(&harness, Region::Inspector, Role::Link);
-    assert!(links.contains(&"Q1 · row 1, col 2".to_owned()), "{links:?}");
+    assert!(
+        links.contains(&"position: Q1 · row 1, col 2".to_owned()),
+        "{links:?}"
+    );
     // Only the one header the cell is read with is a link of the grid section.
     assert_eq!(
         links.iter().filter(|l| l.contains("row ")).count(),
@@ -333,7 +340,7 @@ fn the_inspector_names_the_pdf_2_algorithm_and_lists_both_headers() {
     assert!(!labels.contains(&"PDF 1.7 rules".to_owned()), "{labels:?}");
     assert_eq!(
         texts_in(&harness, Region::Inspector, Role::Link),
-        ["Q1 · row 1, col 2", "North · row 2, col 1"]
+        ["Scope: Q1 · row 1, col 2", "Scope: North · row 2, col 1"]
     );
     // The row header is a header cell of the grid, in this table.
     assert!(grid(&harness).contains(&"Header cell row 2, column 1: North".to_owned()));
@@ -354,9 +361,9 @@ fn a_header_id_no_cell_has_is_named_in_the_inspector_and_a_click_in_the_grid_sel
     assert_eq!(
         texts_in(&harness, Region::Inspector, Role::Link),
         [
-            "South · row 4, col 1",
-            "Q2 · row 2, col 3",
-            "Sales · row 1, col 2"
+            "Headers: South · row 4, col 1",
+            "Headers: Q2 · row 2, col 3",
+            "Headers: Sales · row 1, col 2"
         ]
     );
     // Spans are named: Sales covers two columns, Region two rows.
@@ -371,7 +378,296 @@ fn a_header_id_no_cell_has_is_named_in_the_inspector_and_a_click_in_the_grid_sel
     )
     .click();
     settle(&mut harness);
-    assert_eq!(harness.state().state.selection.primary, Some(elem(18)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(18)));
+}
+
+// ---- header scope ----
+
+fn boxes_on(harness: &mut App) {
+    harness.key_press_modifiers(Modifiers::SHIFT, Key::T);
+    settle(harness);
+}
+
+/// The chips of the header cells on the canvas, sorted.
+fn header_chips(harness: &App) -> Vec<String> {
+    on_canvas(harness, "TH")
+}
+
+/// Every shape painted last frame whose ink is `color`, by kind: rectangles outlined in it, and
+/// meshes with a vertex of it.
+fn rects_stroked(harness: &App, color: egui::Color32, width: f32) -> Vec<egui::Rect> {
+    painted(harness)
+        .into_iter()
+        .filter_map(|shape| match shape {
+            Shape::Rect(rect) if rect.stroke.color == color && rect.stroke.width == width => Some(rect.rect),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The bands of the echo painted last frame: meshes that start at 25 % of the table colour.
+fn echo_bands(harness: &App) -> usize {
+    let near = tokens::ROLE_TABLE.gamma_multiply(0.25);
+    painted(harness)
+        .into_iter()
+        .filter(|shape| matches!(shape, Shape::Mesh(mesh) if mesh.vertices.iter().any(|v| v.color == near)))
+        .count()
+}
+
+/// The chevrons of the echo painted last frame.
+fn echo_chevrons(harness: &App) -> usize {
+    painted(harness)
+        .into_iter()
+        .filter(|shape| {
+            matches!(shape, Shape::Path(path)
+                if path.points.len() == 3 && path.stroke.color == egui::epaint::ColorMode::Solid(tokens::ROLE_TABLE))
+        })
+        .count()
+}
+
+#[test]
+fn a_th_chip_says_its_declared_scope_and_a_conflict_gets_an_amber_ring_and_a_mark() {
+    let mut harness = opened("table-scope-conflict");
+    assert_eq!(header_chips(&harness), Vec::<String>::new());
+
+    boxes_on(&mut harness);
+
+    assert_eq!(
+        header_chips(&harness),
+        [
+            "TH · Both · declared",
+            "TH · Column · declared",
+            "TH · Column · declared",
+            "TH · Column · declared",
+            "TH · Column · declared, conflicts with position",
+            "TH · Row · declared",
+        ]
+    );
+    // The ring is on the one chip that conflicts, and the `!` is drawn: not colour alone.
+    let south = the(
+        &harness,
+        Region::Center,
+        Role::Button,
+        "TH · Column · declared, conflicts with position",
+    )
+    .rect();
+    let rings = rects_stroked(&harness, tokens::WARN, header_scope::CONFLICT_RING);
+    assert_eq!(rings, [south]);
+    let marks = painted(&harness)
+        .into_iter()
+        .filter(|shape| matches!(shape, Shape::Text(t) if t.galley.text() == "!" && south.contains(t.pos)))
+        .count();
+    assert_eq!(marks, 1);
+    // Smoke: labels off, the chips go.
+    harness.key_press(Key::L);
+    settle(&mut harness);
+    assert_eq!(header_chips(&harness), Vec::<String>::new());
+}
+
+#[test]
+fn a_th_without_scope_has_an_outlined_chip_and_a_hash_when_cells_name_it_by_id() {
+    let mut harness = opened("table-headers-ids");
+
+    boxes_on(&mut harness);
+
+    assert_eq!(
+        header_chips(&harness),
+        [
+            "TH · Column · inferred",
+            "TH · Column · inferred · IDs decide",
+            "TH · Column · inferred · IDs decide",
+            "TH · Column · inferred · IDs decide",
+            "TH · Row · inferred · IDs decide",
+            "TH · Row · inferred · IDs decide",
+        ]
+    );
+    // Outlined: a 1 px border in the table colour and no fill, for each header chip.
+    let chips: Vec<egui::Rect> = common::nodes_in(&harness, Region::Center, Role::Button)
+        .into_iter()
+        .filter(|node| node.accesskit_node().label().is_some_and(|l| l.starts_with("TH")))
+        .map(|node| node.rect())
+        .collect();
+    let outlined: Vec<egui::Rect> = painted(&harness)
+        .into_iter()
+        .filter_map(|shape| match shape {
+            Shape::Rect(r)
+                if r.stroke.color == tokens::ROLE_TABLE
+                    && r.stroke.width == 1.0
+                    && r.fill == egui::Color32::TRANSPARENT =>
+            {
+                Some(r.rect)
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        chips.iter().all(|chip| outlined.contains(chip)),
+        "{chips:?} in {outlined:?}"
+    );
+    let hashes = painted(&harness)
+        .into_iter()
+        .filter(|shape| matches!(shape, Shape::Text(t) if t.galley.text() == "#"))
+        .count();
+    assert_eq!(hashes, 5);
+    // Smoke: nothing conflicts here.
+    assert_eq!(
+        rects_stroked(&harness, tokens::WARN, header_scope::CONFLICT_RING),
+        []
+    );
+}
+
+/// The texts of the inspector's labels.
+fn inspector_labels(harness: &App) -> Vec<String> {
+    texts_in(harness, Region::Inspector, Role::Label)
+}
+
+#[test]
+fn the_inspector_says_each_scope_how_many_cells_it_governs_and_explains_a_conflict() {
+    let mut harness = opened("table-scope-conflict");
+
+    // Each header cell: its Scope row and how many cells it governs.
+    for (cell, scope, governs) in [
+        (13, "Both · declared", "5 cells"),
+        (14, "Column · declared", "6 cells"),
+        (15, "Column · declared", "2 cells"),
+        (17, "Row · declared", "2 cells"),
+        (20, "Column · declared, conflicts with position", "0 cells"),
+    ] {
+        select(&mut harness, elem(cell));
+        let labels = inspector_labels(&harness);
+        assert!(labels.contains(&scope.to_owned()), "{cell}: {labels:?}");
+        assert!(labels.contains(&governs.to_owned()), "{cell}: {labels:?}");
+    }
+    // The conflict has its card, in plain words.
+    let labels = inspector_labels(&harness);
+    assert!(
+        labels.contains(&table::SCOPE_CONFLICT_CODE.to_owned()),
+        "{labels:?}"
+    );
+    assert!(
+        labels.iter().any(|l| l.starts_with(
+            "Says Column, but sits in the first column, so it reads as a row header."
+        )),
+        "{labels:?}"
+    );
+    // Smoke: a declared scope that agrees has no card, and a data cell governs nothing.
+    select(&mut harness, elem(15));
+    assert!(!inspector_labels(&harness).contains(&table::SCOPE_CONFLICT_CODE.to_owned()));
+    select(&mut harness, elem(18));
+    assert!(!inspector_labels(&harness).contains(&"Governs".to_owned()));
+}
+
+#[test]
+fn the_inspector_lists_the_cells_whose_headers_name_an_inferred_header() {
+    let mut harness = opened("table-headers-ids");
+
+    // Q1: no Scope, named by 1.2 and 0.9.
+    select(&mut harness, elem(15));
+
+    let labels = inspector_labels(&harness);
+    assert!(labels.contains(&"Column · inferred".to_owned()), "{labels:?}");
+    assert!(labels.contains(&"2 cells".to_owned()), "{labels:?}");
+    let links = texts_in(&harness, Region::Inspector, Role::Link);
+    assert!(
+        links.contains(&"/Headers: 1.2 · row 3, col 2".to_owned()),
+        "{links:?}"
+    );
+    assert!(
+        links.contains(&"/Headers: 0.9 · row 4, col 2".to_owned()),
+        "{links:?}"
+    );
+    // A click on a cell that names it selects that cell.
+    the(&harness, Region::Inspector, Role::Label, "0.9 · row 4, col 2").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(21)));
+}
+
+#[test]
+fn a_selected_th_echoes_the_cells_it_governs_and_nothing_else_does() {
+    let mut harness = opened("table-scope-conflict");
+    assert_eq!(echo_bands(&harness), 0);
+
+    // Q1 heads the two cells below it: one band, a chevron on each of their rows.
+    select(&mut harness, elem(15));
+    assert_eq!((echo_bands(&harness), echo_chevrons(&harness)), (1, 2));
+
+    // The corner heads cells beside it and below it: two bands.
+    select(&mut harness, elem(13));
+    assert_eq!(echo_bands(&harness), 2);
+
+    // A data cell, or the table, has none.
+    select(&mut harness, elem(18));
+    assert_eq!((echo_bands(&harness), echo_chevrons(&harness)), (0, 0));
+    select(&mut harness, elem(8));
+    assert_eq!(echo_bands(&harness), 0);
+}
+
+#[test]
+fn hovering_a_th_chip_echoes_its_cells_until_the_pointer_leaves() {
+    let mut harness = opened("table-scope-conflict");
+    boxes_on(&mut harness);
+    harness.remove_cursor();
+    settle(&mut harness);
+    assert_eq!(echo_bands(&harness), 0);
+
+    let corner = the(&harness, Region::Center, Role::Button, "TH · Both · declared").rect();
+    harness.hover_at(corner.center());
+    settle(&mut harness);
+    assert_eq!(echo_bands(&harness), 2);
+
+    harness.remove_cursor();
+    settle(&mut harness);
+    assert_eq!(echo_bands(&harness), 0);
+
+    // Hovering the selected header does not paint its echo twice.
+    select(&mut harness, elem(13));
+    harness.hover_at(corner.center());
+    settle(&mut harness);
+    assert_eq!(echo_bands(&harness), 2);
+}
+
+#[test]
+fn snapshot_table_header_scope() {
+    let _gpu = common::gpu_lock();
+    let mut harness = common::builder().wgpu().build_eframe(|cc| PdfxrayApp::new(cc));
+    harness.run();
+    open_fixture(&mut harness, "table-scope-conflict");
+    common::click_rail(&mut harness, "Tags");
+    boxes_on(&mut harness);
+    // Sales selected: its echo over the quarters and the figures; the hint of the conflict. Zoomed
+    // in so the table is as large as on the design board.
+    harness.state_mut().state.set_zoom(2.2);
+    harness.state_mut().state.select(elem(14));
+    harness.run_steps(4);
+    wait_for_render(&mut harness);
+    let south = the(
+        &harness,
+        Region::Center,
+        Role::Button,
+        "TH · Column · declared, conflicts with position",
+    )
+    .rect();
+    harness.hover_at(south.center());
+    harness.run_steps(6);
+    harness.snapshot("app_table_header_scope");
+}
+
+#[test]
+fn snapshot_table_header_scope_by_ids() {
+    let _gpu = common::gpu_lock();
+    let mut harness = common::builder().wgpu().build_eframe(|cc| PdfxrayApp::new(cc));
+    harness.run();
+    open_fixture(&mut harness, "table-headers-ids");
+    common::click_rail(&mut harness, "Tags");
+    boxes_on(&mut harness);
+    // Q1 selected: inferred, named by two cells.
+    harness.state_mut().state.set_zoom(2.2);
+    harness.state_mut().state.select(elem(15));
+    harness.run_steps(4);
+    wait_for_render(&mut harness);
+    harness.remove_cursor();
+    harness.run_steps(2);
+    harness.snapshot("app_table_header_scope_ids");
 }
 
 // ---- footnote connectors ----
@@ -423,12 +719,12 @@ fn a_footnote_label_goes_to_the_other_end() {
     the(&harness, Region::Center, Role::Button, "Footnote link: 1 apart").click();
     settle(&mut harness);
     // From the reference to the note.
-    assert_eq!(harness.state().state.selection.primary, Some(elem(11)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(11)));
 
     the(&harness, Region::Center, Role::Button, "Footnote link: 1 apart").click();
     settle(&mut harness);
     // And back.
-    assert_eq!(harness.state().state.selection.primary, Some(elem(9)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(9)));
 }
 
 /// A two-page file whose footnote reference is on page 1 and whose note is on page 2.
@@ -510,7 +806,7 @@ fn a_note_on_another_page_is_joined_on_both_pages_and_says_which() {
     )
     .click();
     settle(&mut harness);
-    assert_eq!(harness.state().state.selection.primary, Some(elem(11)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(elem(11)));
     assert_eq!(harness.state().state.canvas.page, 1);
 }
 
@@ -527,4 +823,54 @@ fn snapshot_table_overlay() {
     harness.remove_cursor();
     harness.run_steps(2);
     harness.snapshot("app_table_overlay");
+}
+
+#[test]
+fn the_sub_headers_of_the_table_section_are_in_natural_case_on_the_section_headers_text_edge() {
+    let mut harness = opened("table-headers-ids");
+    // A header cell named by two cells, then a data cell read with its headers.
+    select(&mut harness, elem(15));
+    let header = the(&harness, Region::Inspector, Role::Button, table::TITLE).rect();
+    let named = the(&harness, Region::Inspector, Role::Label, table::NAMED_BY).rect();
+
+    assert_eq!(table::NAMED_BY, "Named by /Headers");
+    assert!(
+        (named.min.x - (header.min.x + pdfxray_app::components::section::TEXT_X)).abs() < 0.5,
+        "{named:?} against the header {header:?}"
+    );
+    let shape = painted(&harness)
+        .into_iter()
+        .find_map(|shape| match shape {
+            Shape::Text(t) if t.galley.text() == table::NAMED_BY => Some(t),
+            _ => None,
+        })
+        .expect("the sub-header is painted");
+    let format = &shape.galley.job.sections[0].format;
+    assert_eq!(
+        (format.font_id.size, format.color),
+        (tokens::text::SMALL, tokens::TEXT_2)
+    );
+    assert!(
+        shape.galley.job.sections[0].format.font_id.family
+            == pdfxray_app::theme::fonts::semibold(11.0).family,
+        "Inter 600"
+    );
+
+    select(&mut harness, elem(22));
+    let cell = the(
+        &harness,
+        Region::Inspector,
+        Role::Label,
+        table::HEADERS_OF_THE_CELL,
+    )
+    .rect();
+    assert_eq!(table::HEADERS_OF_THE_CELL, "Headers of the cell");
+    assert!((cell.min.x - named.min.x).abs() < 0.5, "{cell:?} {named:?}");
+    // Smoke: the shouted versions are gone.
+    let labels = inspector_labels(&harness);
+    assert!(
+        !labels
+            .iter()
+            .any(|l| l == "HEADERS OF THE CELL" || l == "NAMED BY /HEADERS")
+    );
 }

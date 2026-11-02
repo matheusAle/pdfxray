@@ -13,8 +13,8 @@ use pdfxray_core::{NodeId, PaintStep};
 
 use super::Action;
 use super::structure::Cx;
-use crate::components::PropRow;
 use crate::components::prop_row::VALUE_X;
+use crate::components::{PropRow, focus};
 use crate::drawer::paint_order::summary;
 use crate::theme::{fonts, tokens};
 
@@ -134,7 +134,7 @@ fn covered_by(ui: &mut Ui, captured: &CapturedPage, step: &PaintStep, action: &m
         };
         let text = format!("op {}", summary(captured, op));
         let key = if n == 0 { "Covered later by" } else { "" };
-        if PropRow::new(key, &text).link(true).show(ui).value.clicked() {
+        if PropRow::new(key, &text).link(true).show(ui).followed {
             action.step_to = Some(op.ix);
         }
     }
@@ -239,6 +239,7 @@ fn stack_row(ui: &mut Ui, text: &str, place: Place) -> bool {
         };
         painter.rect_filled(inner, tokens::RADIUS_SM, fill);
     }
+    focus::ring(ui, &response, inner, tokens::RADIUS_SM);
     painter.circle_filled(pos2(inner.min.x + 10.0, inner.center().y), 3.0, dot);
     painter.text(
         pos2(inner.min.x + 22.0, inner.center().y),

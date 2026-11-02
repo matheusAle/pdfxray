@@ -77,9 +77,9 @@ pub(super) fn subtitle_of(
     let operators = |n: usize| format!("{n} operator{}", if n == 1 { "" } else { "s" });
     match (kind, page, ops) {
         (ObjectKind::ContentStream, Some(page), Some(n)) => {
-            format!("Page {}'s drawing instructions · {}", page + 1, operators(n))
+            format!("Page {}’s drawing instructions · {}", page + 1, operators(n))
         }
-        (ObjectKind::ContentStream, Some(page), None) => format!("Page {}'s drawing instructions", page + 1),
+        (ObjectKind::ContentStream, Some(page), None) => format!("Page {}’s drawing instructions", page + 1),
         (ObjectKind::Form, _, Some(n)) => format!("Drawing instructions of a form · {}", operators(n)),
         _ => match kind {
             ObjectKind::Image => format!(

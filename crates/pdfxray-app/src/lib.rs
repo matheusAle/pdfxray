@@ -72,8 +72,8 @@ pub use recents::{Recent, Recents, RecentsError};
 pub use roles::role_color;
 pub use shell::show;
 pub use state::{
-    AppState, CanvasState, DrawerState, DrawerTab, HitEntry, HitStack, LoadedDocument, NavState, NavTree,
-    ObjectHistory, ObjectMode, ObjectRow, ObjectsState, READY, RailItem, ResourceGroup, ResourceRow,
+    AppState, CanvasState, Combine, DrawerState, DrawerTab, HitEntry, HitStack, LoadedDocument, NavState,
+    NavTree, ObjectHistory, ObjectMode, ObjectRow, ObjectsState, READY, RailItem, ResourceGroup, ResourceRow,
     SelectionState,
 };
 pub use states::Screen;

@@ -21,11 +21,6 @@ const HINT_GAP: f32 = 8.0;
 /// so an active button reacts to the pointer too.
 const ACTIVE_HOVER: Color32 = Color32::from_rgba_unmultiplied_const(0xFF, 0xFF, 0xFF, 0x1E);
 const ACTIVE_PRESSED: Color32 = Color32::from_rgba_unmultiplied_const(0xFF, 0xFF, 0xFF, 0x28);
-/// A tall button (the title bar's Validate): height, corner radius, padding left and right, gap.
-const TALL_H: f32 = 30.0;
-const TALL_RADIUS: f32 = 7.0;
-const TALL_PAD: (f32, f32) = (10.0, 12.0);
-const TALL_GAP: f32 = 6.0;
 
 /// How a [`ToolButton`] looks when it is not active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +44,6 @@ pub struct ToolButton<'a> {
     active: bool,
     icon_only: bool,
     compact: bool,
-    tall: bool,
     look: Look,
     hint: Option<&'a str>,
     min_width: f32,
@@ -65,7 +59,6 @@ impl<'a> ToolButton<'a> {
             active: false,
             icon_only: false,
             compact: false,
-            tall: false,
             look: Look::Ghost,
             hint: None,
             min_width: 0.0,
@@ -94,12 +87,6 @@ impl<'a> ToolButton<'a> {
     /// Tighter padding, for toolbars that have little room.
     pub const fn compact(mut self, compact: bool) -> Self {
         self.compact = compact;
-        self
-    }
-
-    /// The title bar's size: taller, rounder and with a semibold label.
-    pub const fn tall(mut self) -> Self {
-        self.tall = true;
         self
     }
 
@@ -140,9 +127,7 @@ impl<'a> ToolButton<'a> {
 
     /// Space left and right of the content.
     fn pad(&self) -> (f32, f32) {
-        if self.tall {
-            TALL_PAD
-        } else if self.compact {
+        if self.compact {
             (PAD_COMPACT, PAD_COMPACT)
         } else {
             (PAD, PAD)
@@ -150,31 +135,18 @@ impl<'a> ToolButton<'a> {
     }
 
     fn gap(&self) -> f32 {
-        if self.tall {
-            TALL_GAP
-        } else if self.compact {
-            GAP_COMPACT
-        } else {
-            GAP
-        }
+        if self.compact { GAP_COMPACT } else { GAP }
     }
 
-    fn height(&self) -> f32 {
-        if self.tall { TALL_H } else { tokens::CONTROL_H }
-    }
-
-    fn font(&self) -> egui::FontId {
-        if self.tall {
-            fonts::semibold(tokens::text::BODY)
-        } else {
-            fonts::medium(tokens::text::BODY)
-        }
+    /// The label's font.
+    fn font() -> egui::FontId {
+        fonts::medium(tokens::text::BODY)
     }
 
     /// The width [`Self::show`] will take, so a toolbar can decide what fits.
     pub fn width(&self, ui: &Ui) -> f32 {
         if self.icon_only {
-            return self.height();
+            return tokens::CONTROL_H;
         }
         self.content_width(ui).max(self.min_width)
     }
@@ -183,7 +155,7 @@ impl<'a> ToolButton<'a> {
     fn content_width(&self, ui: &Ui) -> f32 {
         let galley = ui
             .painter()
-            .layout_no_wrap(self.label.to_owned(), self.font(), Color32::WHITE);
+            .layout_no_wrap(self.label.to_owned(), Self::font(), Color32::WHITE);
         let (left, right) = self.pad();
         let mut width = left + right + galley.size().x;
         if self.icon.is_some() {
@@ -201,7 +173,7 @@ impl<'a> ToolButton<'a> {
     /// Lays the button out and returns its response; `clicked()` is the action.
     pub fn show(self, ui: &mut Ui) -> Response {
         let enabled = ui.is_enabled();
-        let font = self.font();
+        let font = Self::font();
         let galley = (!self.icon_only).then(|| {
             ui.painter()
                 .layout_no_wrap(self.label.to_owned(), font.clone(), Color32::WHITE)
@@ -214,7 +186,7 @@ impl<'a> ToolButton<'a> {
             self.content_width(ui)
         };
         let width = self.width(ui);
-        let (rect, response) = ui.allocate_exact_size(vec2(width, self.height()), Sense::click());
+        let (rect, response) = ui.allocate_exact_size(vec2(width, tokens::CONTROL_H), Sense::click());
         let label = self.label;
         let active = self.active;
         response.widget_info(|| WidgetInfo::selected(Role::Button, enabled, active, label));
@@ -224,7 +196,7 @@ impl<'a> ToolButton<'a> {
             let open = self.opens_popup && Popup::is_id_open(ui.ctx(), Popup::default_response_id(&response));
             let pressed = (response.is_pointer_button_down_on() && enabled) || open;
             let (fill, stroke, ink) = self.colors(hovered, pressed);
-            let radius = if self.tall { TALL_RADIUS } else { tokens::RADIUS_MD };
+            let radius = tokens::RADIUS_MD;
             if self.look == Look::Primary {
                 effects::primary_gradient(ui.painter(), rect, radius);
                 // Hover lightens, a press darkens, over the gradient.

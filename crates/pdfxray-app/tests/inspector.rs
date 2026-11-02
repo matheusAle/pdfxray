@@ -11,7 +11,7 @@ use std::sync::Arc;
 use common::fake::{FakeValidator, struct_rich_report};
 use common::{
     Region, app, buttons_in, click_at, click_rail, is_selected, named, open_fixture, texts_in, the,
-    wait_for_render, wait_until,
+    wait_for_render,
 };
 use egui::{Role, vec2};
 use egui_kittest::Harness;
@@ -143,10 +143,7 @@ fn the_problem_card_comes_first_and_details_opens_the_finding() {
     let mut harness = app();
     harness.state_mut().state.validator = Arc::new(fake);
     open_fixture(&mut harness, "struct-rich");
-    the(&harness, Region::Chrome, Role::Button, "Validate").click();
-    wait_until(&mut harness, "the validation result", |s| {
-        s.document.as_ref().unwrap().doc.validation().is_some() && !s.validation.is_running()
-    });
+    common::validate_from_the_rail(&mut harness);
     click_rail(&mut harness, "Tags");
     // 12 0 R has no /Alt in the report.
     harness

@@ -67,18 +67,6 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
             ui.add_space(4.0);
             ui.label("Reads PDFs only: it never changes your file.");
         });
-        let validation = state.nav.rail == RailItem::Validation;
-        let shield = button(
-            ui,
-            Icon::Validation,
-            RailItem::Validation.title(),
-            validation,
-            has_document,
-            tokens::ACCENT,
-        );
-        if shield.clicked() && has_document {
-            state.set_rail(RailItem::Validation);
-        }
         let diagnostics = state
             .document
             .as_ref()

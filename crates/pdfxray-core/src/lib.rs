@@ -54,10 +54,10 @@ pub use resources::{
 };
 pub use revisions::{RevisionInfo, XrefKind};
 pub use tags::{
-    HeaderRef, HeaderSource, IrregularRow, LangChange, LinkFlag, LinkTarget, NoteFlag, NoteLinkSource,
-    NoteRole, OrderComparison, OrderStep, PresetRule, ReadingOrder, ReadingOrderSource, RoleClass, RowGroup,
-    SkipReason, SpeechCell, SpeechItem, SpeechOrder, SpeechPreset, StepKind, Substitution, TableCell,
-    TableModel, TableRules, TableScope, TagBox,
+    HeaderPlace, HeaderRef, HeaderScope, HeaderSource, IrregularRow, LangChange, LinkFlag, LinkTarget,
+    NoteFlag, NoteLinkSource, NoteRole, OrderComparison, OrderStep, PresetRule, ReadingOrder,
+    ReadingOrderSource, RoleClass, RowGroup, ScopeSource, SkipReason, SpeechCell, SpeechItem, SpeechOrder,
+    SpeechPreset, StepKind, Substitution, TableCell, TableModel, TableRules, TableScope, TagBox,
 };
 pub use tree::{Badge, Severity, TreeKind, TreeNode};
 pub use validation::{RuleText, ValidationFinding, ValidationRun};

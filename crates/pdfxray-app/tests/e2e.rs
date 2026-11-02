@@ -19,7 +19,9 @@ use common::{
 use egui::{Event, Key, Modifiers, MouseWheelUnit, Role, vec2};
 use egui_kittest::kittest::{NodeT, Queryable};
 use pdfxray_app::NavTree;
+use pdfxray_app::center::canvas::ENCRYPTED_NOT_RENDERED;
 use pdfxray_app::center::toolbar::zoom_text;
+use pdfxray_app::navigator::tags::NO_STRUCTURE;
 use pdfxray_core::{BoxKind, NodeId, TreeKind};
 use pretty_assertions::assert_eq;
 
@@ -92,7 +94,7 @@ fn open_click_the_page_follow_the_hit_stack_and_a_link() {
         "{:?} at zoom {zoom}",
         stack.point
     );
-    assert_eq!(harness.state().state.selection.primary, Some(media(0)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(media(0)));
 
     // The Hit stack tab lists the same entries, topmost first, and where the click was.
     assert_eq!(
@@ -149,13 +151,13 @@ fn open_click_the_page_follow_the_hit_stack_and_a_link() {
     assert!(labels.contains(&"Defined on".to_owned()), "{labels:?}");
     assert_eq!(
         texts_in(&harness, Region::Inspector, Role::Link),
-        ["page 3 0 R", "Page 1"]
+        ["Defined on: page 3 0 R", "Page: Page 1"]
     );
 
     // Clicking another hit stack entry selects it everywhere.
     the(&harness, Region::Drawer, Role::Button, "CropBox").click();
     harness.run();
-    assert_eq!(harness.state().state.selection.primary, Some(crop(0)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(crop(0)));
     assert!(has_label(&harness, "box:0:crop · page-box"));
     assert!(is_selected(&the(
         &harness,
@@ -165,19 +167,28 @@ fn open_click_the_page_follow_the_hit_stack_and_a_link() {
     )));
 
     // The row that links to the page is clickable and moves the selection to it.
-    the(&harness, Region::Inspector, Role::Link, "Page 1").click();
+    // A link follows a click on its text; the keyboard reaches it through its row.
+    let row = the(&harness, Region::Inspector, Role::Link, "Page: Page 1").rect();
+    named(&harness, Region::Inspector, Role::Label, "Page 1")
+        .into_iter()
+        .find(|label| row.contains_rect(label.rect()))
+        .expect("the text of the link")
+        .click();
     harness.run();
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Page(0)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Page(0))
+    );
     assert_eq!(
         texts_in(&harness, Region::Inspector, Role::Link),
         [
-            "[0 0 200 100]",
-            "[0 0 200 100] (default = MediaBox)",
-            "[0 0 200 100] (default = CropBox)",
-            "[0 0 200 100] (default = CropBox)",
-            "[0 0 200 100] (default = CropBox)",
-            "3 0 R",
-            "3 0 R"
+            "MediaBox: [0 0 200 100]",
+            "CropBox: [0 0 200 100] (default = MediaBox)",
+            "BleedBox: [0 0 200 100] (default = CropBox)",
+            "TrimBox: [0 0 200 100] (default = CropBox)",
+            "ArtBox: [0 0 200 100] (default = CropBox)",
+            "Page object: 3 0 R",
+            "Resources from: 3 0 R"
         ]
     );
     assert_eq!(
@@ -202,17 +213,23 @@ fn clicking_a_breadcrumb_selects_that_ancestor() {
     let mut harness = app();
     open_fixture(&mut harness, "minimal-one-page");
     click_page_corner(&mut harness);
-    assert_eq!(harness.state().state.selection.primary, Some(media(0)));
+    assert_eq!(harness.state().state.selection.primary().cloned(), Some(media(0)));
     // The last crumb is the node itself.
     assert!(is_selected_crumb_free(&harness));
 
     the(&harness, Region::Inspector, Role::Button, "Page 1").click();
     harness.run();
 
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Page(0)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Page(0))
+    );
     the(&harness, Region::Inspector, Role::Button, "minimal-one-page.pdf").click();
     harness.run();
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Document));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Document)
+    );
     assert!(has_label(&harness, "doc · document"));
 }
 
@@ -345,7 +362,10 @@ fn the_objects_entry_lists_the_document_the_resources_and_every_object() {
     // The trailer has properties of its own.
     the(&harness, Region::Navigator, Role::Button, "trailer").click();
     harness.run();
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Trailer));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Trailer)
+    );
     assert_eq!(
         title_and_id(&harness),
         ("Trailer".to_owned(), "trailer · trailer".to_owned())
@@ -360,7 +380,7 @@ fn the_objects_entry_lists_the_document_the_resources_and_every_object() {
     // A page object has a preview, rendered in the background.
     common::wait_for_previews(&mut harness);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Object(pdfxray_core::ObjRef::new(3, 0)))
     );
     let (title, id_line) = title_and_id(&harness);
@@ -378,7 +398,7 @@ fn the_objects_entry_lists_the_document_the_resources_and_every_object() {
     assert_eq!(harness.state().state.objects.mode, pdfxray_app::ObjectMode::Raw);
     // Smoke: the object view switched to the bytes of the same object.
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Object(pdfxray_core::ObjRef::new(3, 0)))
     );
 }
@@ -389,11 +409,13 @@ fn empty_trees_say_so_and_populated_ones_list_their_nodes() {
     open_fixture(&mut harness, "minimal-one-page");
 
     // Tags is the first entry; the file has no structure tree.
-    assert!(has_label(&harness, "This file has no structure tree."));
+    assert!(has_label(&harness, NO_STRUCTURE));
+    // Smoke: the empty state points on to the entry that has the content.
+    assert!(NO_STRUCTURE.ends_with("Content lists what each page draws."));
     // The page has content but no artifacts: the filter leaves nothing to show.
     click_rail(&mut harness, "Artifacts");
     assert!(has_label(&harness, "This page has no artifacts."));
-    assert!(!has_label(&harness, "This file has no structure tree."));
+    assert!(!has_label(&harness, NO_STRUCTURE));
     // The page does have resources: one font, listed in the Objects entry.
     click_rail(&mut harness, "Objects");
     let labels = texts_in(&harness, Region::Navigator, Role::Label);
@@ -554,9 +576,7 @@ fn an_encrypted_document_lists_its_pages_but_the_canvas_says_it_is_not_rendered(
     assert!(has_label(&harness, "encrypted-stub.pdf"));
     // The structure is readable: the page is counted and listed.
     assert_eq!(harness.state().state.page_count(), 1);
-    assert!(
-        texts_in(&harness, Region::Center, Role::Label).contains(&"Encrypted: not rendered in v1".to_owned())
-    );
+    assert!(texts_in(&harness, Region::Center, Role::Label).contains(&ENCRYPTED_NOT_RENDERED.to_owned()));
     assert!(has_label(&harness, "/ 1"));
     // The toolbar is there, the page is not.
     for name in [
@@ -575,7 +595,12 @@ fn an_encrypted_document_lists_its_pages_but_the_canvas_says_it_is_not_rendered(
     assert_eq!(harness.state().state.render_count(), 0);
     assert!(harness.query_by_label("Page 1 canvas").is_none());
     click_drawer_tab(&mut harness, "Diagnostics");
-    assert!(has_label(&harness, "Rendering engine: Encrypted"));
+    // The tab says why in the canvas's words, not the engine's enum.
+    assert!(has_label(
+        &harness,
+        "This file is encrypted: pdfxray can’t draw its pages in this version."
+    ));
+    assert!(!has_label(&harness, "Rendering engine: Encrypted"));
     let _chip = the(
         &harness,
         Region::Chrome,
@@ -747,7 +772,7 @@ fn selecting_a_content_operator_outlines_its_box_on_the_canvas() {
     // `(Hello pdfxray) Tj` at 20 40 in 18 pt Helvetica: the box starts at the text origin and
     // lies inside the 200 x 100 pt page.
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 3 })
     );
     let rect = harness.state().state.selection_rect().unwrap();

@@ -122,7 +122,7 @@ fn row(ui: &mut Ui, mode: LayerMode, key: Key, dot: Option<Color32>, selected: b
         fonts::mono(tokens::mono::SMALL),
         tokens::TEXT_3,
     );
-    focus::ring(ui, &response, rect, tokens::RADIUS_SM);
+    focus::row_ring(ui, &response, rect, tokens::RADIUS_SM);
     if !enabled {
         tooltip::text(
             response,

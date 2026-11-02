@@ -1,6 +1,7 @@
 //! The Paint order tab: the stepper. Buttons (first, previous, play, next, last), the position
-//! `211 / 377 ops`, the "Skip state-only ops" switch, a scrubbable track with marks, and a row
-//! of cards for the operators around the current one: four before, the current one, two after.
+//! `211 / 377 ops`, the "Follow step" and "Skip state-only ops" switches, a scrubbable track with
+//! marks, and a row of cards for the operators around the current one: four before, the current
+//! one, two after.
 //!
 //! Clicking a card or the track moves the stepper there; the canvas, the tree, the breadcrumb
 //! and the inspector follow because the stepper selects the operator it stops at.
@@ -16,7 +17,7 @@ use pdfxray_core::numeric::{f32_from_i64, f32_from_u32, usize_from_u32};
 
 use super::operators::text_of;
 use crate::components::step_track::{StepTrack, Tick, TickKind};
-use crate::components::{Icon, ToolButton, switch, tooltip};
+use crate::components::{Icon, ToolButton, focus, switch, tooltip};
 use crate::state::AppState;
 use crate::theme::{fonts, tokens};
 
@@ -40,6 +41,12 @@ pub const LAST_LABEL: &str = "Last operator";
 
 /// Name of the switch that makes stepping skip operators that paint nothing.
 pub const SKIP_LABEL: &str = "Skip state-only ops";
+
+/// Name of the switch that makes the canvas scroll to what each step paints.
+pub const FOLLOW_LABEL: &str = "Follow step";
+
+/// What [`FOLLOW_LABEL`] does, in its tooltip.
+pub const FOLLOW_HINT: &str = "Scroll the canvas to what each step paints when it is out of view";
 
 /// Shown when the page has no captured operators.
 pub const NO_OPERATORS: &str = "This page has no operators.";
@@ -84,6 +91,7 @@ enum Act {
     Next(bool),
     Play,
     Skip(bool),
+    Follow(bool),
 }
 
 /// One operator card.
@@ -117,6 +125,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
         }
         Some(Act::Play) => state.toggle_play(),
         Some(Act::Skip(on)) => state.canvas.view.skip_state_only = on,
+        Some(Act::Follow(on)) => state.canvas.view.follow_step = on,
         None => {}
     }
 }
@@ -227,6 +236,13 @@ fn controls(ui: &mut Ui, state: &AppState, step: u32, last: u32, act: &mut Optio
             if switch(ui, &mut skip, SKIP_LABEL).changed() {
                 *act = Some(Act::Skip(skip));
             }
+            ui.add_space(8.0);
+            let mut follow = view.follow_step;
+            let follow_switch = switch(ui, &mut follow, FOLLOW_LABEL);
+            if follow_switch.changed() {
+                *act = Some(Act::Follow(follow));
+            }
+            tooltip::text(follow_switch, FOLLOW_HINT);
         });
     });
 }
@@ -279,6 +295,8 @@ fn play_button(ui: &mut Ui, playing: bool) -> egui::Response {
             Stroke::NONE,
         ));
     }
+    // The button already has an accent outline: the ring stands off it.
+    focus::ring(ui, &response, rect.expand(3.0), PLAY_SIZE / 2.0 + 3.0);
     tooltip::with_shortcut(response, label, "space")
 }
 
@@ -329,6 +347,7 @@ fn card_ui(ui: &mut Ui, rect: Rect, card: &Card, current: bool, future: bool) ->
         ),
         StrokeKind::Inside,
     );
+    focus::ring(ui, &response, rect, tokens::RADIUS_MD);
     let ink = |color: Color32| color.gamma_multiply(dim);
     let top = rect.min + vec2(8.0, 7.0);
     let operator_ink = if current {

@@ -25,8 +25,37 @@ pub const EXPAND_ALL_LABEL: &str = "Expand all";
 /// Shown in a list that has no rows.
 pub const EMPTY_TREE: &str = "Nothing to show yet.";
 
+/// Accessible name of the filter field; its hint is only an example of what it takes.
+pub const FILTER_LABEL: &str = "Filter";
+
+/// Name of the button under a filtered list that matches nothing: it empties the filter.
+pub const CLEAR_FILTER_LABEL: &str = "Clear filter";
+
 /// Id of the filter field, so the frame around it can tell when it has the focus.
 const FILTER_ID: &str = "pdfxray-nav-filter";
+
+/// What a list says when the filter matches none of its `things` (`rows`, `pages`): the query,
+/// and the way back to the whole list. Returns true when the user asked for it.
+fn no_match(ui: &mut Ui, filter: &str, things: &str) -> bool {
+    ui.label(RichText::new(format!("No {things} match “{}”.", filter.trim())).color(tokens::TEXT_3));
+    ui.add_space(4.0);
+    clear_filter_button(ui)
+}
+
+/// The button that empties the filter; true when clicked.
+fn clear_filter_button(ui: &mut Ui) -> bool {
+    ToolButton::new(CLEAR_FILTER_LABEL)
+        .icon(Icon::Close)
+        .show(ui)
+        .clicked()
+}
+
+/// [`no_match`], emptying the filter when the button is clicked.
+fn no_match_in(ui: &mut Ui, state: &mut AppState, things: &str) {
+    if no_match(ui, &state.nav.filter, things) {
+        state.nav.filter.clear();
+    }
+}
 
 /// Draws the navigator host.
 pub fn ui(ui: &mut Ui, state: &mut AppState) {
@@ -160,13 +189,15 @@ fn filter(ui: &mut Ui, state: &mut AppState) {
             ui.spacing_mut().interact_size.y = tokens::CONTROL_H - 8.0;
             ui.horizontal(|ui| {
                 Icon::Search.show(ui, 14.0, tokens::TEXT_3);
-                let field = ui.add(
-                    TextEdit::singleline(&mut state.nav.filter)
-                        .id(id)
-                        .frame(egui::Frame::NONE)
-                        .desired_width(f32::INFINITY)
-                        .hint_text(hint),
-                );
+                let field = ui
+                    .add(
+                        TextEdit::singleline(&mut state.nav.filter)
+                            .id(id)
+                            .frame(egui::Frame::NONE)
+                            .desired_width(f32::INFINITY)
+                            .hint_text(hint),
+                    )
+                    .accessible_name(FILTER_LABEL);
                 if focus {
                     field.request_focus();
                 }
@@ -183,17 +214,20 @@ fn filter_words(state: &AppState) -> Vec<String> {
 /// words narrow the filter further, e.g. `artifact` for the Artifacts entry.
 ///
 /// Besides listing, this is where every tree reacts to the user: a click selects, Shift-click
-/// adds the second selection, a double click zooms the canvas to the node, arrow keys move the
-/// selection, and the row under the pointer is previewed on the canvas.
+/// adds to the selection or takes a row out, a double click zooms the canvas to the node, arrow
+/// keys move the selection (Shift+↑/↓ extend it, ⌘+Space toggles the focused row), and the row
+/// under the pointer is previewed on the canvas. Every selected node's row is highlighted.
 fn tree_body(ui: &mut Ui, state: &mut AppState, tree: NavTree, extra: &[&str], empty: &str) {
     let mut words = filter_words(state);
     words.extend(extra.iter().map(|w| (*w).to_owned()));
     let filtered = !state.nav.filter.trim().is_empty();
-    let path = state
+    let paths: Vec<Vec<NodeId>> = state
         .selection
-        .primary
-        .clone()
-        .map(|selected| state.path_to(&selected));
+        .nodes()
+        .iter()
+        .map(|selected| state.path_to(selected))
+        .collect();
+    let primary = state.selection.primary_index();
     let rail = state.nav.rail;
     let Some(model) = state.tree_model(tree) else {
         return;
@@ -204,19 +238,26 @@ fn tree_body(ui: &mut Ui, state: &mut AppState, tree: NavTree, extra: &[&str], e
         return;
     }
     if model.visible_len() == 0 {
-        let text = if filtered {
-            format!("No rows match “{}”.", state.nav.filter.trim())
+        if filtered {
+            no_match_in(ui, state, "rows");
         } else {
-            empty.to_owned()
-        };
-        ui.label(RichText::new(text).color(tokens::TEXT_3));
+            ui.label(RichText::new(empty).color(tokens::TEXT_3));
+        }
         return;
     }
-    // The row to highlight: the selection, or the nearest ancestor this tree has a row for.
-    let highlight = path
-        .as_ref()
-        .and_then(|path| path.iter().rev().find(|id| model.contains(id)))
-        .cloned();
+    // The row to highlight for each selected node: itself, or the nearest ancestor this tree has
+    // a row for.
+    let rows: Vec<Option<NodeId>> = paths
+        .iter()
+        .map(|path| path.iter().rev().find(|id| model.contains(id)).cloned())
+        .collect();
+    let highlight = primary.and_then(|at| rows.get(at).cloned().flatten());
+    model.set_also_selected(
+        rows.into_iter()
+            .flatten()
+            .filter(|row| Some(row) != highlight.as_ref())
+            .collect(),
+    );
     let output = model.ui(ui, highlight.as_ref(), (rail, tree));
     if let Some(id) = output.hovered {
         state.canvas.preview = Some(id);
@@ -227,6 +268,12 @@ fn tree_body(ui: &mut Ui, state: &mut AppState, tree: NavTree, extra: &[&str], e
     if let Some(id) = output.key_selected {
         state.select(id);
     }
+    if let Some(id) = output.key_extended {
+        state.extend_selection(id);
+    }
+    if let Some(id) = output.toggled {
+        state.toggle_selected(id);
+    }
     if let Some(id) = output.clicked {
         select_with_modifiers(ui, state, id);
     }
@@ -235,7 +282,7 @@ fn tree_body(ui: &mut Ui, state: &mut AppState, tree: NavTree, extra: &[&str], e
     }
 }
 
-/// A plain click selects `id`; Shift-click makes it the second selection to measure against.
+/// A plain click selects `id`; Shift-click adds it to the selection, or takes it out.
 pub(crate) fn select_with_modifiers(ui: &Ui, state: &mut AppState, id: NodeId) {
     if ui.input(|i| i.modifiers.shift) {
         state.select_additional(id);

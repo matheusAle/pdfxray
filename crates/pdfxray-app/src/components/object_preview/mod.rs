@@ -35,7 +35,7 @@ pub const NOT_EMBEDDED: &str = "Not embedded";
 pub const NOT_EMBEDDED_WHY: &str = "Readers substitute their own font, so text can reflow or lose glyphs.";
 
 /// The label of the specimen drawn with the app's font for a font that is not embedded.
-pub const FALLBACK_LABEL: &str = "fallback specimen · not the file's font";
+pub const FALLBACK_LABEL: &str = "fallback specimen · not the file’s font";
 
 /// The caption over the glyph cells of a font.
 pub const GLYPHS_LABEL: &str = "GLYPHS USED IN THIS FILE";

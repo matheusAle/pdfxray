@@ -5,14 +5,14 @@ use pretty_assertions::assert_eq;
 use super::*;
 
 #[test]
-fn the_title_bar_validates_and_the_navigator_lists_the_findings_by_rule() {
+fn validating_from_the_rail_lists_the_findings_by_rule_in_the_navigator() {
     let fake = FakeValidator::ready();
     let mut harness = app_with(&fake);
     open_fixture(&mut harness, "orphan-mcid");
     assert_eq!(harness.state().state.nav.rail, RailItem::Tags);
 
     // Pressing Validate before veraPDF was looked for waits for the search, then runs.
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
 
     assert_eq!(harness.state().state.nav.rail, RailItem::Validation);
     assert_eq!(harness.state().state.drawer.tab, DrawerTab::Validation);
@@ -36,7 +36,7 @@ fn the_title_bar_validates_and_the_navigator_lists_the_findings_by_rule() {
     let labels = labels_in(&harness, Region::Navigator);
     assert_eq!(
         labels[labels.len() - 6..],
-        ["4", "failed", "4", "rules", "225", "passed"]
+        ["4", "checks failed", "4", "rules failed", "225", "checks passed"]
     );
     // One group per rule, titled in plain words, each with its node.
     assert_eq!(
@@ -79,7 +79,7 @@ fn clicking_a_node_selects_it_and_the_canvas_marks_the_failure() {
     let fake = FakeValidator::ready();
     let mut harness = app_with(&fake);
     open_fixture(&mut harness, "orphan-mcid");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
     // Every finding with a box on the page is badged, whichever node is selected.
     wait_for_render(&mut harness);
     let badge = "× 7.1-3 · Content is neither tagged nor an artifact";
@@ -96,7 +96,7 @@ fn clicking_a_node_selects_it_and_the_canvas_marks_the_failure() {
 
     let state = &harness.state().state;
     assert_eq!(
-        state.selection.primary,
+        state.selection.primary().cloned(),
         Some(NodeId::MarkedContent { page: 0, mcid: 1 })
     );
     assert_eq!(state.validation.selected_finding, Some(3));
@@ -135,7 +135,7 @@ fn clicking_a_node_selects_it_and_the_canvas_marks_the_failure() {
     harness.run();
     assert_eq!(harness.state().state.validation.selected_finding, Some(3));
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::MarkedContent { page: 0, mcid: 1 })
     );
 }
@@ -145,7 +145,7 @@ fn the_drawer_lists_the_same_findings_as_a_table() {
     let fake = FakeValidator::ready();
     let mut harness = app_with(&fake);
     open_fixture(&mut harness, "orphan-mcid");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
     harness.state_mut().state.drawer.height = 300.0;
     harness.run_steps(2);
 
@@ -182,7 +182,7 @@ fn the_drawer_lists_the_same_findings_as_a_table() {
     harness.run();
     assert_eq!(harness.state().state.validation.selected_finding, Some(0));
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Resource {
             owner: pdfxray_core::ObjRef::new(3, 0),
             kind: pdfxray_core::ResKind::Font,
@@ -208,7 +208,7 @@ fn the_nodes_of_a_rule_are_tree_rows_and_every_row_of_the_list_shows_a_hand() {
     let fake = FakeValidator::ready();
     let mut harness = app_with(&fake);
     open_fixture(&mut harness, "orphan-mcid");
-    title_bar_validate(&mut harness);
+    common::validate_from_the_rail(&mut harness);
     harness.run_steps(3);
 
     let nodes = named(&harness, Region::Navigator, Role::Button, "Document");

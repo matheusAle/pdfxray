@@ -31,10 +31,15 @@ fn navigator_rect_id() -> Id {
 /// panel's ui, so a line that is too long for it cannot push the panel around. The panel's ui
 /// is told the whole rectangle is used: a resizable panel takes its size from what it used, and
 /// would otherwise shrink to its minimum.
+///
+/// The lists of a panel stop at their ends. egui's rubber band lets a trackpad pull a list past
+/// its end, and when the momentum of a fast scroll reaches the end it throws the list out by up
+/// to a third of its height before it springs back: a band of empty panel under the last row.
 fn contained(ui: &mut Ui, host: impl FnOnce(&mut Ui)) {
     let rect = ui.max_rect();
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt("host"));
     child.set_clip_rect(rect.intersect(ui.clip_rect()));
+    child.spacing_mut().scroll.kinetic.rubber_band = false;
     host(&mut child);
     ui.expand_to_include_rect(rect);
 }

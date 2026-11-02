@@ -275,7 +275,7 @@ fn the_eye_toggle_hides_the_outline_of_one_box_and_keeps_it_in_the_legend() {
     assert!(buttons.contains(&"Hide MediaBox".to_owned()));
     // Hiding an outline does not select anything and the legend still lists all five boxes.
     assert_ne!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::PageBox {
             page: 0,
             kind: BoxKind::Crop
@@ -315,10 +315,10 @@ fn clicking_a_box_row_selects_it_and_shift_click_adds_it_to_the_selection() {
     the(&harness, Region::Navigator, Role::Button, "ArtBox").click();
     harness.run();
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(page_box(BoxKind::Art))
     );
-    assert_eq!(harness.state().state.selection.secondary, None);
+    assert_eq!(harness.state().state.selection.other().cloned(), None);
     assert!(common::is_selected(&the(
         &harness,
         Region::Navigator,
@@ -329,11 +329,11 @@ fn clicking_a_box_row_selects_it_and_shift_click_adds_it_to_the_selection() {
     the(&harness, Region::Navigator, Role::Button, "MediaBox").click_modifiers(egui::Modifiers::SHIFT);
     harness.run();
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(page_box(BoxKind::Art))
     );
     assert_eq!(
-        harness.state().state.selection.secondary,
+        harness.state().state.selection.other().cloned(),
         Some(page_box(BoxKind::Media))
     );
     // The inspector switched to the two-node view.
@@ -342,7 +342,7 @@ fn clicking_a_box_row_selects_it_and_shift_click_adds_it_to_the_selection() {
     // A plain click drops the second selection.
     the(&harness, Region::Navigator, Role::Button, "TrimBox").click();
     harness.run();
-    assert_eq!(harness.state().state.selection.secondary, None);
+    assert_eq!(harness.state().state.selection.other().cloned(), None);
     assert!(!common::has_label(&harness, "2 selected · gap"));
 }
 
@@ -372,7 +372,7 @@ fn thumbnails_are_rendered_and_clicking_one_goes_to_that_page() {
 
     let state = &harness.state().state;
     assert_eq!(state.canvas.page, 2);
-    assert_eq!(state.selection.primary, Some(NodeId::Page(2)));
+    assert_eq!(state.selection.primary().cloned(), Some(NodeId::Page(2)));
     assert_eq!(state.canvas.page_field, "3");
     // The strip shows which page is on the canvas, and the lists below follow it.
     assert!(common::is_selected(&the(
@@ -420,7 +420,10 @@ fn the_filter_jumps_to_a_page_by_number_rotation_or_size() {
     assert_eq!(harness.state().state.canvas.page, 1);
     assert_eq!(thumbnails(&harness), ["Page 2"]);
     assert!(common::has_label(&harness, "2 ↻180°"));
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Page(1)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Page(1))
+    );
 
     // A number is a page.
     filter_with(&mut harness, "4");
@@ -482,7 +485,7 @@ fn the_diagnostics_drawer_is_filtered_to_page_boxes_on_this_entry() {
     the(&harness, Region::Drawer, Role::Button, "box-outside-mediabox").click();
     harness.run();
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::PageBox {
             page: 2,
             kind: BoxKind::Trim
@@ -492,7 +495,7 @@ fn the_diagnostics_drawer_is_filtered_to_page_boxes_on_this_entry() {
     the(&harness, Region::Drawer, Role::Button, "box-inherited").click();
     harness.run();
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::PageBox {
             page: 1,
             kind: BoxKind::Media
@@ -501,7 +504,10 @@ fn the_diagnostics_drawer_is_filtered_to_page_boxes_on_this_entry() {
     assert_eq!(harness.state().state.canvas.page, 1);
     the(&harness, Region::Drawer, Role::Button, "rotate-nonzero").click();
     harness.run();
-    assert_eq!(harness.state().state.selection.primary, Some(NodeId::Page(0)));
+    assert_eq!(
+        harness.state().state.selection.primary().cloned(),
+        Some(NodeId::Page(0))
+    );
     assert_eq!(harness.state().state.canvas.page, 0);
 
     // Clearing the filter shows what the reader found, nothing more.
@@ -554,7 +560,7 @@ fn the_diagnostics_drawer_groups_inherited_boxes_and_lists_every_turned_page() {
     named(&harness, Region::Drawer, Role::Button, "box-inherited")[1].click();
     harness.run();
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::PageBox {
             page: 2,
             kind: BoxKind::Crop
@@ -606,7 +612,7 @@ fn right_click_on_a_thumbnail_and_on_a_box_row_lists_the_actions_of_the_page_and
     harness.get_by_role_and_label(Role::MenuItem, "Object").click();
     harness.run_steps(3);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::Object(page_object))
     );
     // Smoke: the Objects entry is showing.
@@ -624,7 +630,7 @@ fn right_click_on_a_thumbnail_and_on_a_box_row_lists_the_actions_of_the_page_and
         .click();
     harness.run_steps(3);
     assert_eq!(
-        harness.state().state.selection.primary,
+        harness.state().state.selection.primary().cloned(),
         Some(NodeId::PageBox {
             page: harness.state().state.canvas.page,
             kind: BoxKind::Crop

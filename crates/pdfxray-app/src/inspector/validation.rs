@@ -33,7 +33,7 @@ pub const WHERE_SECTION: &str = "Where";
 pub const VERAPDF_SECTION: &str = "veraPDF says";
 
 /// Said when pdfxray has no note of its own for the rule.
-pub const NO_NOTE: &str = "pdfxray has no plain-language note for this rule yet. veraPDF's wording is below.";
+pub const NO_NOTE: &str = "pdfxray has no plain-language note for this rule yet. veraPDF’s wording is below.";
 
 /// The line under the example of a fix.
 pub const EXAMPLE_NOTE: &str = "Example only. pdfxray never changes your file.";
@@ -337,12 +337,7 @@ fn where_rows(
         };
         if let Some(element) = element {
             let label = element_label(doc, &element);
-            if PropRow::new("Element", &label)
-                .link(true)
-                .show(ui)
-                .value
-                .clicked()
-            {
+            if PropRow::new("Element", &label).link(true).show(ui).followed {
                 action.navigate = Some(element);
             }
         }

@@ -22,7 +22,7 @@ fn help(code: &str) -> Option<(&'static str, &'static str)> {
         )),
         "xref-offset-wrong" => Some((
             "What is the xref?",
-            "The xref table is the file's index: it says at which byte each object starts. When an \
+            "The xref table is the file’s index: it says at which byte each object starts. When an \
              entry points at the wrong byte, a reader has to search the file for the object. pdfxray \
              found it and shows where it really is.",
         )),
