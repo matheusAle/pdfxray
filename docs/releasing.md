@@ -19,8 +19,10 @@ by hand once, is `docs/spec/distribution-plan.md`.
 
 ## Cut a release
 
-1. Set `[workspace.package].version` in `Cargo.toml` (and commit `Cargo.lock`). The binaries report
-   this version; `cargo xtask bundle` refuses a `--version` whose `MAJOR.MINOR.PATCH` differs.
+1. Set `[workspace.package].version` in `Cargo.toml`, and the same version on the internal
+   crates in `[workspace.dependencies]` (`pdfxray-raw = { path = …, version = "…" }` and the
+   others), then commit `Cargo.lock`. The binaries report this version; `cargo xtask bundle`
+   refuses a `--version` whose `MAJOR.MINOR.PATCH` differs.
 2. Merge to `main` and wait for CI to pass.
 3. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`. A tag with a suffix (`v0.2.0-rc.1`)
    becomes a GitHub *pre-release*.
