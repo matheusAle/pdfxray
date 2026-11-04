@@ -14,29 +14,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use egui::epaint::{Mesh, PathStroke};
-use egui::{Align2, Color32, Painter, Pos2, Rect as UiRect, Shape, Stroke, StrokeKind, pos2, vec2};
+use egui::epaint::Mesh;
+use egui::{Color32, Pos2, Rect as UiRect, Shape, Stroke, pos2, vec2};
 use pdfxray_core::{HeaderScope, NodeId, PageIx, Rect, ScopeSource, TableCell, TableScope};
 
 use super::geometry::PageGeometry;
 use super::table_overlay;
 use crate::state::AppState;
-use crate::theme::{fonts, tokens};
-
-/// Side of the arrow in a chip.
-pub const ARROW: f32 = 9.0;
-
-/// Stroke of the arrow.
-const ARROW_STROKE: f32 = 1.7;
-
-/// Space between two parts of a chip: its name, the arrow and a mark.
-const GAP: f32 = 3.0;
-
-/// Strength of the arrow of a header whose direction is inferred.
-const INFERRED_ARROW: f32 = 0.6;
-
-/// Width of the amber ring of a conflict.
-pub const CONFLICT_RING: f32 = 1.5;
 
 /// The echo's band next to the header and at its far end.
 const ECHO_NEAR: f32 = 0.25;
@@ -211,99 +195,6 @@ pub(super) fn marks_on(state: &mut AppState, page: PageIx) -> HashMap<NodeId, He
         }
     }
     marks
-}
-
-/// The width the parts after a chip's name take: the arrow and the marks.
-pub(super) fn tail_width(scope: &HeaderScope) -> f32 {
-    let marks = u8::from(scope.source == ScopeSource::Conflict) + u8::from(!scope.named_by.is_empty());
-    GAP + ARROW + f32::from(marks) * (GAP + ARROW)
-}
-
-/// Paints the arrow and the marks of a chip whose name ends at `x`, centred on `y`, in `ink`.
-pub(super) fn paint_tail(painter: &Painter, x: f32, y: f32, scope: &HeaderScope, ink: Color32) {
-    let arrow_ink = if scope.source == ScopeSource::Inferred {
-        ink.gamma_multiply(INFERRED_ARROW)
-    } else {
-        ink
-    };
-    let mut left = x + GAP;
-    arrow(
-        painter,
-        UiRect::from_min_size(pos2(left, y - ARROW / 2.0), vec2(ARROW, ARROW)),
-        scope.scope,
-        arrow_ink,
-    );
-    left += ARROW + GAP;
-    if scope.source == ScopeSource::Conflict {
-        let mark = UiRect::from_min_size(pos2(left, y - ARROW / 2.0), vec2(ARROW, ARROW));
-        painter.rect_filled(mark, 2.0, tokens::WARN);
-        painter.text(
-            mark.center(),
-            Align2::CENTER_CENTER,
-            "!",
-            fonts::bold(tokens::mono::TINY),
-            tokens::BG,
-        );
-        left += ARROW + GAP;
-    }
-    if !scope.named_by.is_empty() {
-        painter.text(
-            pos2(left + ARROW / 2.0, y),
-            Align2::CENTER_CENTER,
-            "#",
-            fonts::mono_bold(tokens::mono::SMALL),
-            ink,
-        );
-    }
-}
-
-/// The amber ring around the chip at `rect` of a header whose scope conflicts.
-pub(super) fn paint_ring(painter: &Painter, rect: UiRect) {
-    painter.rect_stroke(
-        rect,
-        tokens::RADIUS_SM,
-        Stroke::new(CONFLICT_RING, tokens::WARN),
-        StrokeKind::Outside,
-    );
-}
-
-/// An arrow in `rect` (screen): → for `Row`, ↓ for `Column`, and for `Both` one to the right and
-/// one down from the top-left corner.
-fn arrow(painter: &Painter, rect: UiRect, scope: TableScope, ink: Color32) {
-    let stroke = Stroke::new(ARROW_STROKE, ink);
-    let head = ARROW * 0.38;
-    let right = |painter: &Painter, from: Pos2, to: Pos2| {
-        painter.line_segment([from, to], stroke);
-        painter.line(
-            vec![to + vec2(-head, -head), to, to + vec2(-head, head)],
-            PathStroke::from(stroke),
-        );
-    };
-    let down = |painter: &Painter, from: Pos2, to: Pos2| {
-        painter.line_segment([from, to], stroke);
-        painter.line(
-            vec![to + vec2(-head, -head), to, to + vec2(head, -head)],
-            PathStroke::from(stroke),
-        );
-    };
-    let inset = ARROW_STROKE / 2.0;
-    match scope {
-        TableScope::Row => right(
-            painter,
-            pos2(rect.min.x + inset, rect.center().y),
-            pos2(rect.max.x - inset, rect.center().y),
-        ),
-        TableScope::Column => down(
-            painter,
-            pos2(rect.center().x, rect.min.y + inset),
-            pos2(rect.center().x, rect.max.y - inset),
-        ),
-        TableScope::Both => {
-            let corner = rect.min + vec2(inset, inset);
-            right(painter, corner, pos2(rect.max.x - inset, corner.y));
-            down(painter, corner, pos2(corner.x, rect.max.y - inset));
-        }
-    }
 }
 
 /// The shapes of the echo of a header on the page at `geo`, in `color`: one band over the cells
@@ -500,16 +391,6 @@ mod tests {
         assert_eq!(chip_name("TH", &named), "TH · Row · declared · IDs decide");
         // Smoke: the hint of a named header says the IDs decide.
         assert!(hint(&named).ends_with("their /Headers decide which cells it heads."));
-    }
-
-    #[test]
-    fn the_tail_makes_room_for_the_arrow_and_each_mark() {
-        let mut s = scope(TableScope::Row, ScopeSource::Declared, HeaderPlace::FirstColumn);
-        assert_eq!(tail_width(&s), GAP + ARROW);
-        s.source = ScopeSource::Conflict;
-        assert_eq!(tail_width(&s), 2.0 * (GAP + ARROW));
-        s.named_by = vec![NodeId::Document];
-        assert_eq!(tail_width(&s), 3.0 * (GAP + ARROW));
     }
 
     fn cell(node: u32, row: u32, col: u32, row_span: u32) -> TableCell {

@@ -886,8 +886,7 @@ fn roles_out_of_focus_stay_as_faint_boxes_without_labels_and_a_click_still_picks
     let mut harness = opened("reading-order");
     tags_on(&mut harness);
     card_open(&mut harness);
-    let faint =
-        |class| role_color(class).gamma_multiply(pdfxray_app::center::canvas::tag_overlay::UNFOCUSED_BOX);
+    let faint = |class| role_color(class).gamma_multiply(pdfxray_render::annotate::UNFOCUSED_BOX);
     assert_eq!(outlines_in(&harness, role_color(RoleClass::Paragraph)).len(), 2);
 
     click_row(&mut harness, "Figure");
@@ -929,8 +928,7 @@ fn with_the_labels_alone_the_card_picks_which_labels_show() {
     assert_eq!(focused(&harness), [TagRole::Class(RoleClass::Figure)]);
     assert_eq!(chips(&harness), ["Figure"]);
     // No box is drawn, at full strength or faint.
-    let faint = role_color(RoleClass::Paragraph)
-        .gamma_multiply(pdfxray_app::center::canvas::tag_overlay::UNFOCUSED_BOX);
+    let faint = role_color(RoleClass::Paragraph).gamma_multiply(pdfxray_render::annotate::UNFOCUSED_BOX);
     assert_eq!(outlines_in(&harness, role_color(RoleClass::Figure)), []);
     assert_eq!(outlines_in(&harness, faint), []);
     // Smoke: Shift adds the headings' labels.
@@ -956,7 +954,7 @@ fn path_segments(harness: &App) -> (usize, usize) {
     for ClippedShape { shape, .. } in &harness.output().shapes {
         flatten(shape, &mut shapes);
     }
-    let faint = pdfxray_app::center::canvas::tag_overlay::UNFOCUSED_PATH;
+    let faint = pdfxray_render::annotate::UNFOCUSED_PATH;
     let segments: Vec<egui::Color32> = shapes
         .iter()
         .filter_map(|shape| match shape {

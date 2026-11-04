@@ -2,6 +2,9 @@
 
 Both families are licensed under the SIL Open Font License 1.1 (licence texts next to the fonts).
 They are compiled into the app with `include_bytes!` in `crates/pdfxray-app/src/theme/fonts.rs`.
+`Inter-Bold.ttf`, `JetBrainsMono-Medium.ttf` and `JetBrainsMono-Bold.ttf` are also compiled into
+`pdfxray-render` (`crates/pdfxray-render/src/annotate/text.rs`): the one measurer of the
+annotation labels, and their outlines in an exported image.
 Downloaded from the official GitHub release assets over HTTPS into a clean directory, then only the
 files below were copied.
 

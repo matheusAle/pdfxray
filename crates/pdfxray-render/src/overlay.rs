@@ -1,14 +1,115 @@
-//! Overlay shapes painted on top of the rasterised page.
+//! Overlay shapes painted on top of the rasterised page, and the one compositor that paints them.
+//!
+//! Every shape goes through `vello_cpu`, the rasteriser hayro draws the page with, so a debug
+//! outline, a tag box and a badge's ring are anti-aliased alike in one image.
 
+use hayro::vello_cpu::color::{AlphaColor, Srgb};
+use hayro::vello_cpu::kurbo::{
+    self, BezPath, Circle, Point as KPoint, Rect as KRect, RoundedRect, Shape as _,
+};
+use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
 use pdfxray_core::Rect;
-use pdfxray_core::numeric::{u8_from_f64_round, u32_from_f64_trunc, usize_from_u32};
 
-use crate::transform::{PixelRect, Transform};
+use crate::annotate::text::{self, Font};
+use crate::transform::{PixelPoint, PixelRect, Transform};
 
-/// A shape drawn in page space over the page bitmap.
+/// A colour and how strongly it is laid on: `rgba` (straight) times `opacity`.
+///
+/// The opacity is kept apart from the colour so that a faded colour is computed once, the same
+/// way, by every painter: [`Ink::premultiplied`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Ink {
+    /// Straight RGBA.
+    pub rgba: [u8; 4],
+    /// 0 to 1, applied on top of the alpha of `rgba`.
+    pub opacity: f32,
+}
+
+impl Ink {
+    /// `rgba` at full strength.
+    pub const fn new(rgba: [u8; 4]) -> Self {
+        Self { rgba, opacity: 1.0 }
+    }
+
+    /// The same colour at `factor` of its strength.
+    #[must_use]
+    pub fn fade(self, factor: f32) -> Self {
+        Self {
+            opacity: self.opacity * factor,
+            ..self
+        }
+    }
+
+    /// Premultiplied RGBA8: each premultiplied channel times the opacity, rounded half up.
+    pub fn premultiplied(self) -> [u8; 4] {
+        let [r, g, b, a] = self.rgba;
+        let alpha = f32::from(a) / 255.0;
+        let channel = |c: u8, by: f32| {
+            let scaled = (f32::from(c) * by).clamp(0.0, 255.0);
+            // In 0..=255 after the clamp.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let out = (scaled + 0.5) as u8;
+            out
+        };
+        let premultiplied = [channel(r, alpha), channel(g, alpha), channel(b, alpha), a];
+        let opacity = self.opacity.clamp(0.0, 1.0);
+        premultiplied.map(|c| channel(c, opacity))
+    }
+
+    fn color(self) -> AlphaColor<Srgb> {
+        let [r, g, b, a] = self.rgba;
+        AlphaColor::from_rgba8(r, g, b, a).multiply_alpha(self.opacity.clamp(0.0, 1.0))
+    }
+}
+
+/// Which side of a shape's edge its outline is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Edge {
+    /// Entirely inside the shape.
+    Inside,
+    /// Centred on the edge.
+    Centre,
+    /// Entirely outside the shape.
+    Outside,
+}
+
+/// An outline or a line: width in output units, ink, and for a closed shape which side of its
+/// edge it is on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Line {
+    /// Width in output units.
+    pub width: f32,
+    /// Colour.
+    pub ink: Ink,
+    /// Side of the edge, for closed shapes; lines are centred whatever it says.
+    pub edge: Edge,
+}
+
+impl Line {
+    /// A line of `width` in `ink`, centred.
+    pub const fn new(width: f32, ink: Ink) -> Self {
+        Self {
+            width,
+            ink,
+            edge: Edge::Centre,
+        }
+    }
+
+    /// The same line on `edge` of a shape.
+    #[must_use]
+    pub const fn on(self, edge: Edge) -> Self {
+        Self { edge, ..self }
+    }
+}
+
+/// A shape drawn over the page bitmap.
+///
+/// [`Overlay::Rect`] is in page space, as the debug overlays built from the page content are.
+/// Every other variant is a resolved annotation shape in output units (bitmap pixels when it is
+/// rasterised here), laid out by [`crate::annotate::layout`] on a [`crate::annotate::Grid`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum Overlay {
-    /// An axis-aligned rectangle.
+    /// An axis-aligned rectangle in page space.
     Rect {
         /// Rectangle in page space.
         rect: Rect,
@@ -19,111 +120,226 @@ pub enum Overlay {
         /// Outline width in output pixels, centred on the rectangle edge. Zero draws no outline.
         width: f32,
     },
+    /// A box in output units: a tag box, the body of a chip or a note, a legend swatch.
+    Frame {
+        /// The box.
+        rect: PixelRect,
+        /// Corner radius.
+        radius: f32,
+        /// Interior; `None` leaves it untouched.
+        fill: Option<Ink>,
+        /// Outline; `None` draws none.
+        stroke: Option<Line>,
+    },
+    /// One line of text, clipped to `rect`.
+    Text {
+        /// The area the layout gave the text, which it is clipped to.
+        rect: PixelRect,
+        /// The top-left corner of the line: the baseline is the font's ascent below it.
+        origin: PixelPoint,
+        /// The text.
+        text: String,
+        /// Face and size.
+        font: Font,
+        /// Colour.
+        ink: Ink,
+    },
+    /// An open line through `points`.
+    Polyline {
+        /// At least two points.
+        points: Vec<PixelPoint>,
+        /// Width and ink.
+        line: Line,
+    },
+    /// A dashed straight line.
+    Dashed {
+        /// Start.
+        from: PixelPoint,
+        /// End.
+        to: PixelPoint,
+        /// Width and ink.
+        line: Line,
+        /// Length of a dash.
+        dash: f32,
+        /// Length of a gap.
+        gap: f32,
+    },
+    /// A numbered disc.
+    Badge {
+        /// Centre.
+        center: PixelPoint,
+        /// Radius.
+        radius: f32,
+        /// Interior.
+        fill: Ink,
+        /// The ring around it, centred on the edge.
+        ring: Line,
+        /// The number.
+        label: String,
+        /// Face and size of the number.
+        font: Font,
+        /// Colour of the number.
+        ink: Ink,
+    },
 }
 
-/// The bitmap overlays are painted into.
-pub(crate) struct Canvas<'a> {
-    pub(crate) rgba: &'a mut [u8],
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+/// Paints `overlays` over `pixmap` (a page drawn with `to_pixel`), source over.
+pub(crate) fn paint(pixmap: &mut Pixmap, overlays: &[Overlay], to_pixel: &Transform) {
+    if overlays.is_empty() {
+        return;
+    }
+    let mut ctx = RenderContext::new(pixmap.width(), pixmap.height());
+    for overlay in overlays {
+        overlay.paint(&mut ctx, to_pixel);
+    }
+    ctx.flush();
+    ctx.render_with(
+        pixmap,
+        &mut Resources::default(),
+        RasterizerSettings {
+            target_init: TargetInit::SrcOver,
+            ..RasterizerSettings::default()
+        },
+    );
+}
+
+fn krect(r: PixelRect) -> KRect {
+    KRect::new(r.x0, r.y0, r.x1, r.y1)
+}
+
+fn kpoint(p: PixelPoint) -> KPoint {
+    KPoint::new(p.x, p.y)
+}
+
+/// Fills `shape` with `ink`.
+fn fill(ctx: &mut RenderContext, shape: &impl kurbo::Shape, ink: Ink) {
+    ctx.set_paint(ink.color());
+    ctx.fill_path(&shape.to_path(0.1));
+}
+
+/// Strokes `path` with `line`, centred.
+fn stroke(ctx: &mut RenderContext, path: &BezPath, line: Line) {
+    if line.width <= 0.0 {
+        return;
+    }
+    ctx.set_paint(line.ink.color());
+    ctx.set_stroke(
+        kurbo::Stroke::new(f64::from(line.width))
+            .with_caps(kurbo::Cap::Butt)
+            .with_join(kurbo::Join::Miter),
+    );
+    ctx.stroke_path(path);
 }
 
 impl Overlay {
-    /// Paints the shape into `canvas`, mapping page space with `to_pixel`.
-    pub(crate) fn paint(&self, canvas: &mut Canvas<'_>, to_pixel: &Transform) {
+    fn paint(&self, ctx: &mut RenderContext, to_pixel: &Transform) {
         match self {
             Self::Rect {
                 rect,
-                stroke,
-                fill,
+                stroke: outline,
+                fill: interior,
                 width,
             } => {
-                let r = to_pixel.rect_to_pixel(*rect);
-                if let Some(fill) = fill {
-                    canvas.paint_rect(r, *fill);
+                let r = krect(to_pixel.rect_to_pixel(*rect));
+                if let Some(interior) = interior {
+                    fill(ctx, &r, Ink::new(*interior));
                 }
-                let half = f64::from(width.max(0.0)) / 2.0;
-                if half > 0.0 {
-                    canvas.paint_ring(r, half, *stroke);
+                let line = Line::new(*width, Ink::new(*outline));
+                stroke(ctx, &r.to_path(0.1), line);
+            }
+            Self::Frame {
+                rect,
+                radius,
+                fill: interior,
+                stroke: outline,
+            } => {
+                let r = krect(*rect);
+                let radius = f64::from(*radius);
+                if let Some(interior) = interior {
+                    fill(ctx, &RoundedRect::from_rect(r, radius), *interior);
                 }
+                if let Some(line) = outline {
+                    // Outside or inside the edge: the centre line moves by half the width.
+                    let half = f64::from(line.width) / 2.0;
+                    let by = match line.edge {
+                        Edge::Inside => -half,
+                        Edge::Centre => 0.0,
+                        Edge::Outside => half,
+                    };
+                    let shape = RoundedRect::from_rect(r.inflate(by, by), (radius + by).max(0.0));
+                    stroke(ctx, &shape.to_path(0.1), *line);
+                }
+            }
+            Self::Text {
+                rect,
+                origin,
+                text,
+                font,
+                ink,
+            } => {
+                ctx.push_clip_layer(&krect(*rect).to_path(0.1));
+                ctx.set_paint(ink.color());
+                ctx.fill_path(&text::outlines(text, *font, kpoint(*origin)));
+                ctx.pop_layer();
+            }
+            Self::Polyline { points, line } => {
+                let mut path = BezPath::new();
+                for (n, p) in points.iter().enumerate() {
+                    if n == 0 {
+                        path.move_to(kpoint(*p));
+                    } else {
+                        path.line_to(kpoint(*p));
+                    }
+                }
+                stroke(ctx, &path, *line);
+            }
+            Self::Dashed {
+                from,
+                to,
+                line,
+                dash,
+                gap,
+            } => stroke(ctx, &dashes(*from, *to, *dash, *gap), *line),
+            Self::Badge {
+                center,
+                radius,
+                fill: interior,
+                ring,
+                label,
+                font,
+                ink,
+            } => {
+                let disc = Circle::new(kpoint(*center), f64::from(*radius));
+                fill(ctx, &disc, *interior);
+                stroke(ctx, &disc.to_path(0.1), *ring);
+                let (w, h) = text::measure(label, *font, 0.0);
+                let origin = KPoint::new(center.x - f64::from(w) / 2.0, center.y - f64::from(h) / 2.0);
+                ctx.set_paint(ink.color());
+                ctx.fill_path(&text::outlines(label, *font, origin));
             }
         }
     }
 }
 
-impl Canvas<'_> {
-    /// Paints the band `r` grown by `half` minus `r` shrunk by `half`.
-    fn paint_ring(&mut self, r: PixelRect, half: f64, color: [u8; 4]) {
-        let outer = grow(r, half);
-        let inner = grow(r, -half);
-        for (x, y) in self.pixels_touching(outer) {
-            self.blend(x, y, color, coverage(outer, x, y) - coverage(inner, x, y));
-        }
+/// The dashes of the line from `from` to `to`: `dash` drawn, `gap` left, from the start.
+fn dashes(from: PixelPoint, to: PixelPoint, dash: f32, gap: f32) -> BezPath {
+    let (a, b) = (kpoint(from), kpoint(to));
+    let length = a.distance(b);
+    let mut path = BezPath::new();
+    let (dash, period) = (f64::from(dash.max(0.1)), f64::from(dash.max(0.1) + gap.max(0.0)));
+    let mut at = 0.0;
+    while at < length {
+        path.move_to(a.lerp(b, at / length));
+        path.line_to(a.lerp(b, (at + dash).min(length) / length));
+        at += period;
     }
-
-    fn paint_rect(&mut self, r: PixelRect, color: [u8; 4]) {
-        for (x, y) in self.pixels_touching(r) {
-            self.blend(x, y, color, coverage(r, x, y));
-        }
-    }
-
-    /// Every pixel inside the bitmap that `r` touches.
-    fn pixels_touching(&self, r: PixelRect) -> impl Iterator<Item = (u32, u32)> + use<> {
-        let (x_lo, x_hi) = span(r.x0, r.x1, self.width);
-        let (y_lo, y_hi) = span(r.y0, r.y1, self.height);
-        (y_lo..y_hi).flat_map(move |y| (x_lo..x_hi).map(move |x| (x, y)))
-    }
-
-    /// Source-over blend of `color` (straight RGBA) at `cover` onto pixel `(x, y)`.
-    fn blend(&mut self, x: u32, y: u32, color: [u8; 4], cover: f64) {
-        let a = f64::from(color[3]) / 255.0 * cover.clamp(0.0, 1.0);
-        if a <= 0.0 {
-            return;
-        }
-        let at = (usize_from_u32(y) * usize_from_u32(self.width) + usize_from_u32(x)) * 4;
-        let Some(dst) = self.rgba.get_mut(at..at + 4) else {
-            return;
-        };
-        let dst_a = f64::from(dst[3]) / 255.0;
-        let out_a = a + dst_a * (1.0 - a);
-        for (d, s) in dst.iter_mut().zip(color).take(3) {
-            *d = u8_from_f64_round((f64::from(s) * a + f64::from(*d) * dst_a * (1.0 - a)) / out_a);
-        }
-        dst[3] = u8_from_f64_round(out_a * 255.0);
-    }
-}
-
-/// `r` moved outwards by `by` on every side; a negative `by` can invert it.
-fn grow(r: PixelRect, by: f64) -> PixelRect {
-    PixelRect {
-        x0: r.x0 - by,
-        y0: r.y0 - by,
-        x1: r.x1 + by,
-        y1: r.y1 + by,
-    }
-}
-
-/// Pixel index range `[lo, hi)` touched by the interval `[a, b]`, clamped to `0..=limit`.
-fn span(a: f64, b: f64, limit: u32) -> (u32, u32) {
-    let bound = |v: f64| u32_from_f64_trunc(v.clamp(0.0, f64::from(limit)));
-    (bound(a.floor()), bound(b.ceil()))
-}
-
-/// Fraction of pixel `(x, y)` covered by `r`; inverted rectangles cover nothing.
-fn coverage(r: PixelRect, x: u32, y: u32) -> f64 {
-    if r.x1 <= r.x0 || r.y1 <= r.y0 {
-        return 0.0;
-    }
-    let overlap = |lo: f64, hi: f64, cell: u32| {
-        let cell = f64::from(cell);
-        (hi.min(cell + 1.0) - lo.max(cell)).clamp(0.0, 1.0)
-    };
-    overlap(r.x0, r.x1, x) * overlap(r.y0, r.y1, y)
+    path
 }
 
 #[cfg(test)]
 mod tests {
     use kurbo::Affine;
+    use pdfxray_core::numeric::usize_from_u32;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -131,8 +347,12 @@ mod tests {
     const RED: [u8; 4] = [255, 0, 0, 255];
     const WHITE: [u8; 4] = [255, 255, 255, 255];
 
-    fn white(w: u32, h: u32) -> Vec<u8> {
-        WHITE.repeat(usize_from_u32(w * h))
+    /// A white `w` x `h` bitmap with `overlays` painted over it, as straight RGBA rows.
+    fn painted(w: u16, h: u16, overlays: &[Overlay]) -> Vec<u8> {
+        let mut pixmap = Pixmap::new(w, h);
+        pixmap.data_as_u8_slice_mut().fill(255);
+        paint(&mut pixmap, overlays, &Transform::new(Affine::IDENTITY).unwrap());
+        pixmap.take_rgba8(hayro::vello_cpu::peniko::ImageAlphaType::Alpha)
     }
 
     fn pixel(rgba: &[u8], w: u32, x: u32, y: u32) -> [u8; 4] {
@@ -140,58 +360,31 @@ mod tests {
         [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]
     }
 
-    fn paint(img: &mut [u8], w: u32, h: u32, overlay: &Overlay) {
-        let identity = Transform::new(Affine::IDENTITY).unwrap();
-        overlay.paint(
-            &mut Canvas {
-                rgba: img,
-                width: w,
-                height: h,
-            },
-            &identity,
-        );
+    fn rect(rect: Rect, fill: Option<[u8; 4]>, width: f32) -> Overlay {
+        Overlay::Rect {
+            rect,
+            stroke: RED,
+            fill,
+            width,
+        }
     }
 
     #[test]
     fn fill_covers_exactly_the_rectangle() {
-        let mut img = white(6, 6);
+        let img = painted(6, 6, &[rect(Rect::new(1.0, 2.0, 3.0, 4.0), Some(RED), 0.0)]);
 
-        paint(
-            &mut img,
-            6,
-            6,
-            &Overlay::Rect {
-                rect: Rect::new(1.0, 2.0, 3.0, 4.0),
-                stroke: RED,
-                fill: Some(RED),
-                width: 0.0,
-            },
-        );
-
-        let painted: Vec<(u32, u32)> = (0..6)
+        let red: Vec<(u32, u32)> = (0..6)
             .flat_map(|y| (0..6).map(move |x| (x, y)))
             .filter(|&(x, y)| pixel(&img, 6, x, y) == RED)
             .collect();
-        assert_eq!(painted, vec![(1, 2), (2, 2), (1, 3), (2, 3)]);
+        assert_eq!(red, vec![(1, 2), (2, 2), (1, 3), (2, 3)]);
         // Smoke: everything else is still white.
         assert_eq!(pixel(&img, 6, 0, 0), WHITE);
     }
 
     #[test]
     fn stroke_is_centred_on_the_edge_and_leaves_the_interior() {
-        let mut img = white(10, 10);
-
-        paint(
-            &mut img,
-            10,
-            10,
-            &Overlay::Rect {
-                rect: Rect::new(2.0, 2.0, 8.0, 8.0),
-                stroke: RED,
-                fill: None,
-                width: 2.0,
-            },
-        );
+        let img = painted(10, 10, &[rect(Rect::new(2.0, 2.0, 8.0, 8.0), None, 2.0)]);
 
         assert_eq!(
             [
@@ -207,40 +400,106 @@ mod tests {
 
     #[test]
     fn half_covered_pixel_blends_half() {
-        let mut img = white(2, 1);
+        let black = Some([0, 0, 0, 255]);
+        let img = painted(2, 1, &[rect(Rect::new(0.0, 0.0, 0.5, 1.0), black, 0.0)]);
 
-        paint(
-            &mut img,
-            2,
-            1,
-            &Overlay::Rect {
-                rect: Rect::new(0.0, 0.0, 0.5, 1.0),
-                stroke: RED,
-                fill: Some([0, 0, 0, 255]),
-                width: 0.0,
-            },
-        );
-
-        assert_eq!(pixel(&img, 2, 0, 0), [128, 128, 128, 255]);
+        let [r, g, b, a] = pixel(&img, 2, 0, 0);
+        assert!((126..=129).contains(&r) && r == g && g == b, "{r} {g} {b}");
+        assert_eq!(a, 255);
         assert_eq!(pixel(&img, 2, 1, 0), WHITE);
     }
 
     #[test]
     fn rectangles_outside_the_bitmap_are_ignored() {
-        let mut img = white(3, 3);
-
-        paint(
-            &mut img,
+        let img = painted(
             3,
             3,
-            &Overlay::Rect {
-                rect: Rect::new(-50.0, -50.0, -10.0, -10.0),
-                stroke: RED,
-                fill: Some(RED),
-                width: 3.0,
-            },
+            &[rect(Rect::new(-50.0, -50.0, -10.0, -10.0), Some(RED), 3.0)],
         );
 
-        assert_eq!(img, white(3, 3));
+        assert_eq!(img, WHITE.repeat(9));
+    }
+
+    #[test]
+    fn an_outside_outline_leaves_the_frame_and_an_inside_one_stays_in_it() {
+        let frame = |edge| Overlay::Frame {
+            rect: PixelRect {
+                x0: 4.0,
+                y0: 4.0,
+                x1: 12.0,
+                y1: 12.0,
+            },
+            radius: 0.0,
+            fill: None,
+            stroke: Some(Line::new(2.0, Ink::new(RED)).on(edge)),
+        };
+
+        let outside = painted(16, 16, &[frame(Edge::Outside)]);
+        let inside = painted(16, 16, &[frame(Edge::Inside)]);
+
+        assert_eq!(
+            [pixel(&outside, 16, 3, 8), pixel(&outside, 16, 4, 8)],
+            [RED, WHITE]
+        );
+        assert_eq!([pixel(&inside, 16, 3, 8), pixel(&inside, 16, 4, 8)], [WHITE, RED]);
+    }
+
+    #[test]
+    fn text_is_clipped_to_its_rect_and_a_badge_paints_its_number() {
+        let font = Font::new(text::Face::Bold, 40.0);
+        let text = |x1: f64| Overlay::Text {
+            rect: PixelRect {
+                x0: 0.0,
+                y0: 0.0,
+                x1,
+                y1: 60.0,
+            },
+            origin: PixelPoint::new(2.0, 2.0),
+            text: "HH".to_owned(),
+            font,
+            ink: Ink::new(RED),
+        };
+        let reds = |img: &[u8], w: u32, xs: std::ops::Range<u32>| {
+            xs.flat_map(|x| (0..60).map(move |y| (x, y)))
+                .filter(|&(x, y)| pixel(img, w, x, y) == RED)
+                .count()
+        };
+
+        let whole = painted(80, 60, &[text(80.0)]);
+        let clipped = painted(80, 60, &[text(20.0)]);
+
+        assert!(reds(&whole, 80, 30..80) > 0);
+        assert_eq!(reds(&clipped, 80, 21..80), 0);
+        // Smoke: the clipped text still paints left of the clip.
+        assert!(reds(&clipped, 80, 0..20) > 0);
+        let badge = painted(
+            40,
+            40,
+            &[Overlay::Badge {
+                center: PixelPoint::new(20.0, 20.0),
+                radius: 15.0,
+                fill: Ink::new(RED),
+                ring: Line::new(1.5, Ink::new(WHITE)),
+                label: "8".to_owned(),
+                font: Font::new(text::Face::Bold, 20.0),
+                ink: Ink::new([0, 0, 0, 255]),
+            }],
+        );
+        assert_eq!(pixel(&badge, 40, 20, 8), RED);
+        assert_ne!(pixel(&badge, 40, 20, 20), RED);
+    }
+
+    #[test]
+    fn ink_fades_like_a_premultiplied_colour() {
+        let ink = Ink::new([0xB4, 0x8C, 0xFF, 255]);
+
+        assert_eq!(ink.premultiplied(), [0xB4, 0x8C, 0xFF, 255]);
+        assert_eq!(
+            ink.fade(0.15).premultiplied(),
+            [27, 21, 38, 38],
+            "0xB4 * 0.15 = 27, 0xFF * 0.15 = 38.25"
+        );
+        // Smoke: fading twice multiplies.
+        assert!((ink.fade(0.5).fade(0.5).opacity - 0.25).abs() < f32::EPSILON);
     }
 }

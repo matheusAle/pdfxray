@@ -19,6 +19,7 @@
 //! `trunc(W * scale)` x `trunc(H * scale)` pixels where `W x H` is the crop size with
 //! width and height swapped for `/Rotate` 90 and 270.
 
+pub mod annotate;
 mod diff;
 mod filter;
 mod overlay;
@@ -44,7 +45,7 @@ use pdfxray_core::{Document, EngineError, PageIx, Point};
 
 pub use diff::{Diff, diff};
 pub use filter::{ContentFilter, ops_for, ops_for_all};
-pub use overlay::Overlay;
+pub use overlay::{Edge, Ink, Line, Overlay};
 pub use preview::{
     FontPreview, GLYPH_EM, IMAGE_PREVIEW_SIDE, InkMask, PREVIEW_SIDE, Preview, PreviewError, SPECIMEN_EM,
     render_preview,
@@ -52,11 +53,8 @@ pub use preview::{
 pub use rewrite::filtered_pdf;
 pub use transform::{PixelPoint, PixelRect, Transform};
 pub use xray::{
-    ColorBy, ROLE_CLASSES, ROLE_COLORS, RolePalette, XrayOptions, alpha_heatmap_overlays, clip_overlays,
-    role_slot, xray_overlays,
+    ColorBy, ROLE_COLORS, XrayOptions, alpha_heatmap_overlays, clip_overlays, role_rgba, xray_overlays,
 };
-
-use overlay::Canvas;
 
 /// Largest bitmap side [`render_page`] produces, in pixels.
 pub const MAX_SIDE: u32 = 16_384;
@@ -243,17 +241,10 @@ fn rasterise_cached<'a>(
             bg_color: background,
         },
     );
+    let mut pixmap = pixmap;
+    overlay::paint(&mut pixmap, &spec.overlays, &page_to_pixel);
     let (width, height) = (u32::from(pixmap.width()), u32::from(pixmap.height()));
-    let mut rgba = pixmap.take_rgba8(ImageAlphaType::Alpha);
-
-    let mut canvas = Canvas {
-        rgba: &mut rgba,
-        width,
-        height,
-    };
-    for overlay in &spec.overlays {
-        overlay.paint(&mut canvas, &page_to_pixel);
-    }
+    let rgba = pixmap.take_rgba8(ImageAlphaType::Alpha);
 
     Ok(RenderedPage {
         width,

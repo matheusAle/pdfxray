@@ -34,6 +34,62 @@ pub struct PixelRect {
     pub y1: f64,
 }
 
+impl PixelRect {
+    /// The rectangle with top-left corner `min` and size `(width, height)`.
+    pub const fn from_min_size(min: PixelPoint, (width, height): (f64, f64)) -> Self {
+        Self {
+            x0: min.x,
+            y0: min.y,
+            x1: min.x + width,
+            y1: min.y + height,
+        }
+    }
+
+    /// The rectangle of size `(width, height)` centred on `center`.
+    pub fn centred(center: PixelPoint, (width, height): (f64, f64)) -> Self {
+        Self::from_min_size(
+            PixelPoint::new(center.x - width / 2.0, center.y - height / 2.0),
+            (width, height),
+        )
+    }
+
+    /// The square around a disc of `radius` at `center`.
+    pub fn around(center: PixelPoint, radius: f64) -> Self {
+        Self::centred(center, (radius * 2.0, radius * 2.0))
+    }
+
+    /// Width.
+    pub fn width(&self) -> f64 {
+        self.x1 - self.x0
+    }
+
+    /// Height.
+    pub fn height(&self) -> f64 {
+        self.y1 - self.y0
+    }
+
+    /// The centre.
+    pub fn center(&self) -> PixelPoint {
+        PixelPoint::new(f64::midpoint(self.x0, self.x1), f64::midpoint(self.y0, self.y1))
+    }
+
+    /// True when the two share a point; touching edges count.
+    pub fn intersects(&self, other: &Self) -> bool {
+        self.x0 <= other.x1 && other.x0 <= self.x1 && self.y0 <= other.y1 && other.y0 <= self.y1
+    }
+
+    /// The same rectangle moved by `(dx, dy)`.
+    #[must_use]
+    pub fn translate(&self, dx: f64, dy: f64) -> Self {
+        Self {
+            x0: self.x0 + dx,
+            y0: self.y0 + dy,
+            x1: self.x1 + dx,
+            y1: self.y1 + dy,
+        }
+    }
+}
+
 /// An invertible 2x3 affine map from page space (PDF default user space: points, origin
 /// bottom-left, y up, before `/Rotate`) to pixel space of a [`RenderedPage`](crate::RenderedPage).
 ///
@@ -53,6 +109,12 @@ impl Transform {
             forward,
             inverse: forward.inverse(),
         })
+    }
+
+    /// This map followed by a scale of `(sx, sy)` and a move by `(dx, dy)`: page space onto a
+    /// bitmap shown scaled and placed on a screen. `None` when the result cannot be inverted.
+    pub fn onto(&self, (sx, sy): (f64, f64), (dx, dy): (f64, f64)) -> Option<Self> {
+        Self::new(Affine::translate((dx, dy)) * Affine::scale_non_uniform(sx, sy) * self.forward)
     }
 
     /// The matrix coefficients `[a, b, c, d, e, f]`: `x' = a x + c y + e`, `y' = b x + d y + f`.

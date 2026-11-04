@@ -2,32 +2,22 @@
 //! labels and reading-order badges on the canvas, the Tag roles legend and the x-ray's *Tag role*
 //! colouring, so a role reads the same everywhere.
 //!
-//! They are the design's `role-*` tokens (artifacts keep their kind colour), the same colours as
-//! the render crate's [`pdfxray_render::ROLE_COLORS`].
+//! They are the render crate's [`pdfxray_render::ROLE_COLORS`], the design's `role-*` tokens
+//! (artifacts keep their kind colour): the x-ray and the exported tag overlay paint a role in the
+//! same colour because there is one table of them.
 //!
 //! The Tag roles card lists a table in parts ([`TagRole`]), so its rows, header cells and data
 //! cells can be focused one by one; every part keeps the table colour.
 
 use egui::Color32;
 use pdfxray_core::{RoleClass, TagBox};
+use pdfxray_render::role_rgba;
 
-use crate::theme::tokens;
-
-/// The colour of `class`. Every place that draws a role uses this one function.
+/// The colour of `class`. Every place that draws a role uses this one function, which reads the
+/// render crate's table.
 pub const fn role_color(class: RoleClass) -> Color32 {
-    match class {
-        RoleClass::Heading => tokens::ROLE_HEADING,
-        RoleClass::Paragraph => tokens::ROLE_P,
-        RoleClass::Figure => tokens::ROLE_FIGURE,
-        RoleClass::Caption => tokens::ROLE_CAPTION,
-        RoleClass::Table => tokens::ROLE_TABLE,
-        RoleClass::List => tokens::ROLE_LIST,
-        RoleClass::Link => tokens::ROLE_LINK,
-        RoleClass::Inline => tokens::ROLE_INLINE,
-        RoleClass::Group => tokens::ROLE_GROUP,
-        RoleClass::Artifact => tokens::KIND_ARTIFACT,
-        RoleClass::Other => tokens::ROLE_OTHER,
-    }
+    let [r, g, b, _] = role_rgba(class);
+    Color32::from_rgb(r, g, b)
 }
 
 /// How the legend names `class`: the tags it stands for, as in the design.
@@ -122,21 +112,28 @@ impl TagRole {
 
 #[cfg(test)]
 mod tests {
-    use pdfxray_render::{ROLE_COLORS, role_slot};
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::theme::tokens;
 
     #[test]
-    fn the_canvas_and_the_x_ray_paint_a_role_in_the_same_colour() {
-        // The x-ray is rendered by the render crate; the boxes, dots and badges by the app.
-        for class in RoleClass::ALL {
-            assert_eq!(
-                role_color(class).to_srgba_unmultiplied(),
-                ROLE_COLORS[role_slot(class)],
-                "{class:?}"
-            );
-        }
+    fn a_role_takes_the_design_token_of_its_class() {
+        // The colours live in the render crate; the theme's role tokens must be the same.
+        let tokens = [
+            tokens::ROLE_HEADING,
+            tokens::ROLE_P,
+            tokens::ROLE_FIGURE,
+            tokens::ROLE_CAPTION,
+            tokens::ROLE_TABLE,
+            tokens::ROLE_LIST,
+            tokens::ROLE_LINK,
+            tokens::ROLE_INLINE,
+            tokens::ROLE_GROUP,
+            tokens::KIND_ARTIFACT,
+            tokens::ROLE_OTHER,
+        ];
+        assert_eq!(RoleClass::ALL.map(role_color), tokens);
         // Smoke: the heading is the design's violet.
         assert_eq!(
             role_color(RoleClass::Heading),

@@ -3487,6 +3487,7 @@ dependencies = [
  "pdfxray-fixtures",
  "pdfxray-raw",
  "pretty_assertions",
+ "skrifa 0.46.2",
  "thiserror 2.0.21",
 ]
 

@@ -24,7 +24,6 @@ use egui::epaint::{ClippedShape, Shape};
 use egui::{Key, Modifiers, Role};
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
-use pdfxray_app::center::canvas::header_scope;
 use pdfxray_app::inspector::table;
 use pdfxray_app::theme::tokens;
 use pdfxray_app::{DrawerTab, PdfxrayApp};
@@ -453,7 +452,7 @@ fn a_th_chip_says_its_declared_scope_and_a_conflict_gets_an_amber_ring_and_a_mar
         "TH · Column · declared, conflicts with position",
     )
     .rect();
-    let rings = rects_stroked(&harness, tokens::WARN, header_scope::CONFLICT_RING);
+    let rings = rects_stroked(&harness, tokens::WARN, pdfxray_render::annotate::CONFLICT_RING);
     assert_eq!(rings, [south]);
     let marks = painted(&harness)
         .into_iter()
@@ -587,7 +586,7 @@ fn a_th_without_scope_has_an_outlined_chip_and_a_hash_when_cells_name_it_by_id()
     assert_eq!(hashes, 5);
     // Smoke: nothing conflicts here.
     assert_eq!(
-        rects_stroked(&harness, tokens::WARN, header_scope::CONFLICT_RING),
+        rects_stroked(&harness, tokens::WARN, pdfxray_render::annotate::CONFLICT_RING),
         []
     );
 }

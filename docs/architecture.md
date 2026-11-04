@@ -21,7 +21,7 @@ pdfxray-fixtures (tests only)        xtask (dev tasks)
 |-------|----------------|
 | `pdfxray-raw` | Lossless lexer and object parser with byte spans; xref tables/streams, hybrid files, object streams, `/Prev` revision chain; stream filters; 40+ raw diagnostics. Never repairs. |
 | `pdfxray-core` | `Document`: object index, page tree with box provenance, content capture, structure tree, resources, diagnostics, veraPDF mapping. Exposes `info / tree / node / hit / hit_rect / bbox / breadcrumb / marked_content / captured`. |
-| `pdfxray-render` | hayro rasterisation, page↔pixel transform, overlays, X-ray, clip/alpha views, isolate/hide (of one node or a set)/stepper filtering, optional PDFium reference renderer and image diff. |
+| `pdfxray-render` | hayro rasterisation, page↔pixel transform, overlays (one `vello_cpu` compositor), the annotation layer (tag boxes, chips, reading-order badges and path, laid out and measured once for the app and the export), X-ray, clip/alpha views, isolate/hide (of one node or a set)/stepper filtering, optional PDFium reference renderer and image diff. |
 | `pdfxray-verapdf` | Finds or installs veraPDF (pinned, SHA-256 checked), runs it as a separate Java process, parses its XML report, parses context paths into locators. |
 | `pdfxray-cli` | `pdfxray` binary: JSON over the core API. |
 | `pdfxray-app` | egui desktop app. |
@@ -99,6 +99,18 @@ modified copy of the file: an in-memory incremental update that replaces the pag
 `/Contents` (and affected Form XObjects) with filtered streams. Painting operators outside the
 allowed set become no-ops (`n`, invisible text render mode, dropped `Do`/`sh`/inline images);
 all state operators are kept so positions stay exact. The original bytes are never modified.
+
+## The annotation layer
+
+Tag boxes, the chips that name them, reading-order badges, the path between them and its notes
+are laid out by `pdfxray_render::annotate`: a `Scene` (what to mark, in what colour, with what
+chip) on a `Grid` (page space onto output units, the size of an annotation unit, the device pixel)
+becomes a resolved list of `Annotation`s, each an `Overlay` shape with the `NodeId` it stands for.
+The render crate is the only text measurer (Inter Bold and `JetBrains Mono` via `skrifa`), so the
+chip nudging is decided once. The app draws that list with egui and binds its buttons, tooltips
+and accessible names to the rects it was given; `render_page` rasterises the same list with
+`vello_cpu`. Measurement ignores kerning, which only tightens text, so a label drawn by egui never
+outgrows its rect; labels are drawn clipped to it anyway.
 
 ## Node identity
 

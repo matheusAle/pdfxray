@@ -63,13 +63,11 @@ pub const TAG_PALETTE: [[u8; 4]; 8] = [
     [23, 190, 207, 255],
     [188, 189, 34, 255],
 ];
-/// How many role classes there are, i.e. the length of [`ROLE_COLORS`].
-pub const ROLE_CLASSES: usize = RoleClass::ALL.len();
-/// One straight RGBA colour per role class, in the order of [`RoleClass::ALL`].
-pub type RolePalette = [[u8; 4]; ROLE_CLASSES];
-/// The role colours of the design (`13-foundations`): heading, paragraph, figure, caption, table,
-/// list, link, inline, group, artifact, other. The app's role tokens are the same colours.
-pub const ROLE_COLORS: RolePalette = [
+/// The role colours of the design (`13-foundations`), one per role class in the order of
+/// [`RoleClass::ALL`]: heading, paragraph, figure, caption, table, list, link, inline, group,
+/// artifact, other. Every place that colours a role (the x-ray, the tag overlay, the app) takes
+/// it from [`role_rgba`].
+pub const ROLE_COLORS: [[u8; 4]; RoleClass::ALL.len()] = [
     [0xB4, 0x8C, 0xFF, 255],
     [0x5A, 0xA9, 0xFF, 255],
     [0xFF, 0x8A, 0x4C, 255],
@@ -209,6 +207,8 @@ fn with_alpha(overlay: &Overlay, alpha: u8) -> Overlay {
             fill: fill.map(scale),
             width,
         },
+        // The x-ray builds rectangles only.
+        ref other => other.clone(),
     }
 }
 
@@ -261,7 +261,7 @@ fn normal_color(cap: &CapturedPage, item: &PaintItem, options: XrayOptions, role
                     .filter_map(|ix| cap.marked.get(usize_from_u32(*ix))?.mcid)
                     .find_map(role_of)
             };
-            class.map_or(UNTAGGED_TAG, |class| ROLE_COLORS[role_slot(class)])
+            class.map_or(UNTAGGED_TAG, role_rgba)
         }
         ColorBy::Artifact => {
             if sequences().any(|m| m.artifact.is_some()) {
@@ -275,12 +275,17 @@ fn normal_color(cap: &CapturedPage, item: &PaintItem, options: XrayOptions, role
     }
 }
 
-/// Position of `class` in [`RoleClass::ALL`], the index into a [`RolePalette`].
-pub fn role_slot(class: RoleClass) -> usize {
-    RoleClass::ALL
-        .iter()
-        .position(|c| *c == class)
-        .unwrap_or(ROLE_CLASSES - 1)
+/// The colour of role class `class`: its entry of [`ROLE_COLORS`].
+pub const fn role_rgba(class: RoleClass) -> [u8; 4] {
+    let mut at = 0;
+    while at < RoleClass::ALL.len() {
+        if RoleClass::ALL[at] as u8 == class as u8 {
+            return ROLE_COLORS[at];
+        }
+        at += 1;
+    }
+    // Every class is in `ALL`; the last entry is `Other`.
+    ROLE_COLORS[RoleClass::ALL.len() - 1]
 }
 
 /// The palette entry of `tag`, by FNV-1a so it does not change between runs or versions.
@@ -550,8 +555,9 @@ mod tests {
     fn colors(overlays: &[Overlay]) -> Vec<([u8; 4], Option<[u8; 4]>)> {
         overlays
             .iter()
-            .map(|o| match o {
-                Overlay::Rect { stroke, fill, .. } => (*stroke, *fill),
+            .filter_map(|o| match o {
+                Overlay::Rect { stroke, fill, .. } => Some((*stroke, *fill)),
+                _ => None,
             })
             .collect()
     }

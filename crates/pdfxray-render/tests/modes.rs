@@ -22,8 +22,9 @@ use pdfxray_render::xray::{
     UNTAGGED_TAG,
 };
 use pdfxray_render::{
-    ColorBy, ContentFilter, Overlay, ROLE_COLORS, RenderError, RenderSpec, RenderedPage, XrayOptions,
-    alpha_heatmap_overlays, clip_overlays, filtered_pdf, ops_for, ops_for_all, render_page, xray_overlays,
+    ColorBy, ContentFilter, Overlay, RenderError, RenderSpec, RenderedPage, XrayOptions,
+    alpha_heatmap_overlays, clip_overlays, filtered_pdf, ops_for, ops_for_all, render_page, role_rgba,
+    xray_overlays,
 };
 use pretty_assertions::assert_eq;
 
@@ -623,10 +624,11 @@ fn hidden_clipping_text_keeps_clipping_and_the_form_copies_are_new_objects() {
 fn rects(overlays: &[Overlay]) -> Vec<(Rect, [u8; 4], Option<[u8; 4]>)> {
     overlays
         .iter()
-        .map(|o| match o {
+        .filter_map(|o| match o {
             Overlay::Rect {
                 rect, stroke, fill, ..
-            } => (*rect, *stroke, *fill),
+            } => Some((*rect, *stroke, *fill)),
+            _ => None,
         })
         .collect()
 }
@@ -806,11 +808,10 @@ fn xray_colours_by_the_role_class_that_owns_the_content() {
         color_by: ColorBy::TagRole,
         ..XrayOptions::default()
     };
-    let slot = |class| pdfxray_render::role_slot(class);
-    let heading = ROLE_COLORS[slot(pdfxray_core::RoleClass::Heading)];
-    let paragraph = ROLE_COLORS[slot(pdfxray_core::RoleClass::Paragraph)];
-    let figure = ROLE_COLORS[slot(pdfxray_core::RoleClass::Figure)];
-    let caption = ROLE_COLORS[slot(pdfxray_core::RoleClass::Caption)];
+    let heading = role_rgba(pdfxray_core::RoleClass::Heading);
+    let paragraph = role_rgba(pdfxray_core::RoleClass::Paragraph);
+    let figure = role_rgba(pdfxray_core::RoleClass::Figure);
+    let caption = role_rgba(pdfxray_core::RoleClass::Caption);
 
     let overlays = xray_overlays(&doc, 0, by_role);
 

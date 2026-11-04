@@ -25,6 +25,9 @@ hayro = "0.8"
 hayro-syntax = "0.8"
 hayro-interpret = "0.8"
 pdfium-render = "0.9"
+# MIT OR Apache-2.0. Glyph metrics and outlines for the annotation labels; already in the graph
+# through hayro-interpret, same version.
+skrifa = { version = "0.46", default-features = false, features = ["std"] }
 
 # ui
 egui = "0.37"

@@ -14,12 +14,12 @@ use egui::{Align2, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo, pos2, vec2};
 use pdfxray_core::{NodeId, OrderComparison, OrderStep, PageIx, ReadingOrder, ReadingOrderSource, explain};
 
 use super::Action;
-use crate::center::canvas::tag_overlay::chip_text;
 use crate::components::{Icon, PropRow, focus, section, tooltip};
 use crate::modes::OrderSource;
 use crate::roles::role_color;
 use crate::state::{AppState, RailItem};
 use crate::theme::{fonts, tokens};
+use pdfxray_render::annotate::chip_text;
 
 /// Title of the list's section.
 pub const TITLE: &str = "Reading order";

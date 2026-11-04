@@ -3,11 +3,11 @@
 //! line and are buttons.
 
 use egui::{
-    Color32, CursorIcon, Id, Painter, Pos2, Rect as UiRect, Role, Sense, Shape, Stroke, StrokeKind, Ui, Vec2,
+    Color32, CursorIcon, Id, Painter, Pos2, Rect as UiRect, Role, Sense, Shape, Stroke, StrokeKind, Ui,
     WidgetInfo, pos2, vec2,
 };
 
-use super::tag_overlay::clear_of;
+use super::tag_overlay::{px_rect, ui_rect};
 use crate::components::focus;
 use crate::theme::{fonts, tokens};
 
@@ -97,18 +97,10 @@ pub(super) fn beside(from: Pos2, to: Pos2) -> Pos2 {
     }
 }
 
-/// The middle of the line from `from` to `to`, moved to one side of it by as much as a box of
-/// `size` needs to leave the line clear: a wide label by a steep line moves sideways by half its
-/// width, not by [`BESIDE`].
-pub(super) fn clear_beside(from: Pos2, to: Pos2, size: Vec2) -> Pos2 {
-    let mid = from.lerp(to, 0.5);
-    let along = (to - from).normalized();
-    if !along.is_finite() {
-        return mid;
-    }
-    let normal = vec2(-along.y, along.x);
-    let reach = normal.x.abs() * size.x / 2.0 + normal.y.abs() * size.y / 2.0;
-    mid + normal * (reach + BESIDE / 2.0)
+/// `rect` moved down clear of `placed` by the annotation layout's one nudging rule.
+fn clear_of(placed: &[UiRect], rect: UiRect) -> UiRect {
+    let placed: Vec<_> = placed.iter().copied().map(px_rect).collect();
+    ui_rect(pdfxray_render::annotate::clear_of(&placed, px_rect(rect), 1.0))
 }
 
 /// What a [`label`] says and is called.
