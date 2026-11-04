@@ -76,7 +76,10 @@ fn a_changed_page_number_shows_its_residue_and_its_score_side_by_side() {
     let visual = &first["visual"];
     assert!(visual["differing_pixels"].as_u64().unwrap() > 50, "{visual}");
     assert!(visual["ratio"].as_f64().unwrap() < 0.001, "{visual}");
-    assert_eq!(visual["exceeds"], true);
+    assert_eq!(
+        visual["exceeds"], false,
+        "no limit was asked for, so nothing exceeds"
+    );
     assert_eq!(
         out["visual"],
         json!({ "scale": 2.0, "threshold": 0.1, "include_aa": false })

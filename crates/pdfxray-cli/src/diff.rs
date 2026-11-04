@@ -144,7 +144,7 @@ fn page_changed(m: &PageMatch, scope: ScopeArg) -> bool {
 }
 
 /// Narrows `pairing` to what `view` asks for, with the visual `scores` of its page pairs when
-/// there are any. A page pair whose score exceeds its limit is listed even when nothing else
+/// there are any. A page pair whose ink differs at all is listed even when nothing else
 /// changed on it; it does not make the documents differ (`identical`, and the exit status, come
 /// from the pairing).
 pub(crate) fn narrow<'a>(pairing: &'a Pairing, view: DiffView, scores: Option<&Scores>) -> DiffOutput<'a> {
@@ -197,7 +197,7 @@ pub(crate) fn narrow<'a>(pairing: &'a Pairing, view: DiffView, scores: Option<&S
         scores
             .and_then(|s| s.of(m))
             .and_then(|s| s.visual.as_ref())
-            .is_some_and(|v| v.as_ref().is_ok_and(pdfxray_render::score::VisualScore::exceeds))
+            .is_some_and(|v| v.as_ref().is_ok_and(pdfxray_render::score::VisualScore::differs))
     };
     let pages = in_scope_pages
         .into_iter()

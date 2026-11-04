@@ -413,7 +413,7 @@ mod tests {
             anti_aliased: 7,
             threshold: 0.1,
             include_aa: false,
-            allowed: 0,
+            allowed: None,
         };
 
         let mask = change_legend(Mode::Mask, ChangeShow::default(), Some(&score), &[], [0; 4]);

@@ -78,16 +78,16 @@ pub struct Limits {
 
 impl Limits {
     /// The most differing pixels out of `total` that do not exceed: the smaller of the two
-    /// limits, `0` when neither is set.
-    pub fn allowed(&self, total: u64) -> u64 {
+    /// limits, or `None` when neither is set — nothing to exceed, because no limit was asked for.
+    pub fn allowed(&self, total: u64) -> Option<u64> {
         let by_ratio = self.ratio.map(|r| {
             let share = (r.clamp(0.0, 1.0) * f64_from_u64(total)).floor();
             u64::try_from(i64_from_f64_round(share)).unwrap_or(0)
         });
         match (self.pixels, by_ratio) {
-            (Some(p), Some(r)) => p.min(r),
-            (Some(n), None) | (None, Some(n)) => n,
-            (None, None) => 0,
+            (Some(p), Some(r)) => Some(p.min(r)),
+            (Some(n), None) | (None, Some(n)) => Some(n),
+            (None, None) => None,
         }
     }
 }
@@ -143,8 +143,9 @@ pub struct VisualScore {
     pub threshold: f64,
     /// Whether anti-aliased pixels count.
     pub include_aa: bool,
-    /// The differing pixels allowed by the limits it was measured with.
-    pub allowed: u64,
+    /// The differing pixels allowed by the limits it was measured with; `None` when no limit
+    /// was asked for.
+    pub allowed: Option<u64>,
 }
 
 impl VisualScore {
@@ -158,9 +159,20 @@ impl VisualScore {
         }
     }
 
-    /// True when more pixels differ than the stricter limit allows.
+    /// True when any pixel differs at all: whether the page changed visually, which is a
+    /// different question from whether it passed a limit nobody set.
+    pub const fn differs(&self) -> bool {
+        self.differing_pixels > 0
+    }
+
+    /// True when more pixels differ than the stricter limit allows. False when no limit was
+    /// asked for: this reports a score, it does not assert one, so with nothing to exceed every
+    /// page would otherwise read as exceeding and the flag would say nothing.
     pub const fn exceeds(&self) -> bool {
-        self.differing_pixels > self.allowed
+        match self.allowed {
+            Some(allowed) => self.differing_pixels > allowed,
+            None => false,
+        }
     }
 
     /// The score in words, as the legend and the Changes list say it: `840 px differ (0.70%)`.
@@ -674,13 +686,17 @@ mod tests {
         let ratio_strict = with(Some(1000), Some(0.1));
         let both_loose = with(Some(50), Some(0.5));
 
-        assert_eq!((count_strict.allowed, count_strict.exceeds()), (10, true));
-        assert_eq!((ratio_strict.allowed, ratio_strict.exceeds()), (10, true));
-        assert_eq!((both_loose.allowed, both_loose.exceeds()), (50, false));
+        assert_eq!((count_strict.allowed, count_strict.exceeds()), (Some(10), true));
+        assert_eq!((ratio_strict.allowed, ratio_strict.exceeds()), (Some(10), true));
+        assert_eq!((both_loose.allowed, both_loose.exceeds()), (Some(50), false));
         assert!(!with(None, Some(0.2)).exceeds(), "the limit is inclusive");
         // Smoke: with no limit, any differing pixel exceeds, and the score is the same.
         let unlimited = with(None, None);
-        assert_eq!((unlimited.allowed, unlimited.exceeds()), (0, true));
+        assert_eq!(
+            (unlimited.allowed, unlimited.exceeds()),
+            (None, false),
+            "no limit asked for means nothing to exceed"
+        );
         assert_eq!(unlimited.differing_pixels, count_strict.differing_pixels);
         assert!((unlimited.ratio() - 0.2).abs() < 1e-12);
     }

@@ -89,7 +89,7 @@ fn a_changed_page_number_is_many_residue_items_and_a_low_but_clear_score() {
     // ... visually it is a few dozen pixels of a page: low, but clearly not zero.
     assert!(v.differing_pixels > 50, "{v:?}");
     assert!(v.ratio() < 0.001, "{}", v.ratio());
-    assert!(v.exceeds(), "with no limit set, any differing pixel exceeds");
+    assert!(!v.exceeds(), "with no limit set there is nothing to exceed");
     // `Page 1` became `- 1 -`: more ink removed than added.
     assert!(v.ink_removed > v.ink_added, "{v:?}");
     // Smoke: every page pair says the same.

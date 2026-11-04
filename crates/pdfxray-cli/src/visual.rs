@@ -18,7 +18,8 @@ pub struct VisualArgs {
     #[arg(long)]
     include_aa: bool,
     /// The visual score exceeds when more than this many pixels differ. With
-    /// `--max-diff-ratio` too, the stricter wins; with neither, any differing pixel exceeds.
+    /// `--max-diff-ratio` too, the stricter wins; with neither, no limit applies and nothing
+    /// exceeds — a score is reported either way.
     #[arg(long)]
     max_diff_pixels: Option<u64>,
     /// The visual score exceeds when more than this share of the pixels (0 to 1) differ.
