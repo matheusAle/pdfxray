@@ -21,9 +21,9 @@ pdfxray-fixtures (tests only)        xtask (dev tasks)
 |-------|----------------|
 | `pdfxray-raw` | Lossless lexer and object parser with byte spans; xref tables/streams, hybrid files, object streams, `/Prev` revision chain; stream filters; 40+ raw diagnostics. Never repairs. |
 | `pdfxray-core` | `Document`: object index, page tree with box provenance, content capture, structure tree, resources, diagnostics, veraPDF mapping. Exposes `info / tree / node / hit / hit_rect / bbox / breadcrumb / marked_content / captured`. |
-| `pdfxray-render` | hayro rasterisation, page↔pixel transform, overlays (one `vello_cpu` compositor), the annotation layer (tag boxes, chips, reading-order badges and path, laid out and measured once for the app and the export), X-ray, clip/alpha views, isolate/hide (of one node or a set)/stepper filtering, optional PDFium reference renderer and image diff. |
+| `pdfxray-render` | hayro rasterisation into a page's own pixel grid or a given one, page↔pixel transform, overlays (one `vello_cpu` compositor), the annotation layer (tag boxes, chips, reading-order badges and path, a diff's status boxes and legend, laid out and measured once for the app and the export), the visual diff (side by side, overlay, mask over one composite bitmap), X-ray, clip/alpha views, isolate/hide (of one node or a set)/stepper filtering, optional PDFium reference renderer and image diff, PNG/JPEG output. |
 | `pdfxray-verapdf` | Finds or installs veraPDF (pinned, SHA-256 checked), runs it as a separate Java process, parses its XML report, parses context paths into locators. |
-| `pdfxray-cli` | `pdfxray` binary: JSON over the core API. |
+| `pdfxray-cli` | `pdfxray` binary: JSON over the core API; `render` writes PNG/JPEG, alone or compared `--against` a file or a `--reference` engine. |
 | `pdfxray-app` | egui desktop app. |
 | `pdfxray-macos` | The macOS integration that needs Objective-C: the application delegate that receives files from Finder and the Dock, and the system's recent documents. No-op stubs elsewhere. |
 | `pdfxray-fixtures` | Deterministic generator of small PDFs, each with machine-readable expected facts. |
@@ -111,6 +111,20 @@ chip nudging is decided once. The app draws that list with egui and binds its bu
 and accessible names to the rects it was given; `render_page` rasterises the same list with
 `vello_cpu`. Measurement ignores kerning, which only tightens text, so a label drawn by egui never
 outgrows its rect; labels are drawn clipped to it anyway.
+
+## The visual diff
+
+`pdfxray_render::composite` puts two pages into one bitmap: side by side (each on its own grid,
+one wide bitmap), overlaid (A's ink and B's in two tints, multiplied) or as a mask (the pixel
+diff). For the last two, B is drawn **into A's pixel grid** (`RenderSpec::grid`): a page is
+`trunc(W × scale)` pixels wide, so without it a page 0.1 pt wider would change the bitmap's size
+and every pixel would compare against the wrong one. A page whose size (beyond 1 pt) or `/Rotate`
+differs is refused with the reason, and drawn scaled only on request; the pairing's global offset
+is removed only on request, and the output says when either happened. The annotations go on top
+through `Composite::annotate`: B's boxes are carried into A's page space so both sides are laid
+out together, and the legend gets a band of its own below the pages. A diff colours by status,
+never by role; the role is the chip's text. The app and the export call the same function, so
+they draw the same picture.
 
 ## Node identity
 

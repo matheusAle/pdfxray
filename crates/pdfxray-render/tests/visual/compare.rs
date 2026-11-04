@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use pdfxray_render::{RenderedPage, write_png};
+use pdfxray_render::{RenderedPage, write_image};
 
 /// How far a render may drift from its baseline before it counts as different.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,7 +109,7 @@ pub(crate) fn assert_snapshot(dir: &Path, name: &str, page: &RenderedPage, toler
 
     if updating() {
         std::fs::create_dir_all(dir).unwrap();
-        write_png(page, &baseline).unwrap();
+        write_image(page, &baseline).unwrap();
         for stale in [&new, &diff] {
             let _ = std::fs::remove_file(stale);
         }
@@ -136,7 +136,7 @@ pub(crate) fn assert_snapshot(dir: &Path, name: &str, page: &RenderedPage, toler
             }
         }
         Comparison::SizeMismatch { expected, actual } => {
-            write_png(page, &new).unwrap();
+            write_image(page, &new).unwrap();
             panic!(
                 "snapshot `{name}` is {}x{}, baseline is {}x{}; wrote {}",
                 actual.0,
@@ -151,7 +151,7 @@ pub(crate) fn assert_snapshot(dir: &Path, name: &str, page: &RenderedPage, toler
             max_delta,
             diff: diff_pixels,
         } => {
-            write_png(page, &new).unwrap();
+            write_image(page, &new).unwrap();
             image::save_buffer(
                 &diff,
                 &diff_pixels,

@@ -1,8 +1,8 @@
 //! `pdfxray` command line: JSON over the core query API.
 
 mod diff;
+mod render;
 
-use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -10,18 +10,12 @@ use std::time::Duration;
 
 use anyhow::{Context, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
-use pdfxray_core::{
-    BoxKind, Document, LayerMode, NodeId, PageIx, Point, ReadingOrderSource, Rect, SpeechPreset, TreeKind,
-};
-use pdfxray_render::pdfium::PdfiumRenderer;
-use pdfxray_render::{
-    ColorBy, ContentFilter, Overlay, RenderSpec, XrayOptions, alpha_heatmap_overlays, clip_overlays, diff,
-    ops_for, render_page, write_png, xray_overlays,
-};
+use pdfxray_core::{Document, LayerMode, NodeId, PageIx, Point, ReadingOrderSource, SpeechPreset, TreeKind};
 use pdfxray_verapdf::{Discovery, DiscoveryConfig, Profile, RunOptions, VeraPdf, discover};
 use serde::Serialize;
 
 pub use self::diff::ScopeArg;
+pub use self::render::RenderArgs;
 
 /// Command-line arguments.
 #[derive(Debug, Parser)]
@@ -133,67 +127,10 @@ pub enum Command {
         /// Zero-based page index.
         page: PageIx,
     },
-    /// Render a page to PNG, optionally with page boxes and highlighted nodes drawn on top.
-    Render {
-        /// PDF file to render.
-        file: PathBuf,
-        /// Zero-based page index.
-        page: PageIx,
-        /// Output PNG path.
-        #[arg(short, long)]
-        output: PathBuf,
-        /// Pixels per point.
-        #[arg(long, default_value_t = 2.0)]
-        scale: f32,
-        /// Outline every defined page box.
-        #[arg(long)]
-        boxes: bool,
-        /// Outline these nodes (repeatable), e.g. `--highlight mc:0:1`.
-        #[arg(long)]
-        highlight: Vec<NodeId>,
-        /// Outline every painted item, coloured by kind, tag or artifact status.
-        #[arg(long, value_enum)]
-        xray: Option<XrayArg>,
-        /// Also mark invisible items in X-ray (invisible text, white-on-white, off-page).
-        #[arg(long)]
-        invisible: bool,
-        /// Paint only the content of these nodes (repeatable).
-        #[arg(long, conflicts_with_all = ["hide", "step"])]
-        isolate: Vec<NodeId>,
-        /// Paint everything except the content of these nodes (repeatable).
-        #[arg(long, conflicts_with = "step")]
-        hide: Vec<NodeId>,
-        /// Paint-order stepper: paint operators up to this execution index only.
-        #[arg(long)]
-        step: Option<u32>,
-        /// Show the clip in effect after this operator.
-        #[arg(long)]
-        clip: Option<u32>,
-        /// Tint items with transparency, soft masks or non-Normal blend modes.
-        #[arg(long)]
-        alpha: bool,
-    },
-    /// Render a page with hayro and with the `PDFium` reference engine and write a diff image:
-    /// grey = agreement, red = the engines disagree. Tells engine bugs from file bugs.
-    Compare {
-        /// PDF file to compare.
-        file: PathBuf,
-        /// Zero-based page index.
-        page: PageIx,
-        /// Output PNG path for the diff image.
-        #[arg(short, long)]
-        output: PathBuf,
-        /// Pixels per point.
-        #[arg(long, default_value_t = 1.0)]
-        scale: f32,
-        /// Per-channel difference that still counts as equal.
-        #[arg(long, default_value_t = 48)]
-        tolerance: u8,
-        /// `PDFium` library (file or directory) instead of the default search
-        /// (`PDFXRAY_PDFIUM`, `target/pdfium`, the pdfxray data directory).
-        #[arg(long)]
-        pdfium: Option<PathBuf>,
-    },
+    /// Render a page to PNG or JPEG, optionally with page boxes, highlights, the x-ray and the
+    /// View menu's annotations drawn on top; or compare it with another file (`--against`) or a
+    /// reference engine (`--reference pdfium`), side by side, overlaid or as a mask.
+    Render(render::RenderArgs),
     /// Compare two PDFs: which structure elements correspond and what changed (modified,
     /// moved, added, removed), matched by what they say and where they are, never by object
     /// number. Exits 0 when nothing in scope changed, 1 when something did, 2 on error.
@@ -554,119 +491,7 @@ fn run_command(cli: &Cli, out: &mut impl Write, outcome: &mut Outcome) -> anyhow
             let doc = open_page(file, *page)?;
             write_json(out, &doc.tag_boxes(*page), cli.pretty)
         }
-        Command::Render {
-            file,
-            page,
-            output,
-            scale,
-            boxes,
-            highlight,
-            xray,
-            invisible,
-            isolate,
-            hide,
-            step,
-            clip,
-            alpha,
-        } => {
-            let doc = open(file)?;
-            let info = doc
-                .page(*page)
-                .ok_or_else(|| anyhow!("page {page} out of range (document has {})", doc.page_count()))?;
-            let mut spec = RenderSpec::new(*scale);
-            if *boxes {
-                spec.overlays.extend(
-                    info.defined_boxes()
-                        .map(|(kind, rect)| outline(rect, box_colour(kind))),
-                );
-            }
-            for id in highlight {
-                match doc.bbox(id) {
-                    Some((p, rect)) if p == *page => spec.overlays.push(outline(rect, HIGHLIGHT)),
-                    Some((p, _)) => return Err(anyhow!("`{id}` is on page {p}, not {page}")),
-                    None => return Err(anyhow!("`{id}` has no geometry")),
-                }
-            }
-            if let Some(by) = xray {
-                let options = XrayOptions {
-                    color_by: (*by).into(),
-                    include_invisible: *invisible,
-                    ..XrayOptions::default()
-                };
-                spec.overlays.extend(xray_overlays(&doc, *page, options));
-            }
-            if let Some(op) = clip {
-                spec.overlays.extend(clip_overlays(&doc, *page, *op));
-            }
-            if *alpha {
-                spec.overlays.extend(alpha_heatmap_overlays(&doc, *page));
-            }
-            spec.content = if !isolate.is_empty() {
-                ContentFilter::Only(op_set(&doc, isolate)?)
-            } else if !hide.is_empty() {
-                ContentFilter::Hide(op_set(&doc, hide)?)
-            } else if let Some(n) = step {
-                ContentFilter::UpTo(*n)
-            } else {
-                ContentFilter::All
-            };
-            let rendered =
-                render_page(&doc, *page, &spec).with_context(|| format!("rendering page {page}"))?;
-            write_png(&rendered, output).with_context(|| format!("writing {}", output.display()))?;
-            write_json(
-                out,
-                &serde_json::json!({ "output": output, "width": rendered.width, "height": rendered.height }),
-                cli.pretty,
-            )
-        }
-        Command::Compare {
-            file,
-            page,
-            output,
-            scale,
-            tolerance,
-            pdfium,
-        } => {
-            let doc = open(file)?;
-            if doc.page(*page).is_none() {
-                return Err(anyhow!(
-                    "page {page} out of range (document has {})",
-                    doc.page_count()
-                ));
-            }
-            let reference = PdfiumRenderer::load(pdfium.as_deref())
-                .context("loading PDFium; run `cargo xtask pdfium fetch` or pass --pdfium <path>")?;
-            let ours = render_page(&doc, *page, &RenderSpec::new(*scale))
-                .with_context(|| format!("rendering page {page} with hayro"))?;
-            let theirs = reference
-                .render_page(&doc, *page, *scale)
-                .with_context(|| format!("rendering page {page} with PDFium"))?;
-            let d = diff(&ours, &theirs, *tolerance);
-            image::save_buffer(
-                output,
-                &d.image,
-                d.width,
-                d.height,
-                image::ExtendedColorType::Rgba8,
-            )
-            .with_context(|| format!("writing {}", output.display()))?;
-            let total = f64::from(d.width) * f64::from(d.height);
-            let differing = u32::try_from(d.differing_pixels).map_or(f64::INFINITY, f64::from);
-            write_json(
-                out,
-                &serde_json::json!({
-                    "output": output,
-                    "pdfium_version": reference.version(),
-                    "width": d.width,
-                    "height": d.height,
-                    "differing_pixels": d.differing_pixels,
-                    "differing_fraction": if total > 0.0 { differing / total } else { 0.0 },
-                    "max_channel_delta": d.max_channel_delta,
-                    "mean_delta": d.mean_delta,
-                }),
-                cli.pretty,
-            )
-        }
+        Command::Render(args) => render::run(args, cli.pretty, out),
         Command::Validate {
             file,
             profile,
@@ -690,60 +515,6 @@ fn run_command(cli: &Cli, out: &mut impl Write, outcome: &mut Outcome) -> anyhow
             doc.set_validation(&report);
             write_json(out, &doc.validation().as_deref(), cli.pretty)
         }
-    }
-}
-
-/// `--xray` colouring.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum XrayArg {
-    /// By item kind: glyph, path, image, shading.
-    Kind,
-    /// By innermost marked-content tag.
-    Tag,
-    /// Artifact vs tagged vs untagged.
-    Artifact,
-}
-
-impl From<XrayArg> for ColorBy {
-    fn from(x: XrayArg) -> Self {
-        match x {
-            XrayArg::Kind => Self::Kind,
-            XrayArg::Tag => Self::Tag,
-            XrayArg::Artifact => Self::Artifact,
-        }
-    }
-}
-
-fn op_set(doc: &Document, ids: &[NodeId]) -> anyhow::Result<BTreeSet<u32>> {
-    let mut ops = BTreeSet::new();
-    for id in ids {
-        let found = ops_for(doc, id);
-        if found.is_empty() {
-            return Err(anyhow!("`{id}` paints nothing that can be isolated or hidden"));
-        }
-        ops.extend(found);
-    }
-    Ok(ops)
-}
-
-const HIGHLIGHT: [u8; 4] = [255, 0, 160, 255];
-
-fn box_colour(kind: BoxKind) -> [u8; 4] {
-    match kind {
-        BoxKind::Media => [220, 40, 40, 255],
-        BoxKind::Crop => [40, 160, 40, 255],
-        BoxKind::Bleed => [40, 90, 220, 255],
-        BoxKind::Trim => [200, 60, 200, 255],
-        BoxKind::Art => [230, 150, 0, 255],
-    }
-}
-
-fn outline(rect: Rect, stroke: [u8; 4]) -> Overlay {
-    Overlay::Rect {
-        rect,
-        stroke,
-        fill: None,
-        width: 2.0,
     }
 }
 

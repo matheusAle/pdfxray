@@ -14,7 +14,7 @@ pdfxray-raw.workspace = true
 hayro.workspace = true
 kurbo.workspace = true
 skrifa.workspace = true
-image.workspace = true
+image = { workspace = true, features = ["jpeg"] }
 thiserror.workspace = true
 # Optional reference renderer (BSD-3/Apache-2.0). Loaded dynamically at run time, never linked.
 pdfium-render = { workspace = true, optional = true, default-features = false, features = ["pdfium_latest", "thread_safe"] }

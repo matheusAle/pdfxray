@@ -378,19 +378,21 @@ pub(crate) fn digest(harness: &Harness<'_, PdfxrayApp>) -> u64 {
     harness.state().state.shown_digest().unwrap()
 }
 
-/// The digest of what `render_page` makes of page 0 of `fixture` at the scale on the canvas.
+/// The digest of what `render_page` makes of page 0 of `fixture` at the scale on the canvas, with
+/// the overlays `overlays` places on that page.
 pub(crate) fn expected_digest(
     harness: &Harness<'_, PdfxrayApp>,
     fixture: &str,
     content: pdfxray_render::ContentFilter,
-    overlays: impl FnOnce(&pdfxray_core::Document) -> Vec<pdfxray_render::Overlay>,
+    overlays: impl FnOnce(&pdfxray_core::Document, &pdfxray_render::Transform) -> Vec<pdfxray_render::Overlay>,
 ) -> u64 {
     let doc = pdfxray_core::Document::open(fixture_path(fixture)).unwrap();
     let scale = harness.state().state.shown_request().unwrap().scale.scale();
+    let at = pdfxray_render::page_transform(&doc, 0, scale).unwrap();
     let spec = pdfxray_render::RenderSpec {
-        scale,
-        overlays: overlays(&doc),
+        overlays: overlays(&doc, &at),
         content,
+        ..pdfxray_render::RenderSpec::new(scale)
     };
     pdfxray_app::pixel_digest(&pdfxray_render::render_page(&doc, 0, &spec).unwrap().rgba)
 }

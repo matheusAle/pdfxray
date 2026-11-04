@@ -142,8 +142,8 @@ fn xray_changes_the_texture_and_the_legend_lists_the_kind_palette() {
     assert_ne!(xrayed, plain);
     assert_eq!(
         xrayed,
-        expected_digest(&harness, "minimal-one-page", ContentFilter::All, |doc| {
-            xray_overlays(doc, 0, xray(ColorBy::Kind, false))
+        expected_digest(&harness, "minimal-one-page", ContentFilter::All, |doc, at| {
+            xray_overlays(doc, 0, xray(ColorBy::Kind, false), at)
         })
     );
     // The legend is a chip that counts its entries; resting the pointer on it lists exactly the
@@ -185,8 +185,8 @@ fn xray_changes_the_texture_and_the_legend_lists_the_kind_palette() {
     view_tools::close(&mut harness);
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "minimal-one-page", ContentFilter::All, |doc| {
-            xray_overlays(doc, 0, xray(ColorBy::Artifact, false))
+        expected_digest(&harness, "minimal-one-page", ContentFilter::All, |doc, at| {
+            xray_overlays(doc, 0, xray(ColorBy::Artifact, false), at)
         })
     );
 
@@ -286,7 +286,7 @@ fn isolating_a_glyph_renders_only_its_operator_and_the_chip_clears_it() {
             &harness,
             "minimal-one-page",
             ContentFilter::Only(ops.clone()),
-            |_| Vec::new()
+            |_, _| Vec::new()
         )
     );
 
@@ -295,7 +295,7 @@ fn isolating_a_glyph_renders_only_its_operator_and_the_chip_clears_it() {
     assert!(has_label(&harness, "Hidden: Glyph \"H\""));
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "minimal-one-page", ContentFilter::Hide(ops), |_| {
+        expected_digest(&harness, "minimal-one-page", ContentFilter::Hide(ops), |_, _| {
             Vec::new()
         })
     );
@@ -387,8 +387,9 @@ fn isolating_a_tag_keeps_only_its_marked_content() {
     assert_ne!(digest(&harness), full);
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "tagged-simple", ContentFilter::Only(ops), |_| Vec::new(
-        ))
+        expected_digest(&harness, "tagged-simple", ContentFilter::Only(ops), |_, _| {
+            Vec::new()
+        })
     );
 }
 
@@ -432,7 +433,7 @@ fn a_validation_finding_isolates_its_target() {
             &harness,
             "orphan-mcid",
             ContentFilter::Only(isolation.ops.clone()),
-            |_| Vec::new()
+            |_, _| Vec::new()
         )
     );
 }
@@ -514,8 +515,9 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     );
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "graphics-state", ContentFilter::UpTo(37), |_| Vec::new(
-        ))
+        expected_digest(&harness, "graphics-state", ContentFilter::UpTo(37), |_, _| {
+            Vec::new()
+        })
     );
     // The inspector shows that operator and its graphics state.
     let inspector = texts_in(&harness, Region::Inspector, Role::Label);
@@ -561,8 +563,9 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     );
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "graphics-state", ContentFilter::UpTo(38), |_| Vec::new(
-        ))
+        expected_digest(&harness, "graphics-state", ContentFilter::UpTo(38), |_, _| {
+            Vec::new()
+        })
     );
 
     // The buttons move one step too, and stop at the ends.
@@ -597,7 +600,7 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     assert!(!harness.state().state.canvas.view.stepper);
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "graphics-state", ContentFilter::All, |_| Vec::new())
+        expected_digest(&harness, "graphics-state", ContentFilter::All, |_, _| Vec::new())
     );
     assert_eq!(
         harness.state().state.selection.primary().cloned(),
@@ -650,11 +653,12 @@ fn the_clip_toggle_outlines_the_clip_of_the_selected_operator() {
     assert_eq!(request.clip_op, Some(59));
     let doc = Document::open(fixture_path("graphics-state")).unwrap();
     assert_eq!(request.spec(&doc).overlays.len(), 1);
-    assert_eq!(request.spec(&doc).overlays, clip_overlays(&doc, 0, 59));
+    let at = pdfxray_render::page_transform(&doc, 0, request.scale.scale()).unwrap();
+    assert_eq!(request.spec(&doc).overlays, clip_overlays(&doc, 0, 59, &at));
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "graphics-state", ContentFilter::All, |doc| {
-            clip_overlays(doc, 0, 59)
+        expected_digest(&harness, "graphics-state", ContentFilter::All, |doc, at| {
+            clip_overlays(doc, 0, 59, at)
         })
     );
     assert_ne!(digest(&harness), plain);
@@ -706,8 +710,8 @@ fn the_alpha_heatmap_tints_items_that_are_not_opaque() {
     assert!(is_selected(&the(&harness, Region::Center, Role::Button, "Alpha")));
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "graphics-state", ContentFilter::All, |doc| {
-            alpha_heatmap_overlays(doc, 0)
+        expected_digest(&harness, "graphics-state", ContentFilter::All, |doc, at| {
+            alpha_heatmap_overlays(doc, 0, at)
         })
     );
     assert_ne!(digest(&harness), plain);
@@ -808,8 +812,8 @@ fn opening_another_document_starts_a_fresh_render_thread() {
     assert!(!harness.state().state.canvas.view.stepper);
     assert_eq!(
         digest(&harness),
-        expected_digest(&harness, "minimal-one-page", ContentFilter::All, |doc| {
-            xray_overlays(doc, 0, xray(ColorBy::Kind, false))
+        expected_digest(&harness, "minimal-one-page", ContentFilter::All, |doc, at| {
+            xray_overlays(doc, 0, xray(ColorBy::Kind, false), at)
         })
     );
     assert_ne!(digest(&harness), xrayed);

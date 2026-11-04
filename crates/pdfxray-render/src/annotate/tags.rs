@@ -192,11 +192,7 @@ pub fn tag_scene(view: &TagView<'_>) -> Scene {
             })
             .collect()
     });
-    Scene {
-        marks,
-        path,
-        tint: None,
-    }
+    Scene { marks, path }
 }
 
 #[cfg(test)]

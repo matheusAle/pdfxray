@@ -859,4 +859,17 @@ impl Document {
             .map(|ei| tree.id_of(ei))
             .collect()
     }
+
+    /// The header cells of the tables on `page` with the direction each heads, by element, in
+    /// document order: what the chip of a `TH` draws after its name. A header of a table on the
+    /// page is listed even when its own box is on another page.
+    #[must_use]
+    pub fn header_scopes(&self, page: PageIx) -> Vec<(NodeId, HeaderScope)> {
+        self.tables(page)
+            .iter()
+            .filter_map(|id| self.table(id))
+            .flat_map(|model| model.cells)
+            .filter_map(|cell| Some((cell.node, cell.header_scope?)))
+            .collect()
+    }
 }

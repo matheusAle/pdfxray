@@ -102,25 +102,12 @@ impl Line {
     }
 }
 
-/// A shape drawn over the page bitmap.
-///
-/// [`Overlay::Rect`] is in page space, as the debug overlays built from the page content are.
-/// Every other variant is a resolved annotation shape in output units (bitmap pixels when it is
-/// rasterised here), laid out by [`crate::annotate::layout`] on a [`crate::annotate::Grid`].
+/// A shape drawn over the page bitmap, in output units (bitmap pixels when it is rasterised
+/// here): a debug outline placed with [`Overlay::outline`], or an annotation shape laid out by
+/// [`crate::annotate::layout`] on a [`crate::annotate::Grid`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum Overlay {
-    /// An axis-aligned rectangle in page space.
-    Rect {
-        /// Rectangle in page space.
-        rect: Rect,
-        /// Outline colour, straight RGBA.
-        stroke: [u8; 4],
-        /// Interior colour, straight RGBA; `None` leaves the interior untouched.
-        fill: Option<[u8; 4]>,
-        /// Outline width in output pixels, centred on the rectangle edge. Zero draws no outline.
-        width: f32,
-    },
-    /// A box in output units: a tag box, the body of a chip or a note, a legend swatch.
+    /// A box: a debug outline, a tag box, the body of a chip or a note, a legend swatch.
     Frame {
         /// The box.
         rect: PixelRect,
@@ -183,14 +170,14 @@ pub enum Overlay {
     },
 }
 
-/// Paints `overlays` over `pixmap` (a page drawn with `to_pixel`), source over.
-pub(crate) fn paint(pixmap: &mut Pixmap, overlays: &[Overlay], to_pixel: &Transform) {
+/// Paints `overlays` over `pixmap`, source over.
+pub(crate) fn paint(pixmap: &mut Pixmap, overlays: &[Overlay]) {
     if overlays.is_empty() {
         return;
     }
     let mut ctx = RenderContext::new(pixmap.width(), pixmap.height());
     for overlay in overlays {
-        overlay.paint(&mut ctx, to_pixel);
+        overlay.paint(&mut ctx);
     }
     ctx.flush();
     ctx.render_with(
@@ -231,22 +218,37 @@ fn stroke(ctx: &mut RenderContext, path: &BezPath, line: Line) {
     ctx.stroke_path(path);
 }
 
+/// The outline of `r`, its corners rounded by `radius`; a square-cornered box is the plain
+/// rectangle, so a debug outline is the four edges and nothing else.
+fn frame_path(r: KRect, radius: f64) -> BezPath {
+    if radius > 0.0 {
+        RoundedRect::from_rect(r, radius).to_path(0.1)
+    } else {
+        r.to_path(0.1)
+    }
+}
+
 impl Overlay {
-    fn paint(&self, ctx: &mut RenderContext, to_pixel: &Transform) {
+    /// The page-space `rect` drawn with `to_pixel`: outlined `width` output units wide in
+    /// `stroke`, centred on its edge (zero draws no outline), and filled with `fill`. Colours are
+    /// straight RGBA. The debug overlays (page boxes, highlights, the x-ray) are made of these.
+    pub fn outline(
+        to_pixel: &Transform,
+        rect: Rect,
+        stroke: [u8; 4],
+        fill: Option<[u8; 4]>,
+        width: f32,
+    ) -> Self {
+        Self::Frame {
+            rect: to_pixel.rect_to_pixel(rect),
+            radius: 0.0,
+            fill: fill.map(Ink::new),
+            stroke: (width > 0.0).then(|| Line::new(width, Ink::new(stroke))),
+        }
+    }
+
+    fn paint(&self, ctx: &mut RenderContext) {
         match self {
-            Self::Rect {
-                rect,
-                stroke: outline,
-                fill: interior,
-                width,
-            } => {
-                let r = krect(to_pixel.rect_to_pixel(*rect));
-                if let Some(interior) = interior {
-                    fill(ctx, &r, Ink::new(*interior));
-                }
-                let line = Line::new(*width, Ink::new(*outline));
-                stroke(ctx, &r.to_path(0.1), line);
-            }
             Self::Frame {
                 rect,
                 radius,
@@ -256,7 +258,7 @@ impl Overlay {
                 let r = krect(*rect);
                 let radius = f64::from(*radius);
                 if let Some(interior) = interior {
-                    fill(ctx, &RoundedRect::from_rect(r, radius), *interior);
+                    fill(ctx, &frame_path(r, radius), *interior);
                 }
                 if let Some(line) = outline {
                     // Outside or inside the edge: the centre line moves by half the width.
@@ -266,8 +268,8 @@ impl Overlay {
                         Edge::Centre => 0.0,
                         Edge::Outside => half,
                     };
-                    let shape = RoundedRect::from_rect(r.inflate(by, by), (radius + by).max(0.0));
-                    stroke(ctx, &shape.to_path(0.1), *line);
+                    let corner = if radius > 0.0 { (radius + by).max(0.0) } else { 0.0 };
+                    stroke(ctx, &frame_path(r.inflate(by, by), corner), *line);
                 }
             }
             Self::Text {
@@ -351,7 +353,7 @@ mod tests {
     fn painted(w: u16, h: u16, overlays: &[Overlay]) -> Vec<u8> {
         let mut pixmap = Pixmap::new(w, h);
         pixmap.data_as_u8_slice_mut().fill(255);
-        paint(&mut pixmap, overlays, &Transform::new(Affine::IDENTITY).unwrap());
+        paint(&mut pixmap, overlays);
         pixmap.take_rgba8(hayro::vello_cpu::peniko::ImageAlphaType::Alpha)
     }
 
@@ -361,12 +363,7 @@ mod tests {
     }
 
     fn rect(rect: Rect, fill: Option<[u8; 4]>, width: f32) -> Overlay {
-        Overlay::Rect {
-            rect,
-            stroke: RED,
-            fill,
-            width,
-        }
+        Overlay::outline(&Transform::new(Affine::IDENTITY).unwrap(), rect, RED, fill, width)
     }
 
     #[test]

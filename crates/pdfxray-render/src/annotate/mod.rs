@@ -9,19 +9,23 @@
 //!
 //! A [`Scene`] is generic: a box per element in any colour, with an optional chip saying anything,
 //! and an optional numbered path. [`tag_scene`] builds the one the canvas shows (role colours,
-//! role chips, the reading order); a diff can build its own (status colours, the role as chip
-//! text, one tint per side) and lay both sides out together so their chips clear each other.
+//! role chips, the reading order); [`change_scenes`] builds a diff's (status colours, the role
+//! as chip text, a [`Legend`]), both sides laid out together so their chips clear each other.
 
+mod changes;
 mod place;
 mod tags;
 pub(crate) mod text;
 
-use pdfxray_core::{HeaderScope, NodeId, Rect, ScopeSource, TableScope};
+use pdfxray_core::{Document, HeaderScope, NodeId, PageIx, Rect, ScopeSource, TableScope};
+
+use crate::RenderError;
 
 use crate::overlay::{Edge, Ink, Line, Overlay};
 use crate::transform::{PixelPoint, PixelRect, Transform};
 use place::{badge_spot, clear_beside, inside};
 
+pub use changes::{ChangeShow, change_legend, change_scenes, status_name, status_rgba};
 pub use place::clear_of;
 pub use tags::{
     ARTIFACT_CHIP, ArtifactBox, TagShow, TagView, UNFOCUSED_BOX, UNFOCUSED_PATH, artifact_boxes,
@@ -121,6 +125,13 @@ impl Grid {
                 y1: f64::from(height),
             },
         }
+    }
+
+    /// The grid of page `page` of `doc` drawn at `scale` on its own bitmap, annotations `unit`
+    /// pixels per annotation unit: what an export of one page lays its annotations out on.
+    pub fn page(doc: &Document, page: PageIx, scale: f32, unit: f32) -> Result<Self, RenderError> {
+        let (width, height, to_pixel) = crate::page_geometry(doc, page, scale)?;
+        Ok(Self::bitmap(to_pixel, width, height, unit))
     }
 
     fn u(&self, v: f32) -> f32 {
@@ -254,8 +265,21 @@ pub struct Scene {
     pub marks: Vec<Mark>,
     /// The numbered path, if any.
     pub path: Vec<Step>,
-    /// One colour for every box, chip and path segment of the scene: a side of an overlay.
-    pub tint: Option<[u8; 4]>,
+}
+
+impl Scene {
+    /// The same scene with every box moved by `to`: one side's page space onto another's, so
+    /// both sides of a comparison are laid out on one [`Grid`].
+    #[must_use]
+    pub fn mapped(mut self, to: impl Fn(Rect) -> Rect) -> Self {
+        for mark in &mut self.marks {
+            mark.rect = to(mark.rect);
+        }
+        for step in &mut self.path {
+            step.rect = to(step.rect);
+        }
+        self
+    }
 }
 
 /// A key drawn as its own block at the top-left corner of the bounds: what each colour means.
@@ -274,14 +298,13 @@ pub fn layout(grid: &Grid, palette: &Palette, scenes: &[Scene], legend: Option<&
     let mut out = Vec::new();
     for scene in scenes {
         for mark in scene.marks.iter().filter(|m| m.outlined) {
-            out.push(outline(grid, mark, scene.tint));
+            out.push(outline(grid, mark));
         }
     }
     for scene in scenes {
         for mark in &scene.marks {
             if let Some(chip) = &mark.chip {
-                let color = scene.tint.unwrap_or(mark.color);
-                chip_shapes(grid, palette, mark, chip, color, &mut placed, &mut out);
+                chip_shapes(grid, palette, mark, chip, &mut placed, &mut out);
             }
         }
     }
@@ -301,7 +324,6 @@ pub fn layout(grid: &Grid, palette: &Palette, scenes: &[Scene], legend: Option<&
             segment(
                 grid,
                 palette,
-                scene.tint,
                 step,
                 n + 1,
                 (pair[0], pair[1]),
@@ -319,7 +341,7 @@ pub fn layout(grid: &Grid, palette: &Palette, scenes: &[Scene], legend: Option<&
                 shape: Overlay::Badge {
                     center,
                     radius: grid.u(BADGE_RADIUS),
-                    fill: Ink::new(scene.tint.unwrap_or(fill)),
+                    fill: Ink::new(fill),
                     ring: Line::new(grid.u(1.5), Ink::new(palette.ground)),
                     label: step.label.clone(),
                     font: grid.font(Face::Bold, LABEL_SIZE),
@@ -340,8 +362,8 @@ pub fn layout(grid: &Grid, palette: &Palette, scenes: &[Scene], legend: Option<&
 }
 
 /// The box of `mark`.
-fn outline(grid: &Grid, mark: &Mark, tint: Option<[u8; 4]>) -> Annotation {
-    let ink = Ink::new(tint.unwrap_or(mark.color)).fade(mark.strength);
+fn outline(grid: &Grid, mark: &Mark) -> Annotation {
+    let ink = Ink::new(mark.color).fade(mark.strength);
     let (fill, stroke) = match mark.look {
         Look::Solid => (Some(ink.fade(0.06)), Line::new(grid.u(1.5), ink)),
         Look::Container => (None, Line::new(grid.u(1.0), ink.fade(0.55))),
@@ -371,7 +393,6 @@ fn chip_shapes(
     palette: &Palette,
     mark: &Mark,
     chip: &Chip,
-    color: [u8; 4],
     placed: &mut Vec<PixelRect>,
     out: &mut Vec<Annotation>,
 ) {
@@ -401,7 +422,7 @@ fn chip_shapes(
         .scope
         .as_ref()
         .is_some_and(|s| s.source == ScopeSource::Inferred);
-    let fill = Ink::new(color);
+    let fill = Ink::new(mark.color);
     let ink = if outlined { fill } else { Ink::new(palette.ground) };
     let body = if outlined {
         (None, Line::new(grid.u(1.0), fill).on(Edge::Inside))
@@ -578,7 +599,6 @@ fn arrow(grid: &Grid, rect: PixelRect, scope: TableScope, ink: Ink) -> Vec<Overl
 fn segment(
     grid: &Grid,
     palette: &Palette,
-    tint: Option<[u8; 4]>,
     step: &Step,
     at: usize,
     (from, to): (PixelPoint, PixelPoint),
@@ -590,10 +610,7 @@ fn segment(
     } else {
         palette.accent
     };
-    let line = Line::new(
-        grid.u(PATH_WIDTH),
-        Ink::new(tint.unwrap_or(color)).fade(step.strength),
-    );
+    let line = Line::new(grid.u(PATH_WIDTH), Ink::new(color).fade(step.strength));
     let shape = if step.dashed {
         Overlay::Dashed {
             from,
@@ -664,26 +681,70 @@ fn note_shapes(
 }
 
 /// The legend: a block at the top-left corner of the bounds, a swatch and a label per row.
+/// The measured parts of a legend on a grid.
+struct LegendMetrics {
+    font: Font,
+    pad: f64,
+    swatch: f64,
+    gap: f64,
+    row_h: f64,
+    rows: Vec<(f32, f32)>,
+    size: (f64, f64),
+}
+
+impl LegendMetrics {
+    fn of(grid: &Grid, legend: &Legend) -> Self {
+        let font = grid.font(Face::Bold, LABEL_SIZE);
+        let pad = grid.ud(8.0);
+        let swatch = grid.ud(10.0);
+        let rows: Vec<(f32, f32)> = legend
+            .rows
+            .iter()
+            .map(|(_, label)| text::measure(label, font, grid.pixel))
+            .collect();
+        let row_h = rows.iter().map(|&(_, h)| f64::from(h)).fold(swatch, f64::max);
+        let text_w = rows.iter().map(|&(w, _)| f64::from(w)).fold(0.0, f64::max);
+        let gap = grid.ud(6.0);
+        let n = f64::from(u32::try_from(legend.rows.len()).unwrap_or(u32::MAX));
+        let size = (
+            pad * 2.0 + swatch + gap + text_w,
+            pad * 2.0 + row_h * n + gap * (n - 1.0),
+        );
+        Self {
+            font,
+            pad,
+            swatch,
+            gap,
+            row_h,
+            rows,
+            size,
+        }
+    }
+}
+
+/// The room `legend` takes at the top-left corner of `grid`'s bounds, margins included: what an
+/// export sets aside so the legend is a block of its own, clear of the page. Zero for no rows.
+pub fn legend_extent(grid: &Grid, legend: &Legend) -> (f64, f64) {
+    if legend.rows.is_empty() {
+        return (0.0, 0.0);
+    }
+    let m = LegendMetrics::of(grid, legend);
+    (m.size.0 + m.pad * 2.0, m.size.1 + m.pad * 2.0)
+}
+
 fn legend_shapes(grid: &Grid, palette: &Palette, legend: &Legend, out: &mut Vec<Annotation>) {
     if legend.rows.is_empty() {
         return;
     }
-    let font = grid.font(Face::Bold, LABEL_SIZE);
-    let pad = grid.ud(8.0);
-    let swatch = grid.ud(10.0);
-    let rows: Vec<(f32, f32)> = legend
-        .rows
-        .iter()
-        .map(|(_, label)| text::measure(label, font, grid.pixel))
-        .collect();
-    let row_h = rows.iter().map(|&(_, h)| f64::from(h)).fold(swatch, f64::max);
-    let text_w = rows.iter().map(|&(w, _)| f64::from(w)).fold(0.0, f64::max);
-    let gap = grid.ud(6.0);
-    let n = f64::from(u32::try_from(legend.rows.len()).unwrap_or(u32::MAX));
-    let size = (
-        pad * 2.0 + swatch + gap + text_w,
-        pad * 2.0 + row_h * n + gap * (n - 1.0),
-    );
+    let LegendMetrics {
+        font,
+        pad,
+        swatch,
+        gap,
+        row_h,
+        rows,
+        size,
+    } = LegendMetrics::of(grid, legend);
     let block = PixelRect::from_min_size(PixelPoint::new(grid.bounds.x0 + pad, grid.bounds.y0 + pad), size);
     let mut push = |shape| {
         out.push(Annotation {
@@ -794,7 +855,6 @@ mod tests {
                 step(0, Rect::new(100.0, 100.0, 200.0, 120.0), false),
                 step(1, Rect::new(100.0, 140.0, 200.0, 160.0), false),
             ],
-            tint: None,
         };
 
         let out = layout(&grid(), &Palette::DESIGN, &[scene], None);
@@ -836,7 +896,6 @@ mod tests {
         let scene = Scene {
             marks: vec![mark(0, a, Some("P")), mark(1, b, Some("P"))],
             path: vec![step(0, a, false), step(1, b, true)],
-            tint: None,
         };
 
         let out = layout(&grid(), &Palette::DESIGN, &[scene], None);
@@ -908,11 +967,13 @@ mod tests {
     }
 
     #[test]
-    fn a_tint_and_a_unit_scale_a_whole_side() {
+    fn a_mark_colours_its_box_and_chip_and_a_unit_scales_them() {
         let scene = Scene {
-            marks: vec![mark(0, Rect::new(100.0, 100.0, 200.0, 120.0), Some("P"))],
+            marks: vec![Mark {
+                color: [255, 0, 0, 255],
+                ..mark(0, Rect::new(100.0, 100.0, 200.0, 120.0), Some("P"))
+            }],
             path: Vec::new(),
-            tint: Some([255, 0, 0, 255]),
         };
         let big = Grid { unit: 2.0, ..grid() };
 
@@ -931,7 +992,7 @@ mod tests {
             (chip.width(), chip.height()),
             (f64::from(w + 16.0), f64::from(h + 6.0))
         );
-        // Smoke: the chip's body takes the tint too.
+        // Smoke: the chip's body takes the mark's colour too.
         assert!(out.iter().any(|a| matches!(&a.shape,
             Overlay::Frame { fill: Some(ink), radius, .. } if ink.rgba == [255, 0, 0, 255] && *radius == 8.0)));
     }

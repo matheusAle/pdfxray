@@ -112,7 +112,7 @@ fn pixel(row: &[u8], x: usize) -> Option<[u8; 4]> {
 }
 
 /// Rec. 601 luma of an RGB pixel.
-fn luma(p: [u8; 4]) -> u8 {
+pub(crate) fn luma(p: [u8; 4]) -> u8 {
     let weighted = u32::from(p[0]) * 299 + u32::from(p[1]) * 587 + u32::from(p[2]) * 114;
     u8::try_from(weighted / 1000).unwrap_or(u8::MAX)
 }

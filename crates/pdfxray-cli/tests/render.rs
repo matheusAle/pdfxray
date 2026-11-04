@@ -1,4 +1,5 @@
-//! `pdfxray render` writes a PNG of the page with requested overlays.
+//! `pdfxray render` writes a PNG or JPEG of the page with the requested overlays and the View
+//! menu's annotations.
 
 use std::path::PathBuf;
 
@@ -134,4 +135,80 @@ fn isolate_of_node_without_content_fails() {
         .assert()
         .failure()
         .stderr(contains("paints nothing"));
+}
+
+/// Pixels within 30 of `color` on every colour channel.
+fn near(img: &image::RgbaImage, color: [u8; 3]) -> usize {
+    img.pixels()
+        .filter(|p| p.0.iter().zip(color).all(|(a, b)| a.abs_diff(b) <= 30))
+        .count()
+}
+
+/// The design's paragraph colour and the reading-order accent.
+const PARAGRAPH: [u8; 3] = [0x5A, 0xA9, 0xFF];
+const ACCENT: [u8; 3] = [0x3D, 0xD6, 0xF5];
+
+#[test]
+fn the_view_menu_flags_draw_tag_boxes_labels_and_the_reading_order() {
+    let plain = render_args("reading-order", &["0"], &out_path("view-plain.png"));
+    let boxes = render_args("reading-order", &["0", "--tags"], &out_path("view-tags.png"));
+    let labelled = render_args(
+        "reading-order",
+        &["0", "--tags", "--labels"],
+        &out_path("view-labels.png"),
+    );
+    let ordered = render_args(
+        "reading-order",
+        &["0", "--reading-order", "structure"],
+        &out_path("view-order.png"),
+    );
+    let spoken = render_args(
+        "reading-order",
+        &["0", "--reading-order", "speech", "--speech-preset", "acrobat"],
+        &out_path("view-speech.png"),
+    );
+
+    assert_eq!(near(&plain, PARAGRAPH), 0);
+    assert!(near(&boxes, PARAGRAPH) > 100);
+    // A chip is filled with its role colour, so labels add more of it.
+    assert!(near(&labelled, PARAGRAPH) > near(&boxes, PARAGRAPH));
+    assert!(near(&ordered, ACCENT) > 100);
+    assert!(near(&spoken, ACCENT) > 100);
+    // Smoke: without a View flag nothing of the annotation layer is drawn.
+    assert_eq!(near(&plain, ACCENT), 0);
+}
+
+#[test]
+fn nesting_and_artifacts_add_their_boxes() {
+    let tags = render_args("artifacts", &["0", "--tags"], &out_path("view-art-off.png"));
+    let artifacts = render_args(
+        "artifacts",
+        &["0", "--tags", "--artifacts"],
+        &out_path("view-art-on.png"),
+    );
+    let nested = render_args(
+        "tagged-simple",
+        &["0", "--tags", "--nesting"],
+        &out_path("view-nest.png"),
+    );
+    let flat = render_args("tagged-simple", &["0", "--tags"], &out_path("view-flat.png"));
+
+    // The artifact class colour.
+    assert!(near(&artifacts, [0x8A, 0x93, 0xA3]) > near(&tags, [0x8A, 0x93, 0xA3]));
+    assert_ne!(nested, flat, "a container's box is drawn under --nesting");
+    // Smoke: each render is the page's size.
+    assert_eq!(artifacts.dimensions(), tags.dimensions());
+}
+
+#[test]
+fn jpeg_output_follows_the_extension() {
+    let out = out_path("render.jpeg");
+
+    let img = render_args("minimal-one-page", &["0", "--scale", "1"], &out);
+
+    assert_eq!(img.dimensions(), (200, 100));
+    let bytes = std::fs::read(&out).unwrap();
+    assert_eq!(&bytes[..3], &[0xFF, 0xD8, 0xFF]);
+    // Smoke: a JPEG has no alpha; every pixel comes back opaque.
+    assert!(img.pixels().all(|p| p.0[3] == 255));
 }

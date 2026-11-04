@@ -13,7 +13,6 @@ name = "pdfxray"
 path = "src/main.rs"
 
 [dependencies]
-image.workspace = true
 pdfxray-core.workspace = true
 pdfxray-verapdf.workspace = true
 pdfxray-render = { workspace = true, features = ["pdfium"] }
@@ -23,6 +22,7 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+image = { workspace = true, features = ["jpeg"] }
 assert_cmd.workspace = true
 predicates.workspace = true
 insta.workspace = true

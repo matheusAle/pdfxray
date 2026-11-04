@@ -16,7 +16,7 @@ use pdfxray_render::xray::{
 };
 use pdfxray_render::{
     ColorBy, ContentFilter, RenderSpec, XrayOptions, alpha_heatmap_overlays, clip_overlays, ops_for_all,
-    xray_overlays,
+    page_transform, xray_overlays,
 };
 
 use crate::components::Icon;
@@ -371,21 +371,25 @@ pub struct RenderRequest {
 
 impl RenderRequest {
     /// The render specification: overlays are x-ray first, then the heat map, then the clip.
+    /// A page that cannot be drawn gets none; the render reports why.
     pub fn spec(&self, doc: &Document) -> RenderSpec {
+        let scale = self.scale.scale();
         let mut overlays = Vec::new();
-        if let Some(options) = self.xray {
-            overlays.extend(xray_overlays(doc, self.page, options));
-        }
-        if self.heatmap {
-            overlays.extend(alpha_heatmap_overlays(doc, self.page));
-        }
-        if let Some(op) = self.clip_op {
-            overlays.extend(clip_overlays(doc, self.page, op));
+        if let Ok(to_pixel) = page_transform(doc, self.page, scale) {
+            if let Some(options) = self.xray {
+                overlays.extend(xray_overlays(doc, self.page, options, &to_pixel));
+            }
+            if self.heatmap {
+                overlays.extend(alpha_heatmap_overlays(doc, self.page, &to_pixel));
+            }
+            if let Some(op) = self.clip_op {
+                overlays.extend(clip_overlays(doc, self.page, op, &to_pixel));
+            }
         }
         RenderSpec {
-            scale: self.scale.scale(),
             overlays,
             content: self.content.clone(),
+            ..RenderSpec::new(scale)
         }
     }
 }
@@ -715,11 +719,12 @@ mod tests {
 
         assert_eq!(spec.content, ContentFilter::UpTo(10));
         assert!((spec.scale - 1.0).abs() < f32::EPSILON);
+        let at = page_transform(&doc, 0, spec.scale).unwrap();
         let expected =
-            xray_overlays(&doc, 0, XrayOptions::default()).len() + clip_overlays(&doc, 0, 59).len();
+            xray_overlays(&doc, 0, XrayOptions::default(), &at).len() + clip_overlays(&doc, 0, 59, &at).len();
         assert_eq!(spec.overlays.len(), expected);
         // Smoke: the clip is the last overlay and the page really has one at op 59.
-        assert_eq!(spec.overlays.last(), clip_overlays(&doc, 0, 59).first());
-        assert_eq!(clip_overlays(&doc, 0, 59).len(), 1);
+        assert_eq!(spec.overlays.last(), clip_overlays(&doc, 0, 59, &at).first());
+        assert_eq!(clip_overlays(&doc, 0, 59, &at).len(), 1);
     }
 }

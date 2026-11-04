@@ -22,9 +22,9 @@ use pdfxray_render::xray::{
     UNTAGGED_TAG,
 };
 use pdfxray_render::{
-    ColorBy, ContentFilter, Overlay, RenderError, RenderSpec, RenderedPage, XrayOptions,
-    alpha_heatmap_overlays, clip_overlays, filtered_pdf, ops_for, ops_for_all, render_page, role_rgba,
-    xray_overlays,
+    ColorBy, ContentFilter, Overlay, PixelRect, RenderError, RenderSpec, RenderedPage, Transform,
+    XrayOptions, alpha_heatmap_overlays, clip_overlays, filtered_pdf, ops_for, ops_for_all, page_transform,
+    render_page, role_rgba, xray_overlays,
 };
 use pretty_assertions::assert_eq;
 
@@ -621,13 +621,28 @@ fn hidden_clipping_text_keeps_clipping_and_the_form_copies_are_new_objects() {
 // Overlays
 // ---------------------------------------------------------------------------------------------
 
-fn rects(overlays: &[Overlay]) -> Vec<(Rect, [u8; 4], Option<[u8; 4]>)> {
+/// Page 0 of `doc` at scale 1: where the overlays of these tests are placed.
+fn at1(doc: &Document) -> Transform {
+    page_transform(doc, 0, 1.0).unwrap()
+}
+
+/// `rect` of page 0 of `doc` on the bitmap at scale 1.
+fn px(doc: &Document, rect: Rect) -> PixelRect {
+    at1(doc).rect_to_pixel(rect)
+}
+
+/// Each outline's box, stroke colour and fill colour.
+fn rects(overlays: &[Overlay]) -> Vec<(PixelRect, [u8; 4], Option<[u8; 4]>)> {
     overlays
         .iter()
         .filter_map(|o| match o {
-            Overlay::Rect {
+            Overlay::Frame {
                 rect, stroke, fill, ..
-            } => Some((*rect, *stroke, *fill)),
+            } => Some((
+                *rect,
+                stroke.map_or([0; 4], |line| line.ink.rgba),
+                fill.map(|ink| ink.rgba),
+            )),
             _ => None,
         })
         .collect()
@@ -638,13 +653,13 @@ fn xray_outlines_every_glyph_of_the_single_text_run() {
     let doc = open("minimal-one-page");
     let items = &captured(&doc).items;
 
-    let overlays = xray_overlays(&doc, 0, XrayOptions::default());
+    let overlays = xray_overlays(&doc, 0, XrayOptions::default(), &at1(&doc));
 
     assert_eq!(overlays.len(), 13);
     let got = rects(&overlays);
     assert_eq!(
         got.iter().map(|(r, _, _)| *r).collect::<Vec<_>>(),
-        items.iter().map(|i| i.bbox).collect::<Vec<_>>()
+        items.iter().map(|i| px(&doc, i.bbox)).collect::<Vec<_>>()
     );
     assert!(
         got.iter()
@@ -658,6 +673,7 @@ fn xray_outlines_every_glyph_of_the_single_text_run() {
             include_invisible: true,
             ..XrayOptions::default()
         },
+        &at1(&doc),
     );
     assert_eq!(with_hidden, overlays);
 }
@@ -675,17 +691,20 @@ fn palette_counts(overlays: &[Overlay]) -> Vec<([u8; 4], usize)> {
 fn xray_colours_images_and_outlines_each_one() {
     let doc = open("images");
 
-    let overlays = xray_overlays(&doc, 0, XrayOptions::default());
+    let overlays = xray_overlays(&doc, 0, XrayOptions::default(), &at1(&doc));
 
     // The page image, the inline image and the image inside the form.
-    let boxes: Vec<Rect> = rects(&overlays).iter().map(|r| r.0).collect();
+    let boxes: Vec<PixelRect> = rects(&overlays).iter().map(|r| r.0).collect();
     assert_eq!(overlays.len(), 3);
     assert_eq!(palette_counts(&overlays), vec![(KIND_IMAGE, 3)]);
-    for (got, expected) in boxes.iter().zip([
-        Rect::new(50.0, 150.0, 150.0, 250.0),
-        Rect::new(80.0, 20.0, 120.0, 60.0),
-        Rect::new(210.0, 20.0, 270.0, 80.0),
-    ]) {
+    for (got, expected) in boxes.iter().zip(
+        [
+            Rect::new(50.0, 150.0, 150.0, 250.0),
+            Rect::new(80.0, 20.0, 120.0, 60.0),
+            Rect::new(210.0, 20.0, 270.0, 80.0),
+        ]
+        .map(|r| px(&doc, r)),
+    ) {
         assert!(
             (got.x0 - expected.x0).abs() < 1e-6
                 && (got.y0 - expected.y0).abs() < 1e-6
@@ -701,7 +720,7 @@ fn xray_distinguishes_paths_and_shadings_and_skips_clips() {
     let doc = open("graphics-state");
     let cap = captured(&doc);
 
-    let overlays = xray_overlays(&doc, 0, XrayOptions::default());
+    let overlays = xray_overlays(&doc, 0, XrayOptions::default(), &at1(&doc));
 
     // 16 items, two of them clips.
     assert_eq!(cap.items.len(), 16);
@@ -711,10 +730,10 @@ fn xray_distinguishes_paths_and_shadings_and_skips_clips() {
         vec![(KIND_PATH, 13), (KIND_SHADING, 1)]
     );
     let got = rects(&overlays);
-    assert_eq!(got[0].0, Rect::new(20.0, 20.0, 100.0, 80.0));
+    assert_eq!(got[0].0, px(&doc, Rect::new(20.0, 20.0, 100.0, 80.0)));
     // Items 0..=7 come first; the shading (item 9) follows the first clip, so it is overlay 8.
     assert_eq!(got[8].1, KIND_SHADING);
-    assert_eq!(got[8].0, Rect::new(200.0, 220.0, 350.0, 320.0));
+    assert_eq!(got[8].0, px(&doc, Rect::new(200.0, 220.0, 350.0, 320.0)));
 }
 
 #[test]
@@ -726,7 +745,7 @@ fn xray_marks_invisible_text_only_when_asked() {
     let first = gone.first_item.unwrap() as usize;
     let count = gone.item_count as usize;
 
-    let plain = xray_overlays(&doc, 0, XrayOptions::default());
+    let plain = xray_overlays(&doc, 0, XrayOptions::default(), &at1(&doc));
     let everything = xray_overlays(
         &doc,
         0,
@@ -734,6 +753,7 @@ fn xray_marks_invisible_text_only_when_asked() {
             include_invisible: true,
             ..XrayOptions::default()
         },
+        &at1(&doc),
     );
 
     assert_eq!((cap.items.len(), count), (97, 4));
@@ -768,23 +788,33 @@ fn xray_colours_by_artifact_and_by_tag() {
 
     // 24 items sit in artifact sequences, 9 in the tagged paragraph.
     assert_eq!(
-        palette_counts(&xray_overlays(&artifacts, 0, by(ColorBy::Artifact))),
+        palette_counts(&xray_overlays(
+            &artifacts,
+            0,
+            by(ColorBy::Artifact),
+            &at1(&artifacts)
+        )),
         vec![(TAGGED, 9), (ARTIFACT, 24)]
     );
     // The span nested in an artifact counts as artifact content; 14 items are outside any sequence.
-    let outcome = palette_counts(&xray_overlays(&untagged, 0, by(ColorBy::Artifact)));
+    let outcome = palette_counts(&xray_overlays(
+        &untagged,
+        0,
+        by(ColorBy::Artifact),
+        &at1(&untagged),
+    ));
     assert_eq!(
         outcome,
         vec![(TAGGED, 32), ([40, 90, 220, 255], 14), (ARTIFACT, 12)]
     );
 
     // By tag: one colour per innermost tag, grey outside any sequence.
-    let heading_and_paragraph = palette_counts(&xray_overlays(&tagged, 0, by(ColorBy::Tag)));
+    let heading_and_paragraph = palette_counts(&xray_overlays(&tagged, 0, by(ColorBy::Tag), &at1(&tagged)));
     assert_eq!(
         heading_and_paragraph,
         vec![([44, 160, 44, 255], 7), ([188, 189, 34, 255], 14)]
     );
-    let mixed = palette_counts(&xray_overlays(&untagged, 0, by(ColorBy::Tag)));
+    let mixed = palette_counts(&xray_overlays(&untagged, 0, by(ColorBy::Tag), &at1(&untagged)));
     assert_eq!(
         mixed,
         vec![
@@ -796,7 +826,7 @@ fn xray_colours_by_artifact_and_by_tag() {
     );
     // The same tag gets the same colour in different documents ("P" above).
     assert_eq!(
-        palette_counts(&xray_overlays(&artifacts, 0, by(ColorBy::Tag))),
+        palette_counts(&xray_overlays(&artifacts, 0, by(ColorBy::Tag), &at1(&artifacts))),
         vec![([148, 103, 189, 255], 24), ([188, 189, 34, 255], 9)]
     );
 }
@@ -813,13 +843,18 @@ fn xray_colours_by_the_role_class_that_owns_the_content() {
     let figure = role_rgba(pdfxray_core::RoleClass::Figure);
     let caption = role_rgba(pdfxray_core::RoleClass::Caption);
 
-    let overlays = xray_overlays(&doc, 0, by_role);
+    let overlays = xray_overlays(&doc, 0, by_role, &at1(&doc));
 
     // Heading, two paragraphs, the figure and its caption: each in its class colour.
     let colours: BTreeSet<[u8; 4]> = palette_counts(&overlays).into_iter().map(|(c, _)| c).collect();
     assert_eq!(colours, BTreeSet::from([heading, paragraph, figure, caption]));
     // Smoke: untagged content is grey, not a role colour.
-    let untagged = palette_counts(&xray_overlays(&open("untagged-content"), 0, by_role));
+    let untagged = palette_counts(&xray_overlays(
+        &open("untagged-content"),
+        0,
+        by_role,
+        &at1(&open("untagged-content")),
+    ));
     assert!(untagged.iter().any(|(c, _)| *c == UNTAGGED_TAG));
 }
 
@@ -827,26 +862,29 @@ fn xray_colours_by_the_role_class_that_owns_the_content() {
 fn clip_overlay_shows_the_clip_in_effect_for_an_operator() {
     let doc = open("graphics-state");
 
-    let before_any_clip = clip_overlays(&doc, 0, 3);
-    let inside_first = clip_overlays(&doc, 0, 59);
-    let nested = clip_overlays(&doc, 0, 75);
-    let after_restore = clip_overlays(&doc, 0, 79);
+    let before_any_clip = clip_overlays(&doc, 0, 3, &at1(&doc));
+    let inside_first = clip_overlays(&doc, 0, 59, &at1(&doc));
+    let nested = clip_overlays(&doc, 0, 75, &at1(&doc));
+    let after_restore = clip_overlays(&doc, 0, 79, &at1(&doc));
 
     assert_eq!(before_any_clip, Vec::new());
     assert_eq!(
         rects(&inside_first),
         vec![(
-            Rect::new(200.0, 220.0, 350.0, 320.0),
+            px(&doc, Rect::new(200.0, 220.0, 350.0, 320.0)),
             CLIP,
             Some([CLIP[0], CLIP[1], CLIP[2], 32])
         )]
     );
     // The nested clip is the intersection of both.
-    assert_eq!(rects(&nested)[0].0, Rect::new(240.0, 240.0, 350.0, 300.0));
+    assert_eq!(
+        rects(&nested)[0].0,
+        px(&doc, Rect::new(240.0, 240.0, 350.0, 300.0))
+    );
     // Q Q restored the unclipped state.
     assert_eq!(after_restore, Vec::new());
-    assert_eq!(clip_overlays(&doc, 0, 9999), Vec::new());
-    assert_eq!(clip_overlays(&doc, 7, 59), Vec::new());
+    assert_eq!(clip_overlays(&doc, 0, 9999, &at1(&doc)), Vec::new());
+    assert_eq!(clip_overlays(&doc, 7, 59, &at1(&doc)), Vec::new());
 }
 
 #[test]
@@ -854,26 +892,29 @@ fn alpha_heat_map_tints_the_blended_items_only() {
     let doc = open("graphics-state");
     let cap = captured(&doc);
 
-    let overlays = alpha_heatmap_overlays(&doc, 0);
+    let overlays = alpha_heatmap_overlays(&doc, 0, &at1(&doc));
 
     // Items 6 and 7 are drawn with ca/CA 0.5 and the Multiply blend mode.
     assert_eq!(
         rects(&overlays),
         vec![
             (
-                cap.items[6].bbox,
+                px(&doc, cap.items[6].bbox),
                 [HEAT_BLEND[0], HEAT_BLEND[1], HEAT_BLEND[2], 255],
                 Some([HEAT_BLEND[0], HEAT_BLEND[1], HEAT_BLEND[2], 90])
             ),
             (
-                cap.items[7].bbox,
+                px(&doc, cap.items[7].bbox),
                 [HEAT_BLEND[0], HEAT_BLEND[1], HEAT_BLEND[2], 255],
                 Some([HEAT_BLEND[0], HEAT_BLEND[1], HEAT_BLEND[2], 90])
             ),
         ]
     );
     // Smoke: a plain opaque page has nothing to tint.
-    assert_eq!(alpha_heatmap_overlays(&open("minimal-one-page"), 0), Vec::new());
+    assert_eq!(
+        alpha_heatmap_overlays(&open("minimal-one-page"), 0, &at1(&open("minimal-one-page"))),
+        Vec::new()
+    );
 }
 
 #[test]
@@ -885,7 +926,7 @@ fn overlays_compose_with_a_filtered_render() {
         &doc,
         0,
         &RenderSpec {
-            overlays: xray_overlays(&doc, 0, XrayOptions::default()),
+            overlays: xray_overlays(&doc, 0, XrayOptions::default(), &at1(&doc)),
             content: ContentFilter::UpTo(12),
             ..RenderSpec::new(1.0)
         },

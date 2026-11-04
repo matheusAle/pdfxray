@@ -13,7 +13,7 @@
 use pdfxray_core::{Document, EngineError, PageIx, Point, Rect};
 use pdfxray_render::{
     MAX_SIDE, Overlay, PixelPoint, RenderError, RenderSpec, RenderedPage, page_dimensions, render_page,
-    write_png,
+    write_image,
 };
 use pretty_assertions::assert_eq;
 
@@ -170,12 +170,13 @@ fn overlays_do_not_change_the_bitmap_size() {
     let plain = render(&doc, 0, 1.0);
     let spec = RenderSpec {
         scale: 1.0,
-        overlays: vec![Overlay::Rect {
-            rect: Rect::new(10.0, 10.0, 50.0, 50.0),
-            stroke: [255, 0, 0, 255],
-            fill: Some([0, 0, 255, 128]),
-            width: 2.0,
-        }],
+        overlays: vec![Overlay::outline(
+            &plain.page_to_pixel,
+            Rect::new(10.0, 10.0, 50.0, 50.0),
+            [255, 0, 0, 255],
+            Some([0, 0, 255, 128]),
+            2.0,
+        )],
         ..RenderSpec::new(1.0)
     };
 
@@ -233,7 +234,7 @@ fn png_round_trips_the_pixels() {
     let out = render(&doc, 1, 1.0);
     let path = std::env::temp_dir().join(format!("pdfxray-render-{}.png", std::process::id()));
 
-    write_png(&out, &path).unwrap();
+    write_image(&out, &path).unwrap();
     let decoded = image::open(&path).unwrap().to_rgba8();
     std::fs::remove_file(&path).unwrap();
 
@@ -249,7 +250,7 @@ fn png_write_failure_names_the_path() {
         .join("pdfxray-render-missing-dir")
         .join("x.png");
 
-    let err = write_png(&out, &path).unwrap_err();
+    let err = write_image(&out, &path).unwrap_err();
 
     assert!(
         matches!(&err, RenderError::Write { path: p, .. } if *p == path),

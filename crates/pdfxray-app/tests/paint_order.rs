@@ -542,14 +542,14 @@ fn the_canvas_shows_the_page_painted_up_to_the_step() {
             harness.state().state.shown_request().unwrap().content,
             ContentFilter::UpTo(5)
         );
-        let at_five = expected_digest(&harness, fixture, ContentFilter::UpTo(5), |_| Vec::new());
+        let at_five = expected_digest(&harness, fixture, ContentFilter::UpTo(5), |_, _| Vec::new());
         assert_eq!(digest(&harness), at_five, "{fixture}");
 
         press(&mut harness, Key::ArrowRight);
         wait_for_render(&mut harness);
         assert_eq!(
             digest(&harness),
-            expected_digest(&harness, fixture, ContentFilter::UpTo(6), |_| Vec::new()),
+            expected_digest(&harness, fixture, ContentFilter::UpTo(6), |_, _| Vec::new()),
             "{fixture}"
         );
 

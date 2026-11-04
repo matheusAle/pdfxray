@@ -17,9 +17,12 @@
 //! [`render_page`] asks hayro for `R * F * T` (`Page::initial_transform`) instead of
 //! re-deriving it, so the transform cannot drift from what was drawn. The bitmap is
 //! `trunc(W * scale)` x `trunc(H * scale)` pixels where `W x H` is the crop size with
-//! width and height swapped for `/Rotate` 90 and 270.
+//! width and height swapped for `/Rotate` 90 and 270, unless [`RenderSpec::grid`] names
+//! another one: then the page is drawn into that grid, moved by its offset, so two pages whose
+//! sizes differ by a fraction of a point can be compared pixel for pixel.
 
 pub mod annotate;
+pub mod composite;
 mod diff;
 mod filter;
 mod overlay;
@@ -38,7 +41,8 @@ use hayro::hayro_interpret::{InterpreterSettings, TransformExt};
 use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::vello_cpu::color::{AlphaColor, Srgb};
 use hayro::vello_cpu::peniko::ImageAlphaType;
-use hayro::{PixmapSettings, RenderCache, RenderSettings};
+use hayro::vello_cpu::{Pixmap, RasterizerSettings, RenderContext, Resources, TargetInit};
+use hayro::{RenderCache, RenderSettings};
 use kurbo::Affine;
 use pdfxray_core::numeric::{u32_from_f32_trunc, usize_from_u32};
 use pdfxray_core::{Document, EngineError, PageIx, Point};
@@ -69,15 +73,44 @@ pub struct RenderSpec {
     /// Which operators paint. Anything but [`ContentFilter::All`] renders a rewritten copy of
     /// the document, see [`filtered_pdf`]; the file itself is never modified.
     pub content: ContentFilter,
+    /// The bitmap to draw into; `None` is the page's own, `trunc(W * scale)` pixels wide.
+    pub grid: Option<PixelGrid>,
 }
 
 impl RenderSpec {
-    /// A plain render at `scale` without overlays, every operator painting.
+    /// A plain render at `scale` without overlays, every operator painting, on the page's own
+    /// grid.
     pub const fn new(scale: f32) -> Self {
         Self {
             scale,
             overlays: Vec::new(),
             content: ContentFilter::All,
+            grid: None,
+        }
+    }
+}
+
+/// A bitmap of a given size, and where a page goes on it: the page drawn at its scale, then
+/// moved by `offset` pixels. Drawing the second page of a comparison into the first one's grid
+/// makes both bitmaps the same size whatever fraction of a point their pages differ by.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PixelGrid {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// Where the page's top-left corner goes, pixels right and down of the bitmap's.
+    pub offset: (f64, f64),
+}
+
+impl PixelGrid {
+    /// The grid `page` was drawn on, with no offset: another page drawn into it lands on the
+    /// same pixels.
+    pub const fn of(page: &RenderedPage) -> Self {
+        Self {
+            width: page.width,
+            height: page.height,
+            offset: (0.0, 0.0),
         }
     }
 }
@@ -167,6 +200,12 @@ fn engine_reason(error: EngineError) -> &'static str {
     }
 }
 
+/// The map from page space onto the pixels of `page` drawn at `scale` on its own grid: where
+/// the debug overlays of a render go before it is drawn.
+pub fn page_transform(doc: &Document, page: PageIx, scale: f32) -> Result<Transform, RenderError> {
+    Ok(page_geometry(doc, page, scale)?.2)
+}
+
 /// Size of `page` in points as it is drawn: the `CropBox` clipped to the `MediaBox`, with width
 /// and height swapped for `/Rotate` 90 and 270.
 pub fn page_dimensions(doc: &Document, page: PageIx) -> Result<(f32, f32), RenderError> {
@@ -228,22 +267,43 @@ fn rasterise_cached<'a>(
     cache: &RenderCache<'a>,
     background: AlphaColor<Srgb>,
 ) -> Result<RenderedPage, RenderError> {
-    let (_, _, page_to_pixel) = geometry(engine_page, spec.scale)?;
-
-    let pixmap = hayro::render(
+    let (own_width, own_height, own) = geometry(engine_page, spec.scale)?;
+    let (width, height, page_to_pixel) = match spec.grid {
+        None => (own_width, own_height, own),
+        Some(grid) => {
+            let (width, height) = (grid.width, grid.height);
+            if !(1..=MAX_SIDE).contains(&width) || !(1..=MAX_SIDE).contains(&height) {
+                return Err(RenderError::BadSize { width, height });
+            }
+            let moved = own
+                .onto((1.0, 1.0), grid.offset)
+                .ok_or(RenderError::BadSize { width, height })?;
+            (width, height, moved)
+        }
+    };
+    // Both sides are at most `MAX_SIDE`, which fits `u16`.
+    let side = |v: u32| u16::try_from(v).map_err(|_| RenderError::BadSize { width, height });
+    let mut ctx = RenderContext::new(side(width)?, side(height)?);
+    let forward = Affine::new(page_to_pixel.coeffs());
+    hayro::render_into(
         engine_page,
         cache,
         settings,
         &RenderSettings::default(),
-        &PixmapSettings {
-            x_scale: spec.scale,
-            y_scale: spec.scale,
-            bg_color: background,
+        &mut ctx,
+        forward,
+    );
+    ctx.flush();
+    let mut pixmap = Pixmap::new(ctx.width(), ctx.height());
+    ctx.render_with(
+        &mut pixmap,
+        &mut Resources::default(),
+        RasterizerSettings {
+            target_init: TargetInit::Clear(background),
+            ..RasterizerSettings::default()
         },
     );
-    let mut pixmap = pixmap;
-    overlay::paint(&mut pixmap, &spec.overlays, &page_to_pixel);
-    let (width, height) = (u32::from(pixmap.width()), u32::from(pixmap.height()));
+    overlay::paint(&mut pixmap, &spec.overlays);
     let rgba = pixmap.take_rgba8(ImageAlphaType::Alpha);
 
     Ok(RenderedPage {
@@ -277,7 +337,6 @@ fn geometry(
 }
 
 /// [`geometry`] of `page` in `doc`, after validating `scale`.
-#[cfg(feature = "pdfium")]
 fn page_geometry(doc: &Document, page: PageIx, scale: f32) -> Result<(u32, u32, Transform), RenderError> {
     if !(scale.is_finite() && scale > 0.0) {
         return Err(RenderError::InvalidScale);
@@ -285,17 +344,56 @@ fn page_geometry(doc: &Document, page: PageIx, scale: f32) -> Result<(u32, u32, 
     geometry(engine_page(doc, page)?, scale)
 }
 
-/// Writes `page` as an 8-bit RGBA PNG.
-pub fn write_png(page: &RenderedPage, path: &Path) -> Result<(), RenderError> {
-    image::save_buffer(
-        path,
-        &page.rgba,
-        page.width,
-        page.height,
-        image::ExtendedColorType::Rgba8,
-    )
-    .map_err(|e| RenderError::Write {
+/// Writes `page` to `path` in the format its extension names: `.png` (8-bit RGBA) or `.jpg` /
+/// `.jpeg` (anything else is refused). A JPEG has no alpha: the pixels are laid on white first.
+///
+/// The image is encoded in memory and written in one call, so a write that fails part way (a
+/// full disk) is an error, never a truncated file reported as written.
+pub fn write_image(page: &RenderedPage, path: &Path) -> Result<(), RenderError> {
+    let error = |message: String| RenderError::Write {
         path: path.to_path_buf(),
-        message: e.to_string(),
-    })
+        message,
+    };
+    let extension = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase);
+    let (width, height) = (page.width, page.height);
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    match extension.as_deref() {
+        Some("png") => image::write_buffer_with_format(
+            &mut bytes,
+            &page.rgba,
+            width,
+            height,
+            image::ExtendedColorType::Rgba8,
+            image::ImageFormat::Png,
+        ),
+        Some("jpg" | "jpeg") => {
+            let rgb: Vec<u8> = page
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .flat_map(|&[r, g, b, a]| [r, g, b].map(|c| on_white(c, a)))
+                .collect();
+            image::write_buffer_with_format(
+                &mut bytes,
+                &rgb,
+                width,
+                height,
+                image::ExtendedColorType::Rgb8,
+                image::ImageFormat::Jpeg,
+            )
+        }
+        _ => return Err(error("the file name must end in .png, .jpg or .jpeg".to_owned())),
+    }
+    .map_err(|e| error(e.to_string()))?;
+    std::fs::write(path, bytes.into_inner()).map_err(|e| error(e.to_string()))
+}
+
+/// Channel `c` at alpha `a` laid over white, rounded.
+fn on_white(c: u8, a: u8) -> u8 {
+    let (c, a) = (u32::from(c), u32::from(a));
+    u8::try_from((c * a + 255 * (255 - a) + 127) / 255).unwrap_or(u8::MAX)
 }

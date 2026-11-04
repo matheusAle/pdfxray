@@ -14,9 +14,11 @@ mod compare;
 
 use compare::{Tolerance, assert_snapshot, snapshot_dir};
 use pdfxray_core::{Document, NodeId, Point, Rect};
+use pdfxray_render::annotate::{self, ChangeShow, Palette};
+use pdfxray_render::composite::{self, Fit, Mode, Request};
 use pdfxray_render::{
-    ContentFilter, Overlay, PixelPoint, RenderSpec, RenderedPage, XrayOptions, ops_for, render_page,
-    xray_overlays,
+    ContentFilter, Overlay, PixelPoint, RenderSpec, RenderedPage, XrayOptions, ops_for, page_transform,
+    render_page, xray_overlays,
 };
 use pretty_assertions::assert_eq;
 
@@ -32,14 +34,15 @@ fn pixel(page: &RenderedPage, p: PixelPoint) -> [u8; 4] {
     page.rgba[at..at + 4].try_into().unwrap()
 }
 
-/// The `CropBox` outline in magenta, 2 px wide.
+/// The `CropBox` outline in magenta, 2 px wide, on the page drawn at scale 1.
 fn crop_overlay(doc: &Document, page: u32) -> Overlay {
-    Overlay::Rect {
-        rect: doc.page(page).unwrap().crop_box,
-        stroke: [255, 0, 255, 255],
-        fill: None,
-        width: 2.0,
-    }
+    Overlay::outline(
+        &page_transform(doc, page, 1.0).unwrap(),
+        doc.page(page).unwrap().crop_box,
+        [255, 0, 255, 255],
+        None,
+        2.0,
+    )
 }
 
 /// Fixtures with a committed baseline. A fixed list: fixtures added to the corpus later do
@@ -124,12 +127,13 @@ fn overlay_lands_where_the_transform_predicts() {
         // A 1 pt square at (60, 100): empty space on every page of the fixture.
         let spec = RenderSpec {
             scale: 4.0,
-            overlays: vec![Overlay::Rect {
-                rect: Rect::new(60.0, 100.0, 61.0, 101.0),
-                stroke: magenta,
-                fill: Some(magenta),
-                width: 0.0,
-            }],
+            overlays: vec![Overlay::outline(
+                &page_transform(&doc, page, 4.0).unwrap(),
+                Rect::new(60.0, 100.0, 61.0, 101.0),
+                magenta,
+                Some(magenta),
+                0.0,
+            )],
             ..RenderSpec::new(4.0)
         };
 
@@ -168,7 +172,7 @@ fn mismatch_fails_and_writes_new_and_diff_images() {
     .unwrap();
     let dir = std::env::temp_dir().join(format!("pdfxray-render-snap-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    pdfxray_render::write_png(&plain, &dir.join("sample.png")).unwrap();
+    pdfxray_render::write_image(&plain, &dir.join("sample.png")).unwrap();
 
     let outcome = std::panic::catch_unwind(|| {
         assert_snapshot(&dir, "sample", &marked, Tolerance::STRICT);
@@ -203,6 +207,7 @@ fn mode_spec(name: &str, doc: &Document) -> RenderSpec {
                     include_invisible: true,
                     ..XrayOptions::default()
                 },
+                &page_transform(doc, 0, 1.0).unwrap(),
             ),
             ..RenderSpec::new(1.0)
         },
@@ -242,4 +247,47 @@ fn debug_render_modes_match_their_baselines() {
         .filter(|(name, _)| snapshot_dir().join(format!("{name}.png")).is_file())
         .count();
     assert_eq!(on_disk, MODE_BASELINES.len());
+}
+
+/// The visual diff in its three modes: page 2 of `move-paragraph-3pt`, whose first paragraph B
+/// draws 3 pt lower, with role chips and the legend. A fixed list, like [`BASELINES`].
+const DIFF_BASELINES: [(&str, Mode); 3] = [
+    ("diff-side-by-side-move-paragraph", Mode::SideBySide),
+    ("diff-overlay-move-paragraph", Mode::Overlay),
+    ("diff-mask-move-paragraph", Mode::Mask),
+];
+
+#[test]
+fn the_visual_diff_modes_match_their_baselines() {
+    let (a, b) = pdfxray_fixtures::pairs::pair("move-paragraph-3pt");
+    let (a, b) = (Document::open(a).unwrap(), Document::open(b).unwrap());
+    let pairing = pdfxray_core::diff::pair(&a, &b);
+    let show = ChangeShow {
+        labels: true,
+        ..ChangeShow::default()
+    };
+    for (name, mode) in DIFF_BASELINES {
+        let request = Request {
+            mode,
+            scale: 1.0,
+            fit: Fit::Refuse,
+            registration: None,
+            tolerance: composite::SAME_ENGINE_TOLERANCE,
+        };
+        let mut picture = composite::composite((&a, 1), (&b, 1), &request).unwrap();
+        let [scene_a, scene_b] =
+            annotate::change_scenes(&pairing, (Some(1), Some(1)), mode, show, &|_, _| None);
+        let scene_b = scene_b.mapped(|rect| picture.b_in_a(rect));
+        let legend = annotate::change_legend(mode, show, &[], Palette::DESIGN.warn);
+
+        picture.annotate(1.0, &Palette::DESIGN, &[scene_a, scene_b], &legend);
+
+        assert_snapshot(&snapshot_dir(), name, &picture.into_page(), Tolerance::STRICT);
+    }
+    // Smoke: every mode has a baseline file.
+    let on_disk = DIFF_BASELINES
+        .iter()
+        .filter(|(name, _)| snapshot_dir().join(format!("{name}.png")).is_file())
+        .count();
+    assert_eq!(on_disk, DIFF_BASELINES.len());
 }

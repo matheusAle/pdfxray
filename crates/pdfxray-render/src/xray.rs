@@ -34,7 +34,7 @@ use pdfxray_core::capture::{CapturedPage, ColorInfo, PaintItem, PaintKind};
 use pdfxray_core::numeric::{u8_from_f64_round, u64_from_usize, usize_from_u32};
 use pdfxray_core::{Document, PageIx, Rect, RoleClass};
 
-use crate::Overlay;
+use crate::{Overlay, Transform};
 
 /// Glyph outline for [`ColorBy::Kind`].
 pub const KIND_GLYPH: [u8; 4] = [0, 90, 200, 255];
@@ -147,22 +147,48 @@ impl Hidden {
     }
 }
 
-/// One outline per painted item (glyph, path, image, shading) of `page`, in paint order.
+/// A page-space outline of the debug overlays, before it is placed on a bitmap.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Outline {
+    rect: Rect,
+    stroke: [u8; 4],
+    fill: Option<[u8; 4]>,
+    width: f32,
+}
+
+impl Outline {
+    fn place(self, to_pixel: &Transform) -> Overlay {
+        Overlay::outline(to_pixel, self.rect, self.stroke, self.fill, self.width)
+    }
+}
+
+fn placed(outlines: impl IntoIterator<Item = Outline>, to_pixel: &Transform) -> Vec<Overlay> {
+    outlines.into_iter().map(|o| o.place(to_pixel)).collect()
+}
+
+/// One outline per painted item (glyph, path, image, shading) of `page`, in paint order, on a
+/// bitmap of the page drawn with `to_pixel`.
 ///
 /// Clip-only items are not painted and get no outline. Empty when the page was not captured.
-pub fn xray_overlays(doc: &Document, page: PageIx, options: XrayOptions) -> Vec<Overlay> {
+pub fn xray_overlays(
+    doc: &Document,
+    page: PageIx,
+    options: XrayOptions,
+    to_pixel: &Transform,
+) -> Vec<Overlay> {
     let (Some(cap), Some(info)) = (doc.captured(page), doc.page(page)) else {
         return Vec::new();
     };
-    xray_items(cap, info.crop_box, options, &|mcid| {
+    let outlines = xray_items(cap, info.crop_box, options, &|mcid| {
         doc.mcid_role_class(page, mcid)
-    })
+    });
+    placed(outlines, to_pixel)
 }
 
 /// The role class that owns marked content `mcid` of the page being outlined.
 type RoleOf<'a> = &'a dyn Fn(i32) -> Option<RoleClass>;
 
-fn xray_items(cap: &CapturedPage, crop: Rect, options: XrayOptions, role_of: RoleOf<'_>) -> Vec<Overlay> {
+fn xray_items(cap: &CapturedPage, crop: Rect, options: XrayOptions, role_of: RoleOf<'_>) -> Vec<Outline> {
     let alpha = options.alpha;
     cap.items
         .iter()
@@ -174,7 +200,7 @@ fn xray_items(cap: &CapturedPage, crop: Rect, options: XrayOptions, role_of: Rol
                 return None;
             }
             Some(with_alpha(
-                &match hidden {
+                match hidden {
                     Some(h) => highlight(item.bbox, h.color()),
                     None => outline(item.bbox, normal_color(cap, item, options, role_of)),
                 },
@@ -184,8 +210,8 @@ fn xray_items(cap: &CapturedPage, crop: Rect, options: XrayOptions, role_of: Rol
         .collect()
 }
 
-/// `overlay` with its stroke and fill opacities scaled by `alpha / 255`.
-fn with_alpha(overlay: &Overlay, alpha: u8) -> Overlay {
+/// `outline` with its stroke and fill opacities scaled by `alpha / 255`.
+fn with_alpha(outline: Outline, alpha: u8) -> Outline {
     let scale = |color: [u8; 4]| {
         let a = u16::from(color[3]) * u16::from(alpha) + 127;
         [
@@ -195,25 +221,15 @@ fn with_alpha(overlay: &Overlay, alpha: u8) -> Overlay {
             u8::try_from(a / 255).unwrap_or(u8::MAX),
         ]
     };
-    match *overlay {
-        Overlay::Rect {
-            rect,
-            stroke,
-            fill,
-            width,
-        } => Overlay::Rect {
-            rect,
-            stroke: scale(stroke),
-            fill: fill.map(scale),
-            width,
-        },
-        // The x-ray builds rectangles only.
-        ref other => other.clone(),
+    Outline {
+        stroke: scale(outline.stroke),
+        fill: outline.fill.map(scale),
+        ..outline
     }
 }
 
-fn outline(rect: Rect, color: [u8; 4]) -> Overlay {
-    Overlay::Rect {
+fn outline(rect: Rect, color: [u8; 4]) -> Outline {
+    Outline {
         rect,
         stroke: color,
         fill: None,
@@ -221,8 +237,8 @@ fn outline(rect: Rect, color: [u8; 4]) -> Overlay {
     }
 }
 
-fn highlight(rect: Rect, color: [u8; 4]) -> Overlay {
-    Overlay::Rect {
+fn highlight(rect: Rect, color: [u8; 4]) -> Outline {
+    Outline {
         rect,
         stroke: color,
         fill: Some([color[0], color[1], color[2], HIDDEN_FILL_ALPHA]),
@@ -373,23 +389,24 @@ pub const CLIP: [u8; 4] = [0, 170, 190, 255];
 
 /// The clip bounding box in effect after operator `op_ix` executed: a teal outline with a faint
 /// fill. Empty when no clip is in effect, the operator does not exist or the page was not
-/// captured. Clips are tracked as bounding boxes, so a rotated clip is over-approximated.
-pub fn clip_overlays(doc: &Document, page: PageIx, op_ix: u32) -> Vec<Overlay> {
+/// captured. Clips are tracked as bounding boxes, so a rotated clip is over-approximated. On a
+/// bitmap of the page drawn with `to_pixel`.
+pub fn clip_overlays(doc: &Document, page: PageIx, op_ix: u32, to_pixel: &Transform) -> Vec<Overlay> {
     let Some(cap) = doc.captured(page) else {
         return Vec::new();
     };
-    cap.ops
+    let clip = cap
+        .ops
         .iter()
         .find(|o| o.ix == op_ix)
         .and_then(|o| o.gstate.clip)
-        .map(|rect| Overlay::Rect {
+        .map(|rect| Outline {
             rect,
             stroke: CLIP,
             fill: Some([CLIP[0], CLIP[1], CLIP[2], 32]),
             width: 2.0,
-        })
-        .into_iter()
-        .collect()
+        });
+    placed(clip, to_pixel)
 }
 
 /// Soft mask active.
@@ -403,24 +420,25 @@ pub const HEAT_BLEND: [u8; 3] = [200, 0, 200];
 /// several apply the order is soft mask, blend mode, alpha. In paint order.
 ///
 /// The alpha of an item is `ca` for fills, images and shadings, `CA` for strokes and the lower
-/// of both for fill-and-stroke items.
-pub fn alpha_heatmap_overlays(doc: &Document, page: PageIx) -> Vec<Overlay> {
+/// of both for fill-and-stroke items. On a bitmap of the page drawn with `to_pixel`.
+pub fn alpha_heatmap_overlays(doc: &Document, page: PageIx, to_pixel: &Transform) -> Vec<Overlay> {
     let Some(cap) = doc.captured(page) else {
         return Vec::new();
     };
-    cap.items
+    let tints = cap
+        .items
         .iter()
         .filter(|item| !matches!(item.kind, PaintKind::Clip))
         .filter_map(|item| {
             let (rgb, alpha) = heat(item)?;
-            Some(Overlay::Rect {
+            Some(Outline {
                 rect: item.bbox,
                 stroke: [rgb[0], rgb[1], rgb[2], 255],
                 fill: Some([rgb[0], rgb[1], rgb[2], alpha]),
                 width: 1.0,
             })
-        })
-        .collect()
+        });
+    placed(tints, to_pixel)
 }
 
 /// Tint colour and fill alpha for a non-plain item.
@@ -552,14 +570,8 @@ mod tests {
         y1: 30.0,
     };
 
-    fn colors(overlays: &[Overlay]) -> Vec<([u8; 4], Option<[u8; 4]>)> {
-        overlays
-            .iter()
-            .filter_map(|o| match o {
-                Overlay::Rect { stroke, fill, .. } => Some((*stroke, *fill)),
-                _ => None,
-            })
-            .collect()
+    fn colors(outlines: &[Outline]) -> Vec<([u8; 4], Option<[u8; 4]>)> {
+        outlines.iter().map(|o| (o.stroke, o.fill)).collect()
     }
 
     fn with_hidden() -> XrayOptions {

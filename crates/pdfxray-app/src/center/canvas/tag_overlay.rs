@@ -445,9 +445,6 @@ fn badge(ui: &Ui, painter: &Painter, page: PageIx, shape: &Overlay, step: &Order
 /// Paints one resolved shape with egui.
 pub(super) fn paint(painter: &Painter, shape: &Overlay) {
     match shape {
-        // The layout never emits page-space rectangles; those are the x-ray's, drawn into the
-        // page bitmap.
-        Overlay::Rect { .. } => {}
         Overlay::Frame {
             rect,
             radius,
