@@ -381,7 +381,7 @@ fn results(ui: &mut Ui, state: &mut AppState) {
     let Some(run) = loaded.doc.validation() else {
         return;
     };
-    counters(ui, run);
+    counters(ui, &run);
     ui.add_space(8.0);
     if run.findings.is_empty() {
         ui.label(RichText::new(NO_FAILURES_TEXT).color(tokens::TEXT_3));
@@ -393,7 +393,7 @@ fn results(ui: &mut Ui, state: &mut AppState) {
         .split_whitespace()
         .map(str::to_lowercase)
         .collect();
-    let groups: Vec<(RuleGroup, Vec<u32>)> = findings::groups(run)
+    let groups: Vec<(RuleGroup, Vec<u32>)> = findings::groups(&run)
         .into_iter()
         .filter_map(|group| {
             let shown: Vec<u32> = group
@@ -423,7 +423,7 @@ fn results(ui: &mut Ui, state: &mut AppState) {
                     group,
                     shown,
                     doc: &loaded.doc,
-                    run,
+                    run: &run,
                     current,
                     open: !state.validation.folded.contains(&group.rule),
                     all: state.validation.listed_all.contains(&group.rule),

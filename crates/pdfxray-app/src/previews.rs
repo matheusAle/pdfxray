@@ -1,7 +1,7 @@
 //! Object previews (`pdfxray_render::render_preview`): pictures rendered one at a time on a thread
 //! of their own, and kept for the objects looked at lately.
 //!
-//! Like [`crate::thumbnails`], the thread owns its copy of the document and renders the object
+//! Like [`crate::thumbnails`], the thread shares the UI's document and renders the object
 //! asked for last first: the one on screen now matters most. A frame never waits for a preview;
 //! until it is there the panel says it is being rendered.
 
@@ -14,7 +14,7 @@ use std::thread;
 
 use egui::{Color32, ColorImage, Context, TextureHandle, TextureOptions};
 use pdfxray_core::numeric::usize_from_u32;
-use pdfxray_core::{CharCode, CoreError, Document, ObjRef, Visual, VisualKind};
+use pdfxray_core::{CharCode, Document, ObjRef, Visual, VisualKind};
 use pdfxray_render::{InkMask, Preview, PreviewError, render_preview};
 
 use crate::page_cache::pixel_digest;
@@ -101,9 +101,6 @@ pub(crate) enum PreviewFailure {
     /// The renderer panicked on this object.
     #[error("the renderer crashed on this object")]
     Crashed,
-    /// The preview thread could not open its copy of the document.
-    #[error(transparent)]
-    Open(Arc<CoreError>),
     /// The object cannot be previewed.
     #[error(transparent)]
     Preview(#[from] PreviewError),
@@ -132,22 +129,21 @@ struct Worker {
 }
 
 impl Worker {
-    fn spawn(ctx: &Context, doc: &Document) -> Result<Self, PreviewFailure> {
-        let bytes = doc.bytes().to_vec();
+    fn spawn(ctx: &Context, doc: &Arc<Document>) -> Result<Self, PreviewFailure> {
+        let doc = Arc::clone(doc);
         let (jobs, jobs_rx) = mpsc::channel();
         let (done_tx, done) = mpsc::channel();
         let ctx = ctx.clone();
         thread::Builder::new()
             .name("pdfxray-previews".to_owned())
-            .spawn(move || work(&ctx, bytes, &jobs_rx, &done_tx))
+            .spawn(move || work(&ctx, &doc, &jobs_rx, &done_tx))
             .map_err(|e| PreviewFailure::Spawn(Arc::new(e)))?;
         Ok(Self { jobs, done })
     }
 }
 
 /// Body of the thread: renders the object asked for last, until the UI hangs up.
-fn work(ctx: &Context, bytes: Vec<u8>, jobs: &Receiver<Visual>, done: &Sender<Done>) {
-    let doc = Document::from_bytes("previews", bytes).map_err(|e| PreviewFailure::Open(Arc::new(e)));
+fn work(ctx: &Context, doc: &Document, jobs: &Receiver<Visual>, done: &Sender<Done>) {
     let mut stack: Vec<Visual> = Vec::new();
     loop {
         if stack.is_empty() {
@@ -160,11 +156,8 @@ fn work(ctx: &Context, bytes: Vec<u8>, jobs: &Receiver<Visual>, done: &Sender<Do
         let Some(visual) = stack.pop() else {
             continue;
         };
-        let result = match &doc {
-            Ok(doc) => catch_unwind(AssertUnwindSafe(|| render(ctx, doc, &visual)))
-                .unwrap_or(Err(PreviewFailure::Crashed)),
-            Err(failure) => Err(failure.clone()),
-        };
+        let result = catch_unwind(AssertUnwindSafe(|| render(ctx, doc, &visual)))
+            .unwrap_or(Err(PreviewFailure::Crashed));
         if done.send((visual.obj, result)).is_err() {
             return;
         }
@@ -286,7 +279,7 @@ impl Previews {
     }
 
     /// The preview of `visual`; asks the thread for it the first time.
-    pub(crate) fn get(&mut self, ctx: &Context, doc: &Document, visual: &Visual) -> PreviewFrame {
+    pub(crate) fn get(&mut self, ctx: &Context, doc: &Arc<Document>, visual: &Visual) -> PreviewFrame {
         self.poll();
         if let Some(at) = self.ready.iter().position(|(key, _)| *key == visual.obj) {
             let entry = self.ready.remove(at);
@@ -319,6 +312,7 @@ mod tests {
 
     use super::*;
     use crate::state::describe;
+    use crate::test_support::{fixture, wait_until};
 
     #[test]
     fn a_failure_reads_as_before_and_keeps_its_cause() {
@@ -339,5 +333,35 @@ mod tests {
             describe(&PreviewFailure::Preview(PreviewError::Unreadable)),
             "the embedded font program cannot be read; a viewer would substitute another font"
         );
+    }
+
+    #[test]
+    fn the_preview_thread_draws_from_the_uis_document_and_lets_go_of_it_when_cleared() {
+        let ctx = Context::default();
+        let doc = Arc::new(fixture("images"));
+        let count = u32::try_from(doc.info().object_count).unwrap();
+        let visual = (1..=count)
+            .find_map(|n| doc.visual(ObjRef::new(n, 0)))
+            .expect("the images fixture has a previewable object");
+        let mut previews = Previews::default();
+
+        let first = previews.get(&ctx, &doc, &visual);
+        let while_live = Arc::strong_count(&doc);
+        wait_until(|| match previews.get(&ctx, &doc, &visual) {
+            PreviewFrame::Rendering => None,
+            frame => Some(frame),
+        });
+        let digest = previews.digest(visual.obj);
+        previews.clear();
+        wait_until(|| (Arc::strong_count(&doc) == 1).then_some(()));
+
+        assert!(
+            matches!(first, PreviewFrame::Rendering),
+            "the first ask goes to the thread"
+        );
+        assert_eq!(while_live, 2, "the UI and the preview thread hold one document");
+        assert_eq!(Arc::strong_count(&doc), 1, "the thread let go after clear()");
+        // smoke: the preview was rendered, not failed
+        assert!(digest.is_some(), "no bitmap for {}", visual.obj);
     }
 }

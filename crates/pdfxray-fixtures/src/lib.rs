@@ -7,6 +7,7 @@
 //! * [`expected`] holds the serde types describing what is true about a fixture.
 //! * [`catalog`] lists the fixtures; [`catalog::all`] returns them in a stable order.
 //! * [`gallery`] builds a file with one object of every kind an object preview draws.
+//! * [`paint_pages`] builds two pages of overlapping fills for the paint order across pages.
 //! * [`generate`] writes `<name>.pdf` and `<name>.expected.json` for every fixture, and
 //!   [`fixtures_dir`] tells other crates where the committed copies live.
 //!
@@ -22,6 +23,7 @@ pub mod catalog;
 mod deflate;
 pub mod expected;
 pub mod gallery;
+pub mod paint_pages;
 pub mod writer;
 
 use std::fs;

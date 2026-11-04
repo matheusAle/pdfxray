@@ -142,11 +142,14 @@ they leave the toolbar; the selection's action bar and their keys still have the
   invisible text, white-on-white and off-page content.
 * **Isolate** (`I`) paints only the selection's content; **Hide** (`H`) paints everything else.
   Both are also on the selection's action bar.
-* **Paint order** (`P`) replays the page operator by operator; the Inspector shows each
-  operator's state. It stays on its page while you scroll the canvas. **Follow step** (on by
+* **Paint order** (`P`) replays the whole document operator by operator, page after page: the
+  track spans every page's operators, and stepping past a page's last operator goes on to the next
+  page. The page holding the step is painted up to it; every other page is painted whole. The tab
+  reads `211 / 1120 ops` and where that is, `page 3 · op #42`; the Inspector shows each
+  operator's state. The step stays where it is while you scroll the canvas. **Follow step** (on by
   default, in the Paint order tab next to **Skip state-only ops**) scrolls the canvas to what a
-  step paints when it is out of view, whether you step, jump, scrub or play; turn it off to keep
-  the view where it is.
+  step paints when it is out of view (to its page when it paints nothing), whether you step,
+  jump, scrub or play, and keeps the zoom; turn it off to keep the view where it is.
 * **Clip** (`C`) shows the clip in effect for the selected operator.
 * **Alpha** (`A`) tints transparent, soft-masked and blended content.
 

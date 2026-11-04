@@ -27,7 +27,8 @@ pub enum TickKind {
 /// One mark on the track.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tick {
-    /// Execution index of the operator.
+    /// Position of the operator on the track (the paint order of the whole document for the
+    /// stepper).
     pub ix: u32,
     /// What it says.
     pub kind: TickKind,

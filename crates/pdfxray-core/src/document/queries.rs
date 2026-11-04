@@ -19,7 +19,7 @@ impl Document {
             TreeKind::Content(page) => self.content_tree(page),
             TreeKind::Artifacts => self.artifacts_tree(),
         };
-        if let Some(run) = &self.validation {
+        if let Some(run) = self.validation() {
             let targets: HashSet<&NodeId> = run.findings.iter().filter_map(|f| f.target.as_ref()).collect();
             for root in &mut roots {
                 add_validation_badges(root, &targets);
@@ -47,7 +47,7 @@ impl Document {
                     .collect();
                 self.objects.object_props(&self.raw, *r, &diags)
             }
-            NodeId::Validation(i) => self.validation.as_ref()?.props(*i),
+            NodeId::Validation(i) => self.validation()?.props(*i),
             NodeId::Op { .. }
             | NodeId::Glyph { .. }
             | NodeId::MarkedContent { .. }
@@ -193,8 +193,7 @@ impl Document {
             | NodeId::Artifact { .. } => self.content_bbox(id),
             NodeId::StructElem(_) => self.tag_bbox(id),
             NodeId::Validation(i) => self.bbox(
-                self.validation
-                    .as_ref()?
+                self.validation()?
                     .findings
                     .get(usize_from_u32(*i))?
                     .target

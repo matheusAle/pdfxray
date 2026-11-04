@@ -11,6 +11,7 @@ use super::page::{draw_page, overlays};
 use super::pointer::apply_wheel_zoom;
 use super::{CanvasOutput, PAGE_GAP, anchored_offset, layout_pages, most_visible};
 use crate::page_cache::RenderFailure;
+use crate::selection::node_page;
 use crate::state::AppState;
 use crate::state::canvas::Reveal;
 use crate::theme::{effects, motion};
@@ -299,6 +300,14 @@ pub(super) fn pages_view(
         state.canvas.scroll_to = Some(page);
         ui.ctx().request_repaint();
     } else if state.canvas.reveal.is_some() && state.selection_rect().is_none() {
+        // Nothing to outline (an operator that paints nothing, say): its page is what can be
+        // shown, so a page out of view is scrolled to; the zoom stays as it is.
+        if let Some(page) = state.selection.primary().and_then(node_page)
+            && !output.inner.visible.contains(&page)
+        {
+            state.canvas.scroll_to = Some(page);
+            ui.ctx().request_repaint();
+        }
         state.canvas.reveal = None;
     }
     CanvasOutput {

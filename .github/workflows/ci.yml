@@ -71,6 +71,23 @@ jobs:
             **/*.snap.new
           if-no-files-found: ignore
 
+  # The timing and memory budgets are `#[ignore]`d in the test job: they mean nothing in a debug
+  # build or next to other tests. Here they run in release, one test at a time, so a slower open,
+  # a quadratic query or a second copy of an open document fails CI instead of going unnoticed.
+  perf:
+    name: perf budgets (release, macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release
+      - name: Core budgets (open time, memory, queries, dense page)
+        run: cargo test --release -p pdfxray-core --test perf -- --ignored --nocapture --test-threads=1
+      - name: App budget (one document shared by the render threads)
+        run: cargo test --release -p pdfxray-app --test perf -- --ignored --nocapture --test-threads=1
+
   hygiene:
     name: licenses · advisories · unused deps
     runs-on: ubuntu-latest

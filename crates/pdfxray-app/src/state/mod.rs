@@ -72,8 +72,8 @@ pub const READY: &str = "Ready";
 /// An opened document and where it came from.
 #[derive(Debug)]
 pub struct LoadedDocument {
-    /// The document.
-    pub doc: Document,
+    /// The document, shared with the threads that render from it.
+    pub doc: Arc<Document>,
     /// File it was read from.
     pub path: PathBuf,
     /// How long opening took.
@@ -191,7 +191,7 @@ impl AppState {
             info: doc.info(),
             tagged: !doc.tree(TreeKind::Tags).is_empty(),
             encryption: doc.encryption(),
-            doc,
+            doc: Arc::new(doc),
             path: path.to_path_buf(),
             opened_in,
         };

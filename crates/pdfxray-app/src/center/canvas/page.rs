@@ -38,7 +38,6 @@ pub(super) fn overlays(
     preview: Option<&NodeId>,
 ) -> Overlays {
     let selection = state.selection_rect().filter(|s| s.page == page).map(|s| s.rect);
-    let current = page == state.canvas.page;
     Overlays {
         boxes: state.canvas.shown_boxes(),
         selection,
@@ -48,8 +47,8 @@ pub(super) fn overlays(
         measuring: state.canvas.measure.active,
         reveal: state.canvas.reveal.filter(|_| selection.is_some()),
         lengths: state.lengths(),
-        // The stepper walks the current page.
-        ghost: if current {
+        // What the stepper has not painted yet is on the page it is on.
+        ghost: if page == state.canvas.view.step.page {
             paint_order::collect(state)
         } else {
             paint_order::Ghost::default()

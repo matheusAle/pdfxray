@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use egui::Key;
-use pdfxray_core::{Document, NodeId, PageIx};
+use pdfxray_core::{Document, NodeId, OpPosition, PageIx};
 use pdfxray_render::xray::{
     ARTIFACT, HEAT_BLEND, HEAT_SOFT_MASK, INVISIBLE_TEXT, KIND_GLYPH, KIND_IMAGE, KIND_PATH, KIND_SHADING,
     OUTSIDE_CROP, TAG_PALETTE, TAGGED, UNTAGGED, UNTAGGED_TAG, WHITE_ON_WHITE,
@@ -146,8 +146,9 @@ pub struct ViewMode {
     pub isolation: Option<Isolation>,
     /// Whether the paint-order stepper is on.
     pub stepper: bool,
-    /// Last operator index that paints while the stepper is on.
-    pub step: u32,
+    /// The last operator that paints while the stepper is on, anywhere in the document: the
+    /// stepper walks the paint order of every page, one after the other.
+    pub step: OpPosition,
     /// Show the clip in effect for the selected operator.
     pub clip: bool,
     /// Tint items that are not plain opaque.
@@ -173,7 +174,7 @@ impl Default for ViewMode {
             invisible: false,
             isolation: None,
             stepper: false,
-            step: 0,
+            step: OpPosition::default(),
             clip: false,
             heatmap: false,
             skip_state_only: false,
@@ -193,10 +194,10 @@ impl ViewMode {
     }
 
     /// The operators that may paint on `page`: the isolation and the stepper combined.
-    pub fn content_filter(&self, doc: &Document, page: PageIx, current: PageIx) -> ContentFilter {
+    pub fn content_filter(&self, doc: &Document, page: PageIx) -> ContentFilter {
         let isolation = self.isolation.as_ref().filter(|i| i.page == page);
-        // The stepper walks the current page; the others are painted whole.
-        let step = (self.stepper && page == current).then_some(self.step);
+        // The stepper cuts the page it is on; the others are painted whole.
+        let step = (self.stepper && page == self.step.page).then_some(self.step.ix);
         match (isolation, step) {
             (None, None) => ContentFilter::All,
             (None, Some(last)) => ContentFilter::UpTo(last),
@@ -327,12 +328,12 @@ impl ViewTool {
     }
 
     /// Whether the mode can be turned on: isolate and hide need a selection with content, the
-    /// stepper needs a page with operators. A mode that is on can always be turned off.
+    /// stepper needs a document with operators. A mode that is on can always be turned off.
     pub fn available(self, state: &AppState) -> bool {
         self.active(state)
             || match self {
                 Self::Isolate | Self::Hide => state.can_isolate(),
-                Self::PaintOrder => state.last_op(state.canvas.page).is_some(),
+                Self::PaintOrder => state.op_total() > 0,
                 Self::Xray | Self::Clip | Self::Alpha => true,
             }
     }
@@ -478,14 +479,8 @@ impl AppState {
         let NodeId::Validation(index) = id else {
             return Some(id.clone());
         };
-        let finding = self
-            .document
-            .as_ref()?
-            .doc
-            .validation()?
-            .findings
-            .get(usize::try_from(*index).ok()?)?;
-        finding.target.clone()
+        let run = self.document.as_ref()?.doc.validation()?;
+        run.findings.get(usize::try_from(*index).ok()?)?.target.clone()
     }
 
     /// The nodes isolate and hide act on: the [`Self::view_target`] of every selected node that
@@ -592,7 +587,7 @@ impl AppState {
         Some(RenderRequest {
             page,
             scale,
-            content: view.content_filter(doc, page, self.canvas.page),
+            content: view.content_filter(doc, page),
             xray: view.xray.then_some(XrayOptions {
                 color_by: view.color_by,
                 include_invisible: view.invisible,
@@ -630,32 +625,40 @@ mod tests {
     fn the_filter_combines_isolation_and_stepper() {
         let doc = fixture("graphics-state");
         let mut view = ViewMode::default();
-        assert_eq!(view.content_filter(&doc, 0, 0), ContentFilter::All);
+        assert_eq!(view.content_filter(&doc, 0), ContentFilter::All);
 
         view.stepper = true;
-        view.step = 4;
-        assert_eq!(view.content_filter(&doc, 0, 0), ContentFilter::UpTo(4));
-        // The stepper walks the current page only; the page below is painted whole.
-        assert_eq!(view.content_filter(&doc, 1, 0), ContentFilter::All);
+        view.step = OpPosition::new(0, 4);
+        assert_eq!(view.content_filter(&doc, 0), ContentFilter::UpTo(4));
+        // The stepper cuts only the page it is on; the page below is painted whole.
+        assert_eq!(view.content_filter(&doc, 1), ContentFilter::All);
+        view.step = OpPosition::new(1, 2);
+        assert_eq!(view.content_filter(&doc, 1), ContentFilter::UpTo(2));
+        assert_eq!(
+            view.content_filter(&doc, 0),
+            ContentFilter::All,
+            "pages before it are whole"
+        );
+        view.step = OpPosition::new(0, 4);
 
         view.stepper = false;
         view.isolation = Some(isolation(IsolateMode::Hide, &[2, 3]));
         assert_eq!(
-            view.content_filter(&doc, 0, 0),
+            view.content_filter(&doc, 0),
             ContentFilter::Hide([2, 3].into_iter().collect())
         );
         // Filters are per page.
-        assert_eq!(view.content_filter(&doc, 1, 0), ContentFilter::All);
+        assert_eq!(view.content_filter(&doc, 1), ContentFilter::All);
 
         // Both: hide keeps everything up to the step except the hidden ones.
         view.stepper = true;
         assert_eq!(
-            view.content_filter(&doc, 0, 0),
+            view.content_filter(&doc, 0),
             ContentFilter::Only([0, 1, 4].into_iter().collect())
         );
         view.isolation = Some(isolation(IsolateMode::Only, &[2, 3, 9]));
         assert_eq!(
-            view.content_filter(&doc, 0, 0),
+            view.content_filter(&doc, 0),
             ContentFilter::Only([2, 3].into_iter().collect())
         );
     }

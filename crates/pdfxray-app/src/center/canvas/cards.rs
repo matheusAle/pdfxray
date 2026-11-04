@@ -545,13 +545,12 @@ fn swatch(ui: &mut Ui, entry: &LegendEntry) {
     }
 }
 
-/// The floating paint-order stepper: previous, a track to scrub, `step 11 / 80`, next. It
-/// follows the same position as the Paint order tab of the drawer.
+/// The floating paint-order stepper: previous, a track to scrub over the whole document,
+/// `step 11 / 1120`, next. It follows the same position as the Paint order tab of the drawer.
 fn stepper(ui: &mut Ui, state: &mut AppState) {
-    let Some(last) = state.last_op(state.canvas.page) else {
+    let (Some(index), Some(last)) = (state.step_index(), state.last_step_index()) else {
         return;
     };
-    let step = state.canvas.view.step.min(last);
     let (can_back, can_forward) = (
         state.next_target(false).is_some(),
         state.next_target(true).is_some(),
@@ -572,10 +571,10 @@ fn stepper(ui: &mut Ui, state: &mut AppState) {
                 tooltip::with_shortcut(back, "Previous operator", "←");
             });
             ui.allocate_ui(vec2(MINI_TRACK_W, 20.0), |ui| {
-                target = StepTrack::new(step, last).height(20.0).show(ui);
+                target = StepTrack::new(index, last).height(20.0).show(ui);
             });
             ui.label(
-                RichText::new(mini_text(step + 1, state.op_total()))
+                RichText::new(mini_text(index + 1, state.op_total()))
                     .font(fonts::mono(tokens::mono::BODY))
                     .color(tokens::TEXT_2),
             );
@@ -591,8 +590,8 @@ fn stepper(ui: &mut Ui, state: &mut AppState) {
             });
         });
     });
-    if let Some(ix) = target {
-        state.step_to(ix);
+    if let Some(picked) = target {
+        state.step_to_index(picked);
     } else if let Some(forward) = next {
         state.step_next(forward);
     }

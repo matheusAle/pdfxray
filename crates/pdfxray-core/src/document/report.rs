@@ -1,6 +1,8 @@
 //! A veraPDF report attached to the document, with each failed check resolved to the node it
 //! concerns.
 
+use std::sync::{Arc, PoisonError};
+
 use super::Document;
 use crate::capture::StreamRef;
 use crate::validation::{Locator, Report, ValidationRun, locate_static};
@@ -9,14 +11,21 @@ use crate::{NodeId, PageIx, ResKind};
 impl Document {
     /// Attaches a veraPDF report, replacing any previous one. Each failed check is resolved to
     /// the node it concerns where possible.
-    pub fn set_validation(&mut self, report: &Report) {
-        let run = ValidationRun::from_report(report, |l| self.locate(l));
-        self.validation = Some(run);
+    ///
+    /// Takes `&self` so a document shared between threads can be validated; readers holding the
+    /// previous run keep it until they drop their handle.
+    pub fn set_validation(&self, report: &Report) {
+        let run = Arc::new(ValidationRun::from_report(report, |l| self.locate(l)));
+        *self.validation.write().unwrap_or_else(PoisonError::into_inner) = Some(run);
     }
 
-    /// The attached validation run, if any.
-    pub fn validation(&self) -> Option<&ValidationRun> {
-        self.validation.as_ref()
+    /// The attached validation run, if any: a handle to the run as it was when asked, unaffected
+    /// by a later [`Document::set_validation`].
+    pub fn validation(&self) -> Option<Arc<ValidationRun>> {
+        self.validation
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// Resolves a veraPDF locator to a node: operators via the captured page content (veraPDF

@@ -27,7 +27,7 @@ pub mod text_state;
 pub mod validation;
 
 use egui::{Frame, Margin, Panel, RichText, ScrollArea, Stroke, Ui};
-use pdfxray_core::{NodeId, Props};
+use pdfxray_core::{NodeId, OpPosition, Props};
 
 use crate::components::{context_menu, prop_row};
 use crate::state::AppState;
@@ -54,7 +54,8 @@ pub(super) fn note(ui: &mut Ui, text: RichText) {
 pub(crate) struct Action {
     /// Select this node (a crumb, a link).
     pub(crate) navigate: Option<NodeId>,
-    /// Move the paint-order stepper to this operator.
+    /// Move the paint-order stepper to this operator of the page it is on (the Paint order
+    /// section only shows for the operator the stepper stopped at).
     pub(crate) step_to: Option<u32>,
     /// Open this validation finding (the Details button of a problem card).
     pub(crate) details: Option<u32>,
@@ -154,7 +155,7 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
         state.select(id);
     }
     if let Some(ix) = action.step_to {
-        state.step_to(ix);
+        state.step_to(OpPosition::new(state.canvas.view.step.page, ix));
     }
     if let Some(finding) = action.details {
         problem::open(state, finding);

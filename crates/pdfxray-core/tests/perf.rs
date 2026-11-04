@@ -1,7 +1,8 @@
 //! Performance budgets of the eager loading path (plan decision 13).
 //!
 //! Timing in a debug build is meaningless, so every test is `#[ignore]`d. Run with
-//! `cargo test --release -p pdfxray-core --test perf -- --ignored --nocapture`.
+//! `cargo test --release -p pdfxray-core --test perf -- --ignored --nocapture`; CI runs them in
+//! its `perf` job.
 
 // Helpers here are not `#[test]` functions, so clippy.toml's allow-*-in-tests does not reach them.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::print_stderr)]
@@ -234,6 +235,34 @@ fn synthetic_200_pages_queries_within_budget() {
 
     let over: Vec<_> = timings.iter().filter(|(_, t)| *t >= QUERY).collect();
     assert!(over.is_empty(), "queries over {QUERY:?}: {over:#?}");
+}
+
+/// The dense page's layout, checked in every test run (the budget below is `#[ignore]`d). 2 000
+/// paragraphs are more than one US Letter page holds at this line height (1 800), where an earlier
+/// layout wrapped back to the top and read as 11 `reading-order-backtrack`s at 20 000.
+#[test]
+fn dense_page_reads_top_to_bottom_without_diagnostics() {
+    const PARAGRAPHS: u32 = 2_000;
+    let doc = Document::from_bytes("dense.pdf", common::dense_page_pdf(PARAGRAPHS)).unwrap();
+    let paragraph = |i: u32| NodeId::StructElem(pdfxray_core::ObjRef::new(common::DENSE_FIRST_P + i, 0));
+
+    let codes: Vec<&str> = doc.info().diagnostics.iter().map(|d| d.code).collect();
+    let media_box = doc.page(0).unwrap().media_box;
+    let (_, first) = doc.bbox(&paragraph(0)).unwrap();
+    let (_, last) = doc.bbox(&paragraph(PARAGRAPHS - 1)).unwrap();
+
+    assert_eq!(codes, Vec::<&str>::new());
+    assert_eq!(
+        media_box.height(),
+        f64::from(common::dense_page_height(PARAGRAPHS))
+    );
+    assert!(
+        last.y1 < first.y0,
+        "the last paragraph sits below the first: {first:?} {last:?}"
+    );
+    // smoke: every paragraph's marked content is on the page
+    let root = NodeId::StructElem(pdfxray_core::ObjRef::new(5, 0));
+    assert_eq!(doc.marked_content(&root).len(), PARAGRAPHS as usize);
 }
 
 /// A page with 20 000 marked-content sequences, one structure element each under one parent:

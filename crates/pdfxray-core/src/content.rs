@@ -43,7 +43,7 @@ mod tree;
 pub use self::coverage::Coverage;
 pub(crate) use self::glyph::char_code_of;
 pub use self::glyph::{ActualText, CharCode, GlyphInfo, UnicodeSource};
-pub use self::paint::{MAX_PAINT_STACK, PaintStep};
+pub use self::paint::{MAX_PAINT_STACK, OpPosition, PaintStep};
 pub(crate) use self::runs::RunKind;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -67,6 +67,10 @@ const PARALLEL_FROM: usize = 4;
 #[derive(Debug, Default)]
 pub(crate) struct ContentIndex {
     pages: Vec<Option<PageData>>,
+    /// Where each page's operators start in the paint order of the whole document, plus the
+    /// total at the end: `starts[p]..starts[p + 1]` are page `p`'s. A page that was not captured
+    /// has none.
+    starts: Vec<u32>,
 }
 
 impl ContentIndex {
@@ -117,7 +121,30 @@ impl ContentIndex {
         if page_count == 0 {
             progress.report(OpenStage::CaptureContent, 0, 0);
         }
-        Ok(Self { pages })
+        let starts = op_starts(&pages);
+        Ok(Self { pages, starts })
+    }
+
+    /// Number of operators of every captured page together.
+    pub(crate) fn op_total(&self) -> u32 {
+        self.starts.last().copied().unwrap_or(0)
+    }
+
+    /// Where page `page`'s operators start in the document's paint order.
+    pub(crate) fn op_start(&self, page: PageIx) -> Option<u32> {
+        self.starts.get(usize_from_u32(page)).copied()
+    }
+
+    /// The page whose operators hold paint-order position `index`, with that position's start.
+    pub(crate) fn page_holding(&self, index: u32) -> Option<(PageIx, u32)> {
+        if index >= self.op_total() {
+            return None;
+        }
+        // The last page starting at or before `index`; pages without operators start where the
+        // next one does, so the search skips them.
+        let after = self.starts.partition_point(|&start| start <= index);
+        let page = after.checked_sub(1)?;
+        Some((PageIx::try_from(page).ok()?, self.starts[page]))
     }
 
     pub(crate) fn page(&self, page: PageIx) -> Option<&CapturedPage> {
@@ -127,6 +154,21 @@ impl ContentIndex {
     fn data(&self, page: PageIx) -> Option<&PageData> {
         self.pages.get(usize_from_u32(page))?.as_ref()
     }
+}
+
+/// The running operator count before each page, then the total (see [`ContentIndex::starts`]).
+fn op_starts(pages: &[Option<PageData>]) -> Vec<u32> {
+    let mut starts = Vec::with_capacity(pages.len() + 1);
+    let mut total: u32 = 0;
+    starts.push(total);
+    for page in pages {
+        let ops = page
+            .as_ref()
+            .map_or(0, |p| u32::try_from(p.cap.ops.len()).unwrap_or(u32::MAX));
+        total = total.saturating_add(ops);
+        starts.push(total);
+    }
+    starts
 }
 
 /// One captured page plus the lookup tables the queries need.

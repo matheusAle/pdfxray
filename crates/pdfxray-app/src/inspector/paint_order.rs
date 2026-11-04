@@ -58,7 +58,7 @@ pub fn visible_text(step: &PaintStep) -> String {
 /// at.
 fn applies(cx: &Cx<'_>) -> bool {
     let view = &cx.state.canvas.view;
-    matches!(cx.id, NodeId::Op { page, ix } if view.stepper && *page == cx.state.canvas.page && *ix == view.step)
+    matches!(cx.id, NodeId::Op { page, ix } if view.stepper && *page == view.step.page && *ix == view.step.ix)
 }
 
 pub(super) fn show(ui: &mut Ui, cx: &Cx<'_>, action: &mut Action) {

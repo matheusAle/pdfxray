@@ -226,7 +226,7 @@ impl Shown {
     fn of(state: &AppState, index: u32) -> Option<Self> {
         let run = state.document.as_ref()?.doc.validation()?;
         let finding = run.findings.get(usize_from_u32(index))?.clone();
-        let same: Vec<u32> = findings::groups(run)
+        let same: Vec<u32> = findings::groups(&run)
             .into_iter()
             .find(|group| group.rule == finding.rule)
             .map(|group| group.findings)
@@ -367,8 +367,7 @@ pub(super) fn footer(ui: &mut Ui, state: &mut AppState, index: u32) {
         .document
         .as_ref()
         .and_then(|loaded| loaded.doc.validation())
-        .and_then(|run| run.findings.get(usize_from_u32(index)))
-        .map(|finding| finding.rule.clone())
+        .and_then(|run| Some(run.findings.get(usize_from_u32(index))?.rule.clone()))
         .unwrap_or_default();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;

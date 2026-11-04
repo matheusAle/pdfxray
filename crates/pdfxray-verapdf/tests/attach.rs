@@ -15,7 +15,7 @@ fn orphan_mcid_with_report() -> Document {
     let xml_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/orphan-mcid-ua1.xml");
     let xml = std::fs::read_to_string(xml_path).unwrap();
     let report = pdfxray_verapdf::parse_report(&xml).unwrap();
-    let mut doc = Document::open(path).unwrap();
+    let doc = Document::open(path).unwrap();
     doc.set_validation(&report);
     doc
 }
@@ -105,7 +105,7 @@ fn validation_badges_are_added_per_request_and_never_stick_to_the_cached_trees()
     let path = pdfxray_fixtures::pdf_path("orphan-mcid");
     let xml_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/orphan-mcid-ua1.xml");
     let report = pdfxray_verapdf::parse_report(&std::fs::read_to_string(xml_path).unwrap()).unwrap();
-    let mut doc = Document::open(path).unwrap();
+    let doc = Document::open(path).unwrap();
     let font = NodeId::Resource {
         owner: pdfxray_core::ObjRef::new(3, 0),
         kind: pdfxray_core::ResKind::Font,
@@ -134,4 +134,38 @@ fn validation_badges_are_added_per_request_and_never_stick_to_the_cached_trees()
         doc.tree(TreeKind::Objects),
         "repeated requests agree"
     );
+}
+
+#[test]
+fn a_run_attached_to_a_shared_document_reaches_every_holder_and_old_handles_keep_their_run() {
+    let path = pdfxray_fixtures::pdf_path("orphan-mcid");
+    let xml_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/orphan-mcid-ua1.xml");
+    let report = pdfxray_verapdf::parse_report(&std::fs::read_to_string(xml_path).unwrap()).unwrap();
+    let doc = std::sync::Arc::new(Document::open(path).unwrap());
+    let other = std::sync::Arc::clone(&doc);
+
+    let unvalidated = other.validation();
+    std::thread::scope(|s| {
+        s.spawn(|| doc.set_validation(&report));
+    });
+    let first = other.validation().unwrap();
+    doc.set_validation(&report);
+    let second = other.validation().unwrap();
+
+    assert!(unvalidated.is_none(), "no run before one is attached");
+    assert_eq!(first.findings.len(), second.findings.len());
+    assert!(
+        !std::sync::Arc::ptr_eq(&first, &second),
+        "attaching again replaces the run"
+    );
+    assert_eq!(
+        first.findings, second.findings,
+        "a handle taken earlier keeps the run it was given"
+    );
+    // smoke: the run attached on another thread drives the shared document's queries
+    assert_eq!(
+        other.node(&NodeId::Validation(0)).is_some(),
+        !first.findings.is_empty()
+    );
+    assert!(!first.findings.is_empty(), "the orphan-mcid report has findings");
 }

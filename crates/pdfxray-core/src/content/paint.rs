@@ -11,6 +11,34 @@ use crate::{Document, NodeId, PageIx, Rect};
 /// Most operators listed in each of `paints_over` and `covered_by`.
 pub const MAX_PAINT_STACK: usize = 64;
 
+/// An operator by its place in the document: operator `ix` (execution order, see
+/// [`OpRecord::ix`]) of page `page`. Ordered as the document paints: page by page, then by
+/// operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize)]
+pub struct OpPosition {
+    /// Zero-based page.
+    pub page: PageIx,
+    /// Execution index of the operator on the page.
+    pub ix: u32,
+}
+
+impl OpPosition {
+    /// Operator `ix` of page `page`.
+    #[must_use]
+    pub const fn new(page: PageIx, ix: u32) -> Self {
+        Self { page, ix }
+    }
+}
+
+impl From<OpPosition> for NodeId {
+    fn from(at: OpPosition) -> Self {
+        Self::Op {
+            page: at.page,
+            ix: at.ix,
+        }
+    }
+}
+
 /// Where one operator sits in the painting of its page. See [`Document::paint_step`].
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PaintStep {
@@ -114,6 +142,52 @@ impl Document {
             .data(page)
             .and_then(|data| Some(painted(data, data.op(op_ix)?).next().is_none()))
             .unwrap_or(false)
+    }
+
+    /// Number of operators the document runs, every page's together, in the order the pages
+    /// are painted. The paint-order positions are `0..op_total()`.
+    pub fn op_total(&self) -> u32 {
+        self.content.op_total()
+    }
+
+    /// The paint-order position of operator `at` in the whole document (0 is the first operator
+    /// of the first page that has any). `None` when there is no such operator.
+    pub fn paint_order_index(&self, at: OpPosition) -> Option<u32> {
+        self.content.data(at.page)?.op(at.ix)?;
+        Some(self.content.op_start(at.page)? + at.ix)
+    }
+
+    /// The operator at paint-order position `index` of the whole document, the inverse of
+    /// [`Document::paint_order_index`]. `None` past the last operator.
+    pub fn op_at(&self, index: u32) -> Option<OpPosition> {
+        let (page, start) = self.content.page_holding(index)?;
+        Some(OpPosition::new(page, index - start))
+    }
+
+    /// The next operator after (`forward`) or before `from` that paints something, looking past
+    /// the end of `from`'s page into the next (or previous) pages: where stepping through visible
+    /// changes of the whole document goes. `None` when there is none.
+    pub fn next_visible_change_in_document(&self, from: OpPosition, forward: bool) -> Option<OpPosition> {
+        if let Some(ix) = self.next_visible_change(from.page, from.ix, forward) {
+            return Some(OpPosition::new(from.page, ix));
+        }
+        let paints = |page: PageIx, ix: u32| !self.is_state_only(page, ix);
+        let on = |page: PageIx| {
+            let last = self.content.page(page)?.ops.last()?.ix;
+            let (edge, inward) = if forward { (0, true) } else { (last, false) };
+            let ix = if paints(page, edge) {
+                edge
+            } else {
+                self.next_visible_change(page, edge, inward)?
+            };
+            Some(OpPosition::new(page, ix))
+        };
+        let pages = PageIx::try_from(self.pages.len()).unwrap_or(PageIx::MAX);
+        if forward {
+            (from.page.saturating_add(1)..pages).find_map(on)
+        } else {
+            (0..from.page.min(pages)).rev().find_map(on)
+        }
     }
 }
 

@@ -30,7 +30,7 @@ use pdfxray_app::components::StepTrack;
 use pdfxray_app::rulers;
 use pdfxray_app::theme::tokens;
 use pdfxray_app::{IsolateMode, PdfxrayApp, XRAY_ALPHA, pixel_digest};
-use pdfxray_core::{Document, NodeId, TreeKind};
+use pdfxray_core::{Document, NodeId, OpPosition, TreeKind};
 use pdfxray_render::{
     ColorBy, ContentFilter, XrayOptions, alpha_heatmap_overlays, clip_overlays, ops_for, render_page,
     xray_overlays,
@@ -455,26 +455,29 @@ fn isolation_and_the_stepper_belong_to_their_page() {
         Some(0)
     );
     harness.state_mut().state.set_stepper(true);
-    harness.state_mut().state.step_to(2);
+    harness.state_mut().state.step_to(OpPosition::new(0, 2));
     settle(&mut harness);
     // The isolation card and the stepper both describe page 1.
     let chips = texts_in(&harness, Region::Center, Role::Label);
     assert!(chips.contains(&"Isolated: Tj".to_owned()), "{chips:?}");
-    assert!(has_label(&harness, "step 3 / 28"));
+    // The stepper walks the whole document: 40 pages of 28 operators.
+    assert!(has_label(&harness, "step 3 / 1120"));
 
     harness.state_mut().state.go_to_page(1);
     settle(&mut harness);
     wait_for_render(&mut harness);
 
-    // The isolation is dropped; the stepper stays on and is kept inside the new page.
-    assert_eq!(harness.state().state.canvas.view.isolation, None);
-    assert!(harness.state().state.canvas.view.stepper);
-    let last = harness.state().state.last_op(1).unwrap();
-    assert!(harness.state().state.canvas.view.step <= last);
-    assert_eq!(
-        harness.state().state.shown_request().unwrap().content,
-        ContentFilter::UpTo(harness.state().state.canvas.view.step)
-    );
+    // The isolation is dropped; the stepper stays on, where it was: page 1, operator 2. The
+    // page now on the canvas is painted whole.
+    let state = &harness.state().state;
+    assert_eq!(state.canvas.view.isolation, None);
+    assert!(state.canvas.view.stepper);
+    assert_eq!(state.canvas.view.step, OpPosition::new(0, 2));
+    assert_eq!(state.shown_request().unwrap().content, ContentFilter::All);
+    let doc = Document::open(fixture_path("long-doc")).unwrap();
+    assert_eq!(state.canvas.view.content_filter(&doc, 0), ContentFilter::UpTo(2));
+    // smoke: the count is the same wherever the canvas is
+    assert!(has_label(&harness, "step 3 / 1120"));
 }
 
 #[test]
@@ -486,7 +489,7 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     press(&mut harness, "Paint order");
 
     // It starts after the last operator, which is the full page.
-    assert_eq!(harness.state().state.canvas.view.step, last);
+    assert_eq!(harness.state().state.canvas.view.step, OpPosition::new(0, last));
     assert_eq!(
         harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: last })
@@ -575,7 +578,7 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
         harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 38 })
     );
-    harness.state_mut().state.step_to(0);
+    harness.state_mut().state.step_to(OpPosition::new(0, 0));
     settle(&mut harness);
     assert!(
         the(&harness, Region::Center, Role::Button, "Previous operator")
@@ -583,12 +586,12 @@ fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
             .is_disabled()
     );
     harness.state_mut().state.step_by(-5);
-    assert_eq!(harness.state().state.canvas.view.step, 0);
+    assert_eq!(harness.state().state.canvas.view.step, OpPosition::new(0, 0));
     harness.state_mut().state.step_by(1000);
-    assert_eq!(harness.state().state.canvas.view.step, last);
+    assert_eq!(harness.state().state.canvas.view.step, OpPosition::new(0, last));
 
     // Turning it off shows the whole page again but keeps the selection.
-    harness.state_mut().state.step_to(10);
+    harness.state_mut().state.step_to(OpPosition::new(0, 10));
     wait_for_render_after_step(&mut harness);
     press(&mut harness, "Paint order");
     assert!(!harness.state().state.canvas.view.stepper);
@@ -616,7 +619,7 @@ fn the_stepper_starts_at_the_selected_operator_and_outlines_what_it_painted() {
 
     press(&mut harness, "Paint order");
 
-    assert_eq!(harness.state().state.canvas.view.step, 3);
+    assert_eq!(harness.state().state.canvas.view.step, OpPosition::new(0, 3));
     assert_eq!(
         harness.state().state.selection.primary().cloned(),
         Some(NodeId::Op { page: 0, ix: 3 })

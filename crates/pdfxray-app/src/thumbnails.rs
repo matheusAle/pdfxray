@@ -2,11 +2,12 @@
 //! own, so scrolling a long strip never waits for the page on the canvas (or the other way
 //! round).
 //!
-//! Like [`crate::page_cache`], the thread owns its copy of the document. It renders the page
+//! Like [`crate::page_cache`], the thread shares the UI's document. It renders the page
 //! asked for last first: the ones that scrolled into view matter most.
 
 use std::collections::{HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
@@ -28,14 +29,14 @@ struct Worker {
 }
 
 impl Worker {
-    fn spawn(ctx: &Context, doc: &Document) -> Option<Self> {
-        let bytes = doc.bytes().to_vec();
+    fn spawn(ctx: &Context, doc: &Arc<Document>) -> Option<Self> {
+        let doc = Arc::clone(doc);
         let (jobs, jobs_rx) = mpsc::channel();
         let (done_tx, done) = mpsc::channel();
         let ctx = ctx.clone();
         thread::Builder::new()
             .name("pdfxray-thumbnails".to_owned())
-            .spawn(move || work(&ctx, bytes, &jobs_rx, &done_tx))
+            .spawn(move || work(&ctx, &doc, &jobs_rx, &done_tx))
             // A thumbnail is only a picture of the page: the strip shows the page without one,
             // and the canvas reports a page that cannot be rendered.
             .ok()?;
@@ -44,10 +45,7 @@ impl Worker {
 }
 
 /// Body of the thread: renders the page asked for last, until the UI hangs up.
-fn work(ctx: &Context, bytes: Vec<u8>, jobs: &Receiver<PageIx>, done: &Sender<Done>) {
-    // The UI opened these bytes already; if this copy fails, every thumbnail is left blank and
-    // the canvas says why the pages cannot be rendered.
-    let doc = Document::from_bytes("thumbnails", bytes).ok();
+fn work(ctx: &Context, doc: &Document, jobs: &Receiver<PageIx>, done: &Sender<Done>) {
     let mut stack: Vec<PageIx> = Vec::new();
     loop {
         if stack.is_empty() {
@@ -60,11 +58,9 @@ fn work(ctx: &Context, bytes: Vec<u8>, jobs: &Receiver<PageIx>, done: &Sender<Do
         let Some(page) = stack.pop() else {
             continue;
         };
-        let texture = doc.as_ref().and_then(|doc| {
-            catch_unwind(AssertUnwindSafe(|| render(ctx, doc, page)))
-                .ok()
-                .flatten()
-        });
+        let texture = catch_unwind(AssertUnwindSafe(|| render(ctx, doc, page)))
+            .ok()
+            .flatten();
         if done.send((page, texture)).is_err() {
             return;
         }
@@ -121,7 +117,7 @@ impl Thumbnails {
     }
 
     /// The bitmap of `page`, once it is rendered; asks the thread for it the first time.
-    pub(crate) fn get(&mut self, ctx: &Context, doc: &Document, page: PageIx) -> Option<TextureHandle> {
+    pub(crate) fn get(&mut self, ctx: &Context, doc: &Arc<Document>, page: PageIx) -> Option<TextureHandle> {
         self.poll();
         if let Some(texture) = self.ready.get(&page) {
             return texture.clone();
@@ -139,5 +135,33 @@ impl Thumbnails {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::test_support::{fixture, wait_until};
+
+    #[test]
+    fn the_thumbnail_thread_draws_from_the_uis_document_and_lets_go_of_it_when_cleared() {
+        let ctx = Context::default();
+        let doc = Arc::new(fixture("struct-rich"));
+        let mut thumbnails = Thumbnails::default();
+
+        let first = thumbnails.get(&ctx, &doc, 0);
+        let while_live = Arc::strong_count(&doc);
+        let texture = wait_until(|| thumbnails.get(&ctx, &doc, 0));
+        thumbnails.clear();
+        wait_until(|| (Arc::strong_count(&doc) == 1).then_some(()));
+
+        assert!(first.is_none(), "the first ask goes to the thread");
+        assert_eq!(while_live, 2, "the UI and the thumbnail thread hold one document");
+        assert_eq!(Arc::strong_count(&doc), 1, "the thread let go after clear()");
+        // smoke: the thumbnail is a real bitmap, longest side as configured
+        let [w, h] = texture.size();
+        assert_eq!(w.max(h), 120, "LONGEST_SIDE pixels along the longest side");
     }
 }

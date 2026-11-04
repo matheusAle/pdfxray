@@ -161,7 +161,7 @@ impl Document {
                     .with_children(children),
             );
         }
-        if let Some(run) = &self.validation {
+        if let Some(run) = self.validation() {
             let children = run
                 .findings
                 .iter()

@@ -39,7 +39,7 @@ pub(super) struct Ghost {
     label: Option<(Rect, String)>,
 }
 
-/// The ghosts for the stepper's position; none while the stepper is off.
+/// The ghosts for the stepper's position, on the page it is on; none while the stepper is off.
 pub(super) fn collect(state: &AppState) -> Ghost {
     let view = &state.canvas.view;
     if !view.stepper {
@@ -48,12 +48,12 @@ pub(super) fn collect(state: &AppState) -> Ghost {
     let Some(captured) = state
         .document
         .as_ref()
-        .and_then(|loaded| loaded.doc.captured(state.canvas.page))
+        .and_then(|loaded| loaded.doc.captured(view.step.page))
     else {
         return Ghost::default();
     };
     let mut ghost = Ghost::default();
-    for op in captured.ops.iter().filter(|op| op.ix > view.step) {
+    for op in captured.ops.iter().filter(|op| op.ix > view.step.ix) {
         let Some(first) = op.first_item.and_then(|f| usize::try_from(f).ok()) else {
             continue;
         };
@@ -75,7 +75,7 @@ pub(super) fn collect(state: &AppState) -> Ghost {
         };
         if ghost.label.is_none() {
             let last = captured.ops.last().map_or(op.ix, |last| last.ix);
-            ghost.label = Some((union, not_painted_yet(view.step + 1, last)));
+            ghost.label = Some((union, not_painted_yet(view.step.ix + 1, last)));
         }
         if ghost.boxes.len() < MAX_GHOSTS {
             ghost.boxes.push(union);
@@ -96,7 +96,7 @@ pub fn painting_now(state: &AppState) -> Option<String> {
     let Some(NodeId::Op { page, ix }) = state.selection.primary() else {
         return None;
     };
-    if !view.stepper || *page != state.canvas.page || *ix != view.step {
+    if !view.stepper || *page != view.step.page || *ix != view.step.ix {
         return None;
     }
     let captured = state.document.as_ref()?.doc.captured(*page)?;
@@ -163,6 +163,7 @@ pub(super) fn legend(ui: &mut Ui) {
 
 #[cfg(test)]
 mod tests {
+    use pdfxray_core::OpPosition;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -172,7 +173,7 @@ mod tests {
         let mut state = AppState::default();
         install_fixture(&mut state, fixture);
         state.set_stepper(true);
-        state.step_to(step);
+        state.step_to(OpPosition::new(0, step));
         state
     }
 
@@ -197,7 +198,7 @@ mod tests {
         assert_eq!(collect(&state).boxes.len(), 0);
         assert_eq!(collect(&state).label, None);
 
-        state.step_to(10);
+        state.step_to(OpPosition::new(0, 10));
         state.set_stepper(false);
         assert_eq!(collect(&state).boxes.len(), 0);
     }
@@ -211,21 +212,21 @@ mod tests {
         );
 
         // Operands are part of the name.
-        state.step_to(59);
+        state.step_to(OpPosition::new(0, 59));
         assert_eq!(
             painting_now(&state).as_deref(),
             Some("▶ op #59 · sh /Sh1 · painting now")
         );
 
         // An operator that paints nothing is not painting now.
-        state.step_to(2);
+        state.step_to(OpPosition::new(0, 2));
         assert_eq!(painting_now(&state), None);
-        state.step_to(49);
+        state.step_to(OpPosition::new(0, 49));
 
         // Another selection is not the operator painting now.
         state.select(NodeId::Op { page: 0, ix: 3 });
         assert_eq!(painting_now(&state), None);
-        state.step_to(5);
+        state.step_to(OpPosition::new(0, 5));
         state.set_stepper(false);
         assert_eq!(painting_now(&state), None);
     }

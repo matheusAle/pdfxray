@@ -18,7 +18,7 @@ mod view_tools;
 
 use common::{
     Region, app, builder, buttons_in, canvas_view, click_at, click_rail, digest, expected_digest,
-    fixture_path, has_label, is_selected, open_fixture, texts_in, the, wait_for_render,
+    fixture_path, has_label, is_selected, open_fixture, open_path, texts_in, the, wait_for_render,
 };
 use egui::{Event, Key, Modifiers, MouseWheelUnit, Rect, Role, Vec2, pos2, vec2};
 use egui_kittest::Harness;
@@ -26,10 +26,14 @@ use egui_kittest::kittest::{NodeT, Queryable};
 use pdfxray_app::center::canvas::cards::mini_text;
 use pdfxray_app::center::canvas::paint_order::{LEGEND_ENTRIES, LEGEND_TITLE, painting_now};
 use pdfxray_app::components::StepTrack;
-use pdfxray_app::drawer::paint_order::{FOLLOW_LABEL, SKIP_LABEL, card_label, position_text};
+use pdfxray_app::drawer::paint_order::{FOLLOW_LABEL, SKIP_LABEL, at_text, card_label, position_text};
 use pdfxray_app::inspector::paint_order as section;
+use pdfxray_app::view::ZoomMode;
 use pdfxray_app::{DrawerTab, PdfxrayApp, RailItem};
-use pdfxray_core::{Document, NodeId};
+use pdfxray_core::{Document, NodeId, OpPosition};
+use pdfxray_fixtures::paint_pages::{
+    PAINT_PAGES_BLUE_FILL, PAINT_PAGES_FIRST_OPS, PAINT_PAGES_RED_FILL, two_overlapping_pages,
+};
 use pdfxray_render::ContentFilter;
 use pretty_assertions::assert_eq;
 
@@ -67,8 +71,11 @@ fn start_at(harness: &mut Harness<'_, PdfxrayApp>, ix: u32) {
     wait_for_render(harness);
 }
 
+/// The operator the stepper is at, on page 1: every test here steps on the first page.
 fn step(harness: &Harness<'_, PdfxrayApp>) -> u32 {
-    harness.state().state.canvas.view.step
+    let at = harness.state().state.canvas.view.step;
+    assert_eq!(at.page, 0, "the stepper left page 1");
+    at.ix
 }
 
 fn selected_op(harness: &Harness<'_, PdfxrayApp>) -> Option<NodeId> {
@@ -183,7 +190,7 @@ fn the_arrows_stop_at_the_first_and_last_operator() {
 
     press(&mut harness, Key::ArrowRight);
     assert_eq!(step(&harness), 79);
-    harness.state_mut().state.step_to(0);
+    harness.state_mut().state.step_to(OpPosition::new(0, 0));
     settle(&mut harness);
     press(&mut harness, Key::ArrowLeft);
     assert_eq!(step(&harness), 0);
@@ -484,10 +491,10 @@ fn the_cards_show_the_operators_around_the_current_one_and_a_click_steps_there()
     assert_eq!(step(&harness), 47);
 
     // At the ends there are fewer cards: nothing before the first operator.
-    harness.state_mut().state.step_to(0);
+    harness.state_mut().state.step_to(OpPosition::new(0, 0));
     settle(&mut harness);
     assert_eq!(names(&harness).len(), 3);
-    harness.state_mut().state.step_to(79);
+    harness.state_mut().state.step_to(OpPosition::new(0, 79));
     settle(&mut harness);
     assert_eq!(names(&harness).len(), 5);
 }
@@ -554,7 +561,7 @@ fn the_canvas_shows_the_page_painted_up_to_the_step() {
     let mut harness = opened("graphics-state");
     start_at(&mut harness, 3);
     let before = digest(&harness);
-    harness.state_mut().state.step_to(12);
+    harness.state_mut().state.step_to(OpPosition::new(0, 12));
     settle(&mut harness);
     wait_for_render(&mut harness);
     assert_ne!(digest(&harness), before);
@@ -688,15 +695,15 @@ fn two_painting_ops(doc: &Document) -> (u32, u32) {
     (first, doc.next_visible_change(0, first, true).unwrap())
 }
 
-/// Where operator `ix` of page 1 is drawn on screen, from where the page is drawn and the
-/// operator's box. `None` while page 1 is not drawn.
-fn op_on_screen(harness: &Harness<'_, PdfxrayApp>, doc: &Document, ix: u32) -> Option<Rect> {
+/// Where operator `at` is drawn on screen, from where its page is drawn and the operator's box.
+/// `None` while its page is not drawn.
+fn op_on_screen(harness: &Harness<'_, PdfxrayApp>, doc: &Document, at: OpPosition) -> Option<Rect> {
     let page = harness
-        .query_by_role_and_label(Role::Image, "Page 1 canvas")?
+        .query_by_role_and_label(Role::Image, &format!("Page {} canvas", at.page + 1))?
         .rect();
-    let info = doc.page(0).unwrap();
+    let info = doc.page(at.page).unwrap();
     assert_eq!(info.rotate, 0, "the mapping below is for an upright page");
-    let (_, bbox) = doc.bbox(&op(ix)).unwrap();
+    let (_, bbox) = doc.bbox(&NodeId::from(at)).unwrap();
     let crop = info.crop_box;
     // Page space is y-up from the crop box's corner; the screen is y-down from the page's.
     let at = |x: f64, y: f64| {
@@ -733,7 +740,7 @@ fn scrolling_the_canvas_leaves_the_stepper_on_its_page_and_step() {
     assert_eq!(step(&harness), 5);
     assert_eq!(selected_op(&harness), Some(op(5)));
     let doc = doc("long-doc");
-    let filter = |page| state.canvas.view.content_filter(&doc, page, state.canvas.page);
+    let filter = |page| state.canvas.view.content_filter(&doc, page);
     assert_eq!(filter(0), ContentFilter::UpTo(5));
     assert_eq!(filter(5), ContentFilter::All);
     assert!(has_label(&harness, &mini_text(6, total)));
@@ -761,7 +768,10 @@ fn with_follow_step_a_step_out_of_view_scrolls_to_what_it_paints() {
     scroll_canvas(&mut harness, -40.0);
     let still = offset(&harness);
     assert!(still.y > 0.0);
-    assert!(canvas_view(&harness).contains_rect(op_on_screen(&harness, &doc, second).unwrap()));
+    assert!(
+        canvas_view(&harness)
+            .contains_rect(op_on_screen(&harness, &doc, OpPosition::new(0, second)).unwrap())
+    );
     harness.key_press_modifiers(Modifiers::SHIFT, Key::ArrowRight);
     settle(&mut harness);
     assert_eq!(step(&harness), second);
@@ -769,7 +779,7 @@ fn with_follow_step_a_step_out_of_view_scrolls_to_what_it_paints() {
 
     // Scrolled away, a step back brings it into view.
     scroll_canvas(&mut harness, -3000.0);
-    assert!(op_on_screen(&harness, &doc, first).is_none());
+    assert!(op_on_screen(&harness, &doc, OpPosition::new(0, first)).is_none());
     let away = offset(&harness);
     harness.key_press_modifiers(Modifiers::SHIFT, Key::ArrowLeft);
     settle(&mut harness);
@@ -777,7 +787,7 @@ fn with_follow_step_a_step_out_of_view_scrolls_to_what_it_paints() {
     settle(&mut harness);
 
     assert_eq!(step(&harness), first);
-    let shown = op_on_screen(&harness, &doc, first).expect("page 1 is in view again");
+    let shown = op_on_screen(&harness, &doc, OpPosition::new(0, first)).expect("page 1 is in view again");
     let view = canvas_view(&harness);
     assert!(view.contains_rect(shown), "{shown:?} is not inside {view:?}");
     // Smoke: the stepper's page stayed the current one, and the canvas scrolled back up to it.
@@ -814,10 +824,214 @@ fn without_follow_step_stepping_leaves_the_view_where_it_is() {
     assert_eq!(step(&harness), second);
     assert_eq!(selected_op(&harness), Some(op(second)));
     assert_eq!(offset(&harness), away);
-    assert!(op_on_screen(&harness, &doc, second).is_none());
+    assert!(op_on_screen(&harness, &doc, OpPosition::new(0, second)).is_none());
     // Smoke: playing (another way to change the step) does not move the view either.
     harness.key_press(Key::Space);
     settle(&mut harness);
     assert!(step(&harness) > second);
     assert_eq!(offset(&harness), away);
+}
+
+/// Zooms the canvas to `zoom` by hand, as the zoom buttons do, and lets it redraw.
+fn zoom_to(harness: &mut Harness<'_, PdfxrayApp>, zoom: f32) {
+    harness.state_mut().state.set_zoom(zoom);
+    settle(harness);
+    wait_for_render(harness);
+}
+
+/// Steps until the canvas has scrolled to the step and drawn its page.
+fn settle_on_step(harness: &mut Harness<'_, PdfxrayApp>) {
+    settle(harness);
+    wait_for_render(harness);
+    settle(harness);
+}
+
+#[test]
+fn a_step_onto_the_next_page_scrolls_what_it_paints_into_view_at_the_same_zoom() {
+    let doc = doc("long-doc");
+    let mut harness = opened("long-doc");
+    zoom_to(&mut harness, 2.0);
+    // Page 1's last Tj; long-doc runs 28 operators a page, the Tjs at 4, 11, 18 and 25.
+    start_at(&mut harness, 25);
+    the(&harness, Region::Drawer, Role::Switch, SKIP_LABEL).click();
+    settle(&mut harness);
+    let zoom = harness.state().state.canvas.zoom;
+
+    press(&mut harness, Key::ArrowRight);
+    settle_on_step(&mut harness);
+
+    let state = &harness.state().state;
+    let at = state.canvas.view.step;
+    let shown = op_on_screen(&harness, &doc, at).expect("page 2 is drawn");
+    let view = canvas_view(&harness);
+    assert_eq!(
+        at,
+        OpPosition::new(1, 4),
+        "past page 1's end to page 2's first Tj"
+    );
+    assert!(view.contains_rect(shown), "{shown:?} is not inside {view:?}");
+    assert!(
+        (state.canvas.zoom - zoom).abs() < f32::EPSILON,
+        "the zoom is kept: {zoom} -> {}",
+        state.canvas.zoom
+    );
+    assert_eq!(state.canvas.zoom_mode, ZoomMode::Manual);
+    assert_eq!(state.canvas.page, 1);
+    assert_eq!(selected_op(&harness), Some(NodeId::Op { page: 1, ix: 4 }));
+    // smoke: the drawer counts the whole document and says where the step is
+    assert!(has_label(&harness, &position_text(28 + 4 + 1, 40 * 28)));
+    assert!(has_label(&harness, &at_text(at)));
+    assert!(has_label(&harness, &mini_text(28 + 4 + 1, 40 * 28)));
+}
+
+#[test]
+fn the_track_spans_every_page_and_dragging_it_shows_the_page_it_lands_on() {
+    let doc = doc("long-doc");
+    let mut harness = opened("long-doc");
+    zoom_to(&mut harness, 1.5);
+    start_at(&mut harness, 0);
+    let zoom = harness.state().state.canvas.zoom;
+    let last = harness.state().state.last_step_index().unwrap();
+    let track = the(&harness, Region::Drawer, Role::Slider, TRACK).rect();
+    let at = |fraction: f32| {
+        let start = StepTrack::x_of(track, 0, last);
+        let end = StepTrack::x_of(track, last, last);
+        pos2(start + (end - start) * fraction, track.center().y)
+    };
+
+    harness.drag_at(at(0.0));
+    harness.step();
+    harness.hover_at(at(1.0));
+    harness.step();
+    harness.drop_at(at(1.0));
+    settle_on_step(&mut harness);
+
+    let state = &harness.state().state;
+    let end = state.canvas.view.step;
+    assert_eq!(last, 40 * 28 - 1);
+    assert_eq!(
+        end,
+        OpPosition::new(39, 27),
+        "the end of the track is the last page's last op"
+    );
+    assert_eq!(state.canvas.page, 39);
+    assert!(
+        (state.canvas.zoom - zoom).abs() < f32::EPSILON,
+        "the zoom is kept: {zoom} -> {}",
+        state.canvas.zoom
+    );
+    // EMC paints nothing, so its box is the empty one at the page's origin: the page holding it
+    // is what has to be in view.
+    let page = harness
+        .query_by_role_and_label(Role::Image, "Page 40 canvas")
+        .expect("page 40 is drawn")
+        .rect();
+    assert!(page.intersects(canvas_view(&harness)));
+
+    // A click a quarter along lands on the operator a quarter through the document.
+    click_at(&mut harness, at(0.25));
+    settle_on_step(&mut harness);
+    let quarter = (f64::from(last) * 0.25).round() as u32;
+    let state = &harness.state().state;
+    assert_eq!(state.step_index(), Some(quarter));
+    assert_eq!(state.canvas.view.step, doc.op_at(quarter).unwrap());
+    // smoke: the step's page is the one on the canvas, and it is cut at the step
+    let step = state.canvas.view.step;
+    assert_eq!(state.canvas.page, step.page);
+    assert_eq!(
+        state.canvas.view.content_filter(&doc, step.page),
+        ContentFilter::UpTo(step.ix)
+    );
+    assert_eq!(
+        state.canvas.view.content_filter(&doc, step.page + 1),
+        ContentFilter::All
+    );
+}
+
+/// [`two_overlapping_pages`], written once to a file the app can open, opened at [`ROOMY`].
+fn opened_two_pages() -> Harness<'static, PdfxrayApp> {
+    let dir = std::env::temp_dir().join("pdfxray-paint-order");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("two-overlapping-pages.pdf");
+    let bytes = two_overlapping_pages().unwrap();
+    if std::fs::read(&path).ok().as_deref() != Some(&bytes[..]) {
+        std::fs::write(&path, bytes).unwrap();
+    }
+    let mut harness = app();
+    open_path(&mut harness, path);
+    harness.state_mut().state.set_zoom(ROOMY);
+    settle(&mut harness);
+    wait_for_render(&mut harness);
+    harness
+}
+
+#[test]
+fn on_a_later_page_the_inspector_links_and_the_cards_step_on_that_page() {
+    let (red, blue) = (PAINT_PAGES_RED_FILL, PAINT_PAGES_BLUE_FILL);
+    let mut harness = opened_two_pages();
+    harness.state_mut().state.select(NodeId::Op { page: 1, ix: red });
+    settle(&mut harness);
+    harness.key_press(Key::P);
+    settle_on_step(&mut harness);
+    let started = harness.state().state.canvas.view.step;
+    let covered_by = inspector_value(&harness, "Covered later by");
+
+    // The link to the covering operator: page 2's blue fill, not operator 5 of page 1.
+    the(&harness, Region::Inspector, Role::Label, &format!("op #{blue} f")).click();
+    settle(&mut harness);
+    let after_link = harness.state().state.canvas.view.step;
+    // A stack row back to the red fill.
+    the(&harness, Region::Inspector, Role::Button, &format!("#{red} f")).click();
+    settle(&mut harness);
+    let after_row = harness.state().state.canvas.view.step;
+    // A card: page 2's `re` of the blue square, operator 4.
+    the(&harness, Region::Drawer, Role::Button, &card_label(4, "re")).click();
+    settle(&mut harness);
+    let after_card = harness.state().state.canvas.view.step;
+
+    assert_eq!(started, OpPosition::new(1, red));
+    assert_eq!(covered_by, Some(format!("op #{blue} f")));
+    assert_eq!(after_link, OpPosition::new(1, blue));
+    assert_eq!(after_row, OpPosition::new(1, red));
+    assert_eq!(after_card, OpPosition::new(1, 4));
+    assert_eq!(selected_op(&harness), Some(NodeId::Op { page: 1, ix: 4 }));
+    // smoke: the count is the place in the whole document, after page 1's operators
+    assert!(has_label(
+        &harness,
+        &position_text(PAINT_PAGES_FIRST_OPS + 4 + 1, PAINT_PAGES_FIRST_OPS + 6)
+    ));
+}
+
+/// A selection made elsewhere (the Content tree, a link) of an operator with no box still shows
+/// its page, at the same zoom. The stepper's version of this, which goes through the canvas's
+/// reveal of a selection without a box, is covered by
+/// `the_track_spans_every_page_and_dragging_it_shows_the_page_it_lands_on`.
+#[test]
+fn selecting_an_operator_that_paints_nothing_on_a_page_out_of_view_scrolls_to_its_page() {
+    let mut harness = opened("long-doc");
+    let zoom = harness.state().state.canvas.zoom;
+    assert!(
+        harness
+            .query_by_role_and_label(Role::Image, "Page 40 canvas")
+            .is_none(),
+        "page 40 starts out of view"
+    );
+
+    // Page 40's last operator, an EMC: no box to outline, without the stepper.
+    harness.state_mut().state.select(NodeId::Op { page: 39, ix: 27 });
+    settle_on_step(&mut harness);
+
+    let page = harness
+        .query_by_role_and_label(Role::Image, "Page 40 canvas")
+        .expect("page 40 is drawn");
+    let state = &harness.state().state;
+    assert!(page.rect().intersects(canvas_view(&harness)));
+    assert!(
+        (state.canvas.zoom - zoom).abs() < f32::EPSILON,
+        "the zoom is kept: {zoom} -> {}",
+        state.canvas.zoom
+    );
+    assert!(!state.canvas.view.stepper);
+    // smoke: nothing is left waiting to be revealed
+    assert!(!state.canvas.reveal_pending());
 }

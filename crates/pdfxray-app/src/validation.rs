@@ -558,8 +558,7 @@ impl AppState {
             .document
             .as_ref()
             .and_then(|l| l.doc.validation())
-            .and_then(|run| run.findings.get(usize_from_u32(index)))
-            .map(|f| f.target.clone());
+            .and_then(|run| Some(run.findings.get(usize_from_u32(index))?.target.clone()));
         let Some(target) = target else {
             return;
         };

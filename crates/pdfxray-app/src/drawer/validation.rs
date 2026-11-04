@@ -62,7 +62,7 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     }
     let widths = [STATUS_W, RULE_W, what_width(ui.available_width()), NODE_W, PAGE_W];
     table::header(ui, &widths, &["", "rule", "what failed", "node", "page"]);
-    let order = findings::order(run);
+    let order = findings::order(&run);
     let current = state.current_finding();
     let reveal = std::mem::take(&mut state.validation.reveal_in_table);
     let mut clicked = None;

@@ -1,8 +1,8 @@
 //! Rendered pages: a background render thread and a small cache of the bitmaps it produced.
 //!
 //! The UI never rasterises. [`PageCache::get`] answers from the cache or sends the
-//! [`RenderRequest`] to the render thread, which owns its own copy of the document (a
-//! [`Document`] cannot be shared while validation results are attached to the UI's copy). The
+//! [`RenderRequest`] to the render thread, which renders from the very [`Document`] the UI holds
+//! (a shared `Arc`, so the file is opened once however many threads draw from it). The
 //! canvas shows several pages at once, so the thread renders the newest request of every page
 //! that asked while it was busy, in the order they asked. Until a page's new bitmap is there its
 //! previous one keeps being shown.
@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use egui::{ColorImage, Context, TextureHandle, TextureOptions};
 use pdfxray_core::numeric::usize_from_u32;
-use pdfxray_core::{CoreError, Document, PageIx};
+use pdfxray_core::{Document, PageIx};
 use pdfxray_render::{RenderError, RenderedPage, Transform, render_page};
 
 use crate::modes::RenderRequest;
@@ -55,9 +55,6 @@ pub(crate) enum RenderFailure {
     /// The renderer panicked on this page.
     #[error("the renderer crashed on this page")]
     Crashed,
-    /// The render thread could not open its copy of the document.
-    #[error(transparent)]
-    Open(Arc<CoreError>),
     /// The renderer refused the page.
     #[error(transparent)]
     Render(#[from] RenderError),
@@ -94,14 +91,14 @@ struct Worker {
 }
 
 impl Worker {
-    fn spawn(ctx: &Context, doc: &Document) -> Result<Self, RenderFailure> {
-        let bytes = doc.bytes().to_vec();
+    fn spawn(ctx: &Context, doc: &Arc<Document>) -> Result<Self, RenderFailure> {
+        let doc = Arc::clone(doc);
         let (jobs, jobs_rx) = mpsc::channel();
         let (done_tx, done) = mpsc::channel();
         let ctx = ctx.clone();
         thread::Builder::new()
             .name("pdfxray-render".to_owned())
-            .spawn(move || work(&ctx, bytes, &jobs_rx, &done_tx))
+            .spawn(move || work(&ctx, &doc, &jobs_rx, &done_tx))
             .map_err(|e| RenderFailure::Spawn(Arc::new(e)))?;
         Ok(Self { jobs, done })
     }
@@ -109,17 +106,13 @@ impl Worker {
 
 /// Body of the render thread: renders the newest request of each page that asked, until the UI
 /// hangs up.
-fn work(ctx: &Context, bytes: Vec<u8>, jobs: &Receiver<RenderRequest>, done: &Sender<Done>) {
-    let doc = Document::from_bytes("render", bytes).map_err(|e| RenderFailure::Open(Arc::new(e)));
+fn work(ctx: &Context, doc: &Document, jobs: &Receiver<RenderRequest>, done: &Sender<Done>) {
     while let Ok(first) = jobs.recv() {
         let mut batch = vec![first];
         batch.extend(jobs.try_iter());
         for request in newest_per_page(batch) {
-            let result = match &doc {
-                Ok(doc) => catch_unwind(AssertUnwindSafe(|| render(ctx, doc, &request)))
-                    .unwrap_or(Err(RenderFailure::Crashed)),
-                Err(failure) => Err(failure.clone()),
-            };
+            let result = catch_unwind(AssertUnwindSafe(|| render(ctx, doc, &request)))
+                .unwrap_or(Err(RenderFailure::Crashed));
             if done.send((request, result)).is_err() {
                 return;
             }
@@ -239,7 +232,7 @@ impl PageCache {
     }
 
     /// The bitmap for `request`; asks the thread for it on a miss.
-    pub(crate) fn get(&mut self, ctx: &Context, doc: &Document, request: RenderRequest) -> Frame {
+    pub(crate) fn get(&mut self, ctx: &Context, doc: &Arc<Document>, request: RenderRequest) -> Frame {
         self.poll();
         if let Some(at) = self.entries.iter().position(|(key, _)| *key == request) {
             let entry = self.entries.remove(at);
@@ -265,7 +258,7 @@ impl PageCache {
     fn submit(
         &mut self,
         ctx: &Context,
-        doc: &Document,
+        doc: &Arc<Document>,
         request: &RenderRequest,
     ) -> Result<(), RenderFailure> {
         if self.outstanding.get(&request.page) == Some(request) {
@@ -292,6 +285,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::test_support::{fixture, wait_until};
     use crate::view::render_scale;
 
     fn request(page: PageIx, scale: f32) -> RenderRequest {
@@ -343,5 +337,36 @@ mod tests {
             std::error::Error::source(&spawn).map(ToString::to_string),
             Some("no more threads".to_owned())
         );
+    }
+
+    #[test]
+    fn the_render_thread_draws_from_the_uis_document_and_lets_go_of_it_when_cleared() {
+        let ctx = Context::default();
+        let doc = Arc::new(fixture("struct-rich"));
+        let mut cache = PageCache::default();
+        let page0 = request(0, 1.0);
+
+        let first = cache.get(&ctx, &doc, page0.clone());
+        let while_live = Arc::strong_count(&doc);
+        let digest = wait_until(|| match cache.get(&ctx, &doc, page0.clone()) {
+            Frame::Ready(page) => Some(page.digest),
+            _ => None,
+        });
+        cache.clear();
+        wait_until(|| (Arc::strong_count(&doc) == 1).then_some(()));
+        // The bitmap a separately opened copy gives, i.e. what the thread rendered before it
+        // shared the UI's document.
+        let copy = fixture("struct-rich");
+        let expected = pixel_digest(&render_page(&copy, 0, &page0.spec(&copy)).unwrap().rgba);
+
+        assert!(
+            matches!(first, Frame::Rendering),
+            "the first ask goes to the thread"
+        );
+        assert_eq!(while_live, 2, "the UI and the render thread hold one document");
+        assert_eq!(Arc::strong_count(&doc), 1, "the thread let go after clear()");
+        assert_eq!(cache.renders(), 1);
+        // smoke: sharing the document changed no pixel of page 0
+        assert_eq!(digest, expected);
     }
 }

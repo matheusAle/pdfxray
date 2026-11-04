@@ -12,7 +12,7 @@ mod report;
 
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use hayro_syntax::page::Page;
 use hayro_syntax::{LoadPdfError, Pdf};
@@ -42,7 +42,10 @@ pub struct Document {
     pub(crate) engine: Result<Pdf, EngineError>,
     pub(crate) pages: Vec<PageInfo>,
     pub(crate) diagnostics: Vec<DiagnosticInfo>,
-    pub(crate) validation: Option<ValidationRun>,
+    /// The attached validation run. Behind a lock so that a document shared between threads
+    /// (`Arc<Document>`) can still have a run attached: it is the only thing that changes after
+    /// the file is open.
+    validation: RwLock<Option<Arc<ValidationRun>>>,
     pub(crate) content: ContentIndex,
     pub(crate) tags: TagTree,
     trees: TreeCache,
@@ -209,7 +212,7 @@ impl Document {
             engine,
             pages,
             diagnostics,
-            validation: None,
+            validation: RwLock::default(),
             content,
             tags: TagTree::default(),
             trees: TreeCache::default(),

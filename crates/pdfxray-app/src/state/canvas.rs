@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 
 use egui::Vec2;
-use pdfxray_core::{BoxKind, LayerMode, NodeId, PageIx};
+use pdfxray_core::{BoxKind, LayerMode, NodeId, OpPosition, PageIx};
 
 use super::AppState;
 use super::marquee::Marquee;
@@ -160,7 +160,7 @@ impl CanvasState {
         self.hover = None;
         self.view.isolation = None;
         self.view.stepper = false;
-        self.view.step = 0;
+        self.view.step = OpPosition::default();
         self.selected_ops = None;
         self.zoom_mode = ZoomMode::Fit;
         self.page = 0;
@@ -178,8 +178,8 @@ impl AppState {
     }
 
     /// Makes `page` current without scrolling: the canvas does this when the view scrolls onto
-    /// another page or a page is clicked. Leaving a page drops its hit stack and isolation and
-    /// keeps the stepper inside the new page. False when there is no such page.
+    /// another page or a page is clicked. Leaving a page drops its hit stack and isolation; the
+    /// stepper stays where it is (it walks the whole document). False when there is no such page.
     pub(crate) fn set_current_page(&mut self, page: PageIx) -> bool {
         let in_range = usize::try_from(page).is_ok_and(|p| p < self.page_count());
         if in_range && page != self.canvas.page {
@@ -188,7 +188,6 @@ impl AppState {
             self.canvas.cursor = None;
             // Filters are per page.
             self.canvas.view.isolation = None;
-            self.clamp_step();
         }
         self.canvas.page_field = (self.canvas.page + 1).to_string();
         in_range

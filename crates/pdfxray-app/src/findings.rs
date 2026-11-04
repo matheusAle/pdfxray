@@ -171,7 +171,7 @@ impl AppState {
         let Some(run) = self.document.as_ref().and_then(|l| l.doc.validation()) else {
             return;
         };
-        let order = order(run);
+        let order = order(&run);
         let Some(last) = order.len().checked_sub(1) else {
             return;
         };

@@ -208,57 +208,112 @@ fn page_content(page: u32) -> String {
     out
 }
 
+/// Paragraphs per row of the dense page, laid out left to right.
+const DENSE_COLUMNS: u32 = 20;
+/// Horizontal distance between two paragraphs of a row, in points.
+const DENSE_COLUMN_W: u32 = 29;
+/// Vertical distance between two rows, in points (the text is 4 pt).
+const DENSE_LINE_H: u32 = 8;
+/// x of the first column, in points.
+const DENSE_LEFT: u32 = 10;
+/// Space above the first row's baseline and below the last one's, in points.
+const DENSE_MARGIN: u32 = 12;
+/// Width of the dense page, in points (US Letter).
+const DENSE_WIDTH: u32 = 612;
+/// Largest page side a conforming reader must support (ISO 32000-2, Annex C), in points.
+const MAX_PAGE_SIDE: u32 = 14_400;
+
+// Object numbers of the dense page's file; the paragraphs follow from `DENSE_FIRST_P` on.
+const DENSE_CATALOG: u32 = 1;
+const DENSE_PAGES: u32 = 2;
+const DENSE_FONT: u32 = 3;
+const DENSE_STRUCT_ROOT: u32 = 4;
+const DENSE_DOCUMENT: u32 = 5;
+const DENSE_PAGE: u32 = 6;
+const DENSE_PARENT_TREE: u32 = 7;
+const DENSE_CONTENT: u32 = 8;
+pub(crate) const DENSE_FIRST_P: u32 = 9;
+
+/// Height of the dense page holding `n` paragraphs: tall enough for every row, so the content
+/// never wraps back to the top and is read strictly top to bottom, left to right.
+pub(crate) fn dense_page_height(n: u32) -> u32 {
+    n.div_ceil(DENSE_COLUMNS) * DENSE_LINE_H + 2 * DENSE_MARGIN
+}
+
 /// One page holding `n` paragraphs, each with its own MCID, all children of one `Document`
 /// element: the shape that exposes anything quadratic in the number of MCIDs per page or
 /// children per element.
+///
+/// The paragraphs are laid out in reading order on a page as tall as they need (see
+/// [`dense_page_height`]), so a correct document yields no diagnostics: the file is dense, not
+/// broken.
+///
+/// # Panics
+///
+/// When `n` paragraphs need a page taller than [`MAX_PAGE_SIDE`] (more than 35 940).
 pub(crate) fn dense_page_pdf(n: u32) -> Vec<u8> {
-    let first = 6; // objects 1-5: catalog, pages, font, struct root, Document; then the page
-    let mut w = PdfWriter::new(PdfVersion::V1_7);
-    w.object(
-        1,
-        "<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R /MarkInfo << /Marked true >> >>",
+    let height = dense_page_height(n);
+    assert!(
+        height <= MAX_PAGE_SIDE,
+        "{n} paragraphs need a {height} pt page, above the {MAX_PAGE_SIDE} pt limit"
     );
-    w.object(
-        2,
-        "<< /Type /Pages /Kids [6 0 R] /Count 1 /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> >>",
-    );
-    w.object(3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-    w.object(
-        4,
-        "<< /Type /StructTreeRoot /K 5 0 R /ParentTree 7 0 R /ParentTreeNextKey 1 >>",
-    );
-    let kids: String = (0..n).fold(String::new(), |mut s, i| {
-        let _ = write!(s, "{} 0 R ", first + 3 + i);
+    let paragraphs: String = (0..n).fold(String::new(), |mut s, i| {
+        let _ = write!(s, "{} 0 R ", DENSE_FIRST_P + i);
         s
     });
-    w.object(
-        5,
-        format!("<< /Type /StructElem /S /Document /P 4 0 R /K [{kids}] >>"),
-    );
-    w.object(
-        6,
-        "<< /Type /Page /Parent 2 0 R /StructParents 0 /Contents 8 0 R >>",
-    );
-    let refs: String = (0..n).fold(String::new(), |mut s, i| {
-        let _ = write!(s, "{} 0 R ", first + 3 + i);
-        s
-    });
-    w.object(7, format!("<< /Nums [0 [{refs}]] >>"));
     let mut content = String::new();
     for i in 0..n {
-        let (x, y) = (10 + (i % 20) * 29, 780 - (i / 20 % 90) * 8);
+        let x = DENSE_LEFT + (i % DENSE_COLUMNS) * DENSE_COLUMN_W;
+        let y = height - DENSE_MARGIN - (i / DENSE_COLUMNS) * DENSE_LINE_H;
         let _ = writeln!(
             content,
             "/P << /MCID {i} >> BDC BT /F1 4 Tf {x} {y} Td (w{i}) Tj ET EMC"
         );
     }
-    w.stream(8, "", content.as_bytes());
+
+    let mut w = PdfWriter::new(PdfVersion::V1_7);
+    w.object(
+        DENSE_CATALOG,
+        format!(
+            "<< /Type /Catalog /Pages {DENSE_PAGES} 0 R /StructTreeRoot {DENSE_STRUCT_ROOT} 0 R \
+             /MarkInfo << /Marked true >> >>"
+        ),
+    );
+    w.object(
+        DENSE_PAGES,
+        format!(
+            "<< /Type /Pages /Kids [{DENSE_PAGE} 0 R] /Count 1 /MediaBox [0 0 {DENSE_WIDTH} {height}] \
+             /Resources << /Font << /F1 {DENSE_FONT} 0 R >> >> >>"
+        ),
+    );
+    w.object(
+        DENSE_FONT,
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    );
+    w.object(
+        DENSE_STRUCT_ROOT,
+        format!(
+            "<< /Type /StructTreeRoot /K {DENSE_DOCUMENT} 0 R /ParentTree {DENSE_PARENT_TREE} 0 R \
+             /ParentTreeNextKey 1 >>"
+        ),
+    );
+    w.object(
+        DENSE_DOCUMENT,
+        format!("<< /Type /StructElem /S /Document /P {DENSE_STRUCT_ROOT} 0 R /K [{paragraphs}] >>"),
+    );
+    w.object(
+        DENSE_PAGE,
+        format!("<< /Type /Page /Parent {DENSE_PAGES} 0 R /StructParents 0 /Contents {DENSE_CONTENT} 0 R >>"),
+    );
+    // The page's ParentTree entry lists the paragraphs in MCID order, like the Document's /K.
+    w.object(DENSE_PARENT_TREE, format!("<< /Nums [0 [{paragraphs}]] >>"));
+    w.stream(DENSE_CONTENT, "", content.as_bytes());
     for i in 0..n {
         w.object(
-            first + 3 + i,
-            format!("<< /Type /StructElem /S /P /P 5 0 R /Pg 6 0 R /K {i} >>"),
+            DENSE_FIRST_P + i,
+            format!("<< /Type /StructElem /S /P /P {DENSE_DOCUMENT} 0 R /Pg {DENSE_PAGE} 0 R /K {i} >>"),
         );
     }
-    w.finish_table(&Trailer::new(1)).unwrap();
+    w.finish_table(&Trailer::new(DENSE_CATALOG)).unwrap();
     w.into_output().unwrap().bytes
 }

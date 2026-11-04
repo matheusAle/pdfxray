@@ -32,7 +32,9 @@ mod test_support;
 mod tree;
 pub mod validation;
 
-pub use content::{ActualText, CharCode, Coverage, GlyphInfo, MAX_PAINT_STACK, PaintStep, UnicodeSource};
+pub use content::{
+    ActualText, CharCode, Coverage, GlyphInfo, MAX_PAINT_STACK, OpPosition, PaintStep, UnicodeSource,
+};
 pub use document::{DiagnosticInfo, DocInfo, Document, EngineError};
 pub use encryption::{EncryptionInfo, Permissions};
 pub use error::CoreError;

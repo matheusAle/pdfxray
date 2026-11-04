@@ -1,7 +1,8 @@
-//! The Paint order tab: the stepper. Buttons (first, previous, play, next, last), the position
-//! `211 / 377 ops`, the "Follow step" and "Skip state-only ops" switches, a scrubbable track with
-//! marks, and a row of cards for the operators around the current one: four before, the current
-//! one, two after.
+//! The Paint order tab: the stepper over the paint order of the whole document. Buttons (first,
+//! previous, play, next, last), the position `211 / 1 120 ops` with the page and operator it is
+//! at (`page 3 · op #42`), the "Follow step" and "Skip state-only ops" switches, a scrubbable
+//! track over every page's operators with marks, and a row of cards for the operators around the
+//! current one on its page: four before, the current one, two after.
 //!
 //! Clicking a card or the track moves the stepper there; the canvas, the tree, the breadcrumb
 //! and the inspector follow because the stepper selects the operator it stops at.
@@ -14,6 +15,7 @@ use egui::{
 use pdfxray_core::capture::{CapturedPage, OpRecord};
 use pdfxray_core::explain;
 use pdfxray_core::numeric::{f32_from_i64, f32_from_u32, usize_from_u32};
+use pdfxray_core::{OpPosition, PageIx};
 
 use super::operators::text_of;
 use crate::components::step_track::{StepTrack, Tick, TickKind};
@@ -48,8 +50,8 @@ pub const FOLLOW_LABEL: &str = "Follow step";
 /// What [`FOLLOW_LABEL`] does, in its tooltip.
 pub const FOLLOW_HINT: &str = "Scroll the canvas to what each step paints when it is out of view";
 
-/// Shown when the page has no captured operators.
-pub const NO_OPERATORS: &str = "This page has no operators.";
+/// Shown when no page has captured operators.
+pub const NO_OPERATORS: &str = "This document has no operators.";
 
 /// Operators shown before the current one.
 pub const CARDS_BEFORE: u32 = 4;
@@ -57,7 +59,7 @@ pub const CARDS_BEFORE: u32 = 4;
 /// Operators shown after the current one.
 pub const CARDS_AFTER: u32 = 2;
 
-/// Most operators the track marks; pages with more are left unmarked to keep a frame cheap.
+/// Most operators the track marks; documents with more are left unmarked to keep a frame cheap.
 const MAX_MARKED: u32 = 20_000;
 
 const CARD_H: f32 = 58.0;
@@ -69,9 +71,15 @@ pub fn card_label(ix: u32, operator: &str) -> String {
     format!("op #{ix} {operator}")
 }
 
-/// The position text of the stepper, e.g. `211 / 377 ops`.
+/// The position text of the stepper, e.g. `211 / 1120 ops`: how many operators of the whole
+/// document have run, of how many.
 pub fn position_text(count: u32, total: u32) -> String {
     format!("{count} / {total} ops")
+}
+
+/// Where the stepper is, after its position, e.g. `page 3 · op #42` (the page one-based).
+pub fn at_text(at: OpPosition) -> String {
+    format!("page {} · op #{}", u64::from(at.page) + 1, at.ix)
 }
 
 /// An operator in a few words: its index, the operator and what it works on, e.g.
@@ -87,7 +95,10 @@ pub(crate) fn summary(captured: &CapturedPage, op: &OpRecord) -> String {
 
 /// What the user did in the tab this frame.
 enum Act {
+    /// An operator of the stepper's page (a card).
     To(u32),
+    /// A paint-order position of the whole document (the track, first, last).
+    Index(u32),
     Next(bool),
     Play,
     Skip(bool),
@@ -102,24 +113,27 @@ struct Card {
 }
 
 pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
-    let page = state.canvas.page;
-    let Some(last) = state.last_op(page).filter(|_| state.canvas.view.stepper) else {
+    let (Some(index), Some(last)) = (
+        state.step_index().filter(|_| state.canvas.view.stepper),
+        state.last_step_index(),
+    ) else {
         ui.label(RichText::new(NO_OPERATORS).color(tokens::TEXT_3));
         return;
     };
-    let step = state.canvas.view.step.min(last);
+    let at = state.canvas.view.step;
     let ticks = ticks(state, last);
-    let cards = cards(state, step, last);
+    let cards = cards(state, at);
     let mut act = None;
-    controls(ui, state, step, last, &mut act);
+    controls(ui, state, index, last, &mut act);
     ui.add_space(2.0);
-    if let Some(ix) = StepTrack::new(step, last).ticks(&ticks).show(ui) {
-        act = Some(Act::To(ix));
+    if let Some(picked) = StepTrack::new(index, last).ticks(&ticks).show(ui) {
+        act = Some(Act::Index(picked));
     }
     ui.add_space(4.0);
-    card_row(ui, &cards, step, &mut act);
+    card_row(ui, &cards, at.ix, &mut act);
     match act {
-        Some(Act::To(ix)) => state.step_to(ix),
+        Some(Act::To(ix)) => state.step_to(OpPosition::new(at.page, ix)),
+        Some(Act::Index(picked)) => state.step_to_index(picked),
         Some(Act::Next(forward)) => {
             state.step_next(forward);
         }
@@ -130,44 +144,55 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     }
 }
 
-/// The marks of the track: a dim tick per operator that paints nothing and a red one per
-/// operator that paints untagged content.
+/// The marks of the track, at paint-order positions of the whole document: a dim tick per
+/// operator that paints nothing and a red one per operator that paints untagged content.
 fn ticks(state: &mut AppState, last: u32) -> Vec<Tick> {
     if last >= MAX_MARKED {
         return Vec::new();
     }
-    let page = state.canvas.page;
-    let mut ticks: Vec<Tick> = state
-        .document
-        .as_ref()
-        .map(|loaded| {
-            (0..=last)
-                .filter(|ix| loaded.doc.is_state_only(page, *ix))
-                .map(|ix| Tick {
-                    ix,
-                    kind: TickKind::StateOnly,
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    if let Some(stats) = state.page_stats(page) {
-        ticks.extend(stats.coverage.untagged_ops.iter().map(|&ix| Tick {
-            ix,
-            kind: TickKind::Flagged,
-        }));
+    let pages = PageIx::try_from(state.page_count()).unwrap_or(PageIx::MAX);
+    let mut ticks = Vec::new();
+    for page in 0..pages {
+        let (Some(start), Some(page_last)) = (
+            state
+                .document
+                .as_ref()
+                .and_then(|loaded| loaded.doc.paint_order_index(OpPosition::new(page, 0))),
+            state.last_op(page),
+        ) else {
+            continue;
+        };
+        if let Some(loaded) = &state.document {
+            ticks.extend(
+                (0..=page_last)
+                    .filter(|ix| loaded.doc.is_state_only(page, *ix))
+                    .map(|ix| Tick {
+                        ix: start + ix,
+                        kind: TickKind::StateOnly,
+                    }),
+            );
+        }
+        if let Some(stats) = state.page_stats(page) {
+            ticks.extend(stats.coverage.untagged_ops.iter().map(|&ix| Tick {
+                ix: start + ix,
+                kind: TickKind::Flagged,
+            }));
+        }
     }
     ticks
 }
 
-fn cards(state: &AppState, step: u32, last: u32) -> Vec<Card> {
+/// The cards around `at`, all on its page.
+fn cards(state: &AppState, at: OpPosition) -> Vec<Card> {
     let Some(captured) = state
         .document
         .as_ref()
-        .and_then(|loaded| loaded.doc.captured(state.canvas.page))
+        .and_then(|loaded| loaded.doc.captured(at.page))
     else {
         return Vec::new();
     };
-    (step.saturating_sub(CARDS_BEFORE)..=(step + CARDS_AFTER).min(last))
+    let last = captured.ops.last().map_or(0, |op| op.ix);
+    (at.ix.saturating_sub(CARDS_BEFORE)..=(at.ix + CARDS_AFTER).min(last))
         .filter_map(|ix| {
             let op = captured.ops.get(usize_from_u32(ix)).filter(|op| op.ix == ix)?;
             let text = text_of(captured, op);
@@ -180,19 +205,19 @@ fn cards(state: &AppState, step: u32, last: u32) -> Vec<Card> {
         .collect()
 }
 
-fn controls(ui: &mut Ui, state: &AppState, step: u32, last: u32, act: &mut Option<Act>) {
+fn controls(ui: &mut Ui, state: &AppState, index: u32, last: u32, act: &mut Option<Act>) {
     let view = &state.canvas.view;
     let can_back = state.next_target(false).is_some();
     let can_forward = state.next_target(true).is_some();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        ui.add_enabled_ui(step > 0, |ui| {
+        ui.add_enabled_ui(index > 0, |ui| {
             let first = ToolButton::new(FIRST_LABEL)
                 .icon(Icon::StepBack)
                 .icon_only(true)
                 .show(ui);
             if first.clicked() {
-                *act = Some(Act::To(0));
+                *act = Some(Act::Index(0));
             }
             tooltip::text(first, FIRST_LABEL);
         });
@@ -219,18 +244,18 @@ fn controls(ui: &mut Ui, state: &AppState, step: u32, last: u32, act: &mut Optio
             }
             tooltip::with_shortcut(forward, "Next operator", "→");
         });
-        ui.add_enabled_ui(step < last, |ui| {
+        ui.add_enabled_ui(index < last, |ui| {
             let end = ToolButton::new(LAST_LABEL)
                 .icon(Icon::StepForward)
                 .icon_only(true)
                 .show(ui);
             if end.clicked() {
-                *act = Some(Act::To(last));
+                *act = Some(Act::Index(last));
             }
             tooltip::text(end, LAST_LABEL);
         });
         ui.add_space(10.0);
-        position(ui, state.op_total(), step + 1);
+        position(ui, state.op_total(), index + 1, view.step);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let mut skip = view.skip_state_only;
             if switch(ui, &mut skip, SKIP_LABEL).changed() {
@@ -247,14 +272,20 @@ fn controls(ui: &mut Ui, state: &AppState, step: u32, last: u32, act: &mut Optio
     });
 }
 
-/// `211 / 377 ops`: the count large, the rest dim.
-fn position(ui: &mut Ui, total: u32, count: u32) {
+/// `211 / 1120 ops` (the count large, the rest dim), then where that is: `page 3 · op #42`.
+fn position(ui: &mut Ui, total: u32, count: u32, at: OpPosition) {
     let mut job = LayoutJob::default();
     let big = egui::TextFormat::simple(fonts::mono_medium(tokens::mono::LARGE + 2.0), tokens::TEXT);
     let dim = egui::TextFormat::simple(fonts::mono(tokens::mono::LARGE), tokens::TEXT_3);
     job.append(&count.to_string(), 0.0, big);
     job.append(&format!(" / {total} ops"), 0.0, dim);
     ui.label(job);
+    ui.add_space(4.0);
+    ui.label(
+        RichText::new(at_text(at))
+            .font(fonts::mono(tokens::mono::LARGE))
+            .color(tokens::TEXT_2),
+    );
 }
 
 /// The round accent button: a triangle to play, two bars to pause.
@@ -380,4 +411,45 @@ fn card_ui(ui: &mut Ui, rect: Rect, card: &Card, current: bool, future: bool) ->
     let galley = painter.layout_job(job);
     painter.galley(rect.min + vec2(8.0, 25.0), galley, ink(tokens::TEXT_3));
     response.clicked()
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+    use crate::test_support::install_two_overlapping_pages;
+
+    #[test]
+    fn the_marks_of_later_pages_sit_at_their_place_in_the_whole_document() {
+        let mut state = AppState::default();
+        install_two_overlapping_pages(&mut state);
+        state.set_stepper(true);
+        let last = state.last_step_index().unwrap();
+
+        let mut marks = ticks(&mut state, last);
+        marks.sort_by_key(|t| (t.ix, t.kind == TickKind::Flagged));
+        let by_kind = |kind| {
+            marks
+                .iter()
+                .filter(|t| t.kind == kind)
+                .map(|t| t.ix)
+                .collect::<Vec<_>>()
+        };
+
+        // Page 1 runs 4 operators, so page 2's operators 0..6 are positions 4..10.
+        assert_eq!(last, 9);
+        assert_eq!(by_kind(TickKind::StateOnly), [0, 1, 2, 4, 5, 7, 8]);
+        assert_eq!(by_kind(TickKind::Flagged), [3, 6, 9], "every fill is untagged");
+        // smoke: each mark is the operator at that place of the document
+        let doc = &state.document.as_ref().unwrap().doc;
+        for tick in &marks {
+            let at = doc.op_at(tick.ix).unwrap();
+            assert_eq!(
+                doc.is_state_only(at.page, at.ix),
+                tick.kind == TickKind::StateOnly,
+                "{tick:?} -> {at:?}"
+            );
+        }
+    }
 }

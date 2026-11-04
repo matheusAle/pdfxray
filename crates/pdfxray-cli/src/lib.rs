@@ -582,7 +582,7 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> anyhow::Result<()> {
             install,
             timeout,
         } => {
-            let mut doc = open(file)?;
+            let doc = open(file)?;
             let profile = profile_file
                 .clone()
                 .map_or_else(|| Profile::from(*profile), Profile::Custom);
@@ -595,7 +595,7 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> anyhow::Result<()> {
                 .validate(file, &profile, &opts)
                 .with_context(|| format!("validating {} with {}", file.display(), profile.label()))?;
             doc.set_validation(&report);
-            write_json(out, &doc.validation(), cli.pretty)
+            write_json(out, &doc.validation().as_deref(), cli.pretty)
         }
     }
 }
