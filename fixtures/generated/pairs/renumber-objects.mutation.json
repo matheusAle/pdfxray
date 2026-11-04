@@ -1,0 +1,210 @@
+{
+  "name": "renumber-objects",
+  "description": "Every indirect object renumbered (reversed, sparse) and written in a different byte order; content and tagging byte-identical otherwise.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      188,
+      182,
+      176
+    ],
+    "element_count": 25
+  },
+  "mutations": [
+    {
+      "kind": "renumbered",
+      "objects": [
+        {
+          "label": "catalog",
+          "a": 1,
+          "b": 200
+        },
+        {
+          "label": "pages",
+          "a": 2,
+          "b": 197
+        },
+        {
+          "label": "font.helv",
+          "a": 3,
+          "b": 194
+        },
+        {
+          "label": "content.0",
+          "a": 4,
+          "b": 191
+        },
+        {
+          "label": "page.0",
+          "a": 5,
+          "b": 188
+        },
+        {
+          "label": "content.1",
+          "a": 6,
+          "b": 185
+        },
+        {
+          "label": "page.1",
+          "a": 7,
+          "b": 182
+        },
+        {
+          "label": "content.2",
+          "a": 8,
+          "b": 179
+        },
+        {
+          "label": "page.2",
+          "a": 9,
+          "b": 176
+        },
+        {
+          "label": "struct.root",
+          "a": 10,
+          "b": 173
+        },
+        {
+          "label": "el.document",
+          "a": 11,
+          "b": 170
+        },
+        {
+          "label": "el.title",
+          "a": 12,
+          "b": 167
+        },
+        {
+          "label": "el.intro",
+          "a": 13,
+          "b": 164
+        },
+        {
+          "label": "el.background",
+          "a": 14,
+          "b": 161
+        },
+        {
+          "label": "el.growth",
+          "a": 15,
+          "b": 158
+        },
+        {
+          "label": "el.chart",
+          "a": 16,
+          "b": 155
+        },
+        {
+          "label": "el.method",
+          "a": 17,
+          "b": 152
+        },
+        {
+          "label": "el.compare",
+          "a": 18,
+          "b": 149
+        },
+        {
+          "label": "el.audit",
+          "a": 19,
+          "b": 146
+        },
+        {
+          "label": "el.flow",
+          "a": 20,
+          "b": 143
+        },
+        {
+          "label": "el.results",
+          "a": 21,
+          "b": 140
+        },
+        {
+          "label": "el.balanced",
+          "a": 22,
+          "b": 137
+        },
+        {
+          "label": "el.table",
+          "a": 23,
+          "b": 134
+        },
+        {
+          "label": "el.row0",
+          "a": 24,
+          "b": 131
+        },
+        {
+          "label": "el.row0.label",
+          "a": 25,
+          "b": 128
+        },
+        {
+          "label": "el.row0.value",
+          "a": 26,
+          "b": 125
+        },
+        {
+          "label": "el.row1",
+          "a": 27,
+          "b": 122
+        },
+        {
+          "label": "el.row1.label",
+          "a": 28,
+          "b": 119
+        },
+        {
+          "label": "el.row1.value",
+          "a": 29,
+          "b": 116
+        },
+        {
+          "label": "el.row2",
+          "a": 30,
+          "b": 113
+        },
+        {
+          "label": "el.row2.label",
+          "a": 31,
+          "b": 110
+        },
+        {
+          "label": "el.row2.value",
+          "a": 32,
+          "b": 107
+        },
+        {
+          "label": "el.row3",
+          "a": 33,
+          "b": 104
+        },
+        {
+          "label": "el.row3.label",
+          "a": 34,
+          "b": 101
+        },
+        {
+          "label": "el.row3.value",
+          "a": 35,
+          "b": 98
+        },
+        {
+          "label": "parent-tree",
+          "a": 36,
+          "b": 95
+        }
+      ],
+      "reordered_in_file": true
+    }
+  ]
+}

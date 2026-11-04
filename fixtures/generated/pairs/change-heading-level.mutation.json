@@ -1,0 +1,38 @@
+{
+  "name": "change-heading-level",
+  "description": "The Method heading's /S changes from H2 to H3; ink and content tag unchanged.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "mutations": [
+    {
+      "kind": "role-changed",
+      "element": {
+        "label": "el.method",
+        "a": 17,
+        "b": 17,
+        "role": "H2",
+        "text": "Method",
+        "page_a": 1,
+        "page_b": 1
+      },
+      "from": "H2",
+      "to": "H3"
+    }
+  ]
+}

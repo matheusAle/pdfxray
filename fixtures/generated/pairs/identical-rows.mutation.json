@@ -1,0 +1,66 @@
+{
+  "name": "identical-rows",
+  "description": "The third of four identical table rows is removed without reflow; no row has a unique text, role or neighbour.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 22
+  },
+  "mutations": [
+    {
+      "kind": "element-removed",
+      "element": {
+        "label": "el.row2",
+        "a": 30,
+        "b": null,
+        "role": "TR",
+        "text": null,
+        "page_a": null,
+        "page_b": null
+      },
+      "parent": {
+        "label": "el.table",
+        "a": 23,
+        "b": 23,
+        "role": "Table",
+        "text": null,
+        "page_a": null,
+        "page_b": null
+      },
+      "index_in_parent": 2,
+      "descendants": [
+        {
+          "label": "el.row2.label",
+          "a": 31,
+          "b": null,
+          "role": "TD",
+          "text": "Balanced",
+          "page_a": 2,
+          "page_b": null
+        },
+        {
+          "label": "el.row2.value",
+          "a": 32,
+          "b": null,
+          "role": "TD",
+          "text": "Yes",
+          "page_a": 2,
+          "page_b": null
+        }
+      ]
+    }
+  ]
+}

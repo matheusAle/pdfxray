@@ -1,0 +1,54 @@
+{
+  "name": "reorder-tags",
+  "description": "The two paragraphs on page 2 swap places in the Document's /K; their ink does not move.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "mutations": [
+    {
+      "kind": "siblings-swapped",
+      "parent": {
+        "label": "el.document",
+        "a": 11,
+        "b": 11,
+        "role": "Document",
+        "text": null,
+        "page_a": null,
+        "page_b": null
+      },
+      "first": {
+        "label": "el.compare",
+        "a": 18,
+        "b": 18,
+        "role": "P",
+        "text": "We compared invoices against the ledger.",
+        "page_a": 1,
+        "page_b": 1
+      },
+      "second": {
+        "label": "el.audit",
+        "a": 19,
+        "b": 19,
+        "role": "P",
+        "text": "Each region was audited twice.",
+        "page_a": 1,
+        "page_b": 1
+      }
+    }
+  ]
+}

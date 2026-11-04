@@ -224,6 +224,13 @@ pub enum WriterError {
     /// `into_output` was called before any revision was finished.
     #[error("no revision was finished")]
     NoRevision,
+    /// An [`ObjectGraph`](crate::graph::ObjectGraph) template, write order or root named a label
+    /// that has no object or no number.
+    #[error("no object or number for label `{0}`")]
+    UnknownLabel(String),
+    /// An [`ObjectGraph`](crate::graph::ObjectGraph) label was declared or ordered twice.
+    #[error("label `{0}` appears twice")]
+    DuplicateLabel(String),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -241,6 +248,7 @@ pub struct PdfWriter {
     corruptions: BTreeMap<u32, i64>,
     startxref_delta: Option<i64>,
     max_obj: u32,
+    free_gaps: bool,
     error: Option<WriterError>,
 }
 
@@ -257,8 +265,21 @@ impl PdfWriter {
             corruptions: BTreeMap::new(),
             startxref_delta: None,
             max_obj: 0,
+            free_gaps: false,
             error: None,
         }
+    }
+
+    /// Makes the first revision's classic xref table *dense*: every unused object number below
+    /// `/Size` gets a free entry chained into the free list, so a sparsely numbered file still
+    /// has the single subsection starting at 0 that ISO 32000 requires of a never-updated file.
+    ///
+    /// Without this, gaps simply split the table into several subsections (the historical
+    /// behaviour every existing fixture was generated with).
+    #[must_use]
+    pub const fn free_gaps(mut self) -> Self {
+        self.free_gaps = true;
+        self
     }
 
     /// Current write position (the offset the next byte lands at).
@@ -417,6 +438,15 @@ impl PdfWriter {
                 .filter(|e| matches!(e.location, Location::InObjectStream { .. }))
                 .map(|e| e.obj),
         );
+        let gaps: Vec<u32> = if first && self.free_gaps {
+            (1..=self.max_obj)
+                .filter(|n| !entries.iter().any(|e| e.obj == *n))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        free.extend(&gaps);
+        free.sort_unstable();
         let next_free = |obj: u32| {
             free.iter()
                 .position(|f| *f == obj)
@@ -439,6 +469,11 @@ impl PdfWriter {
                 Location::InObjectStream { .. } => (e.obj, format!("{:010} {:05} f \n", next_free(e.obj), 0)),
             })
             .collect();
+        lines.extend(
+            gaps.iter()
+                .map(|&gap| (gap, format!("{:010} {:05} f \n", next_free(gap), 0))),
+        );
+        lines.sort_by_key(|(obj, _)| *obj);
         if first {
             lines.insert(0, (0, format!("{:010} 65535 f \n", next_free(0))));
         }
@@ -729,6 +764,37 @@ startxref\n116\n%%EOF\n";
         // Smoke: the single revision points at the xref keyword.
         assert_eq!(out.revisions.len(), 1);
         assert!(out.bytes[116..].starts_with(b"xref\n"));
+    }
+
+    #[test]
+    fn free_gaps_lists_unused_numbers_as_one_chained_subsection() {
+        let mut w = PdfWriter::new(PdfVersion::V1_4).free_gaps();
+        w.object(5, "<< /Type /Pages /Kids [] /Count 0 >>");
+        w.object(2, "<< /Type /Catalog /Pages 5 0 R >>");
+        w.finish_table(&Trailer::new(2)).unwrap();
+        let out = w.into_output().unwrap();
+
+        let xref = text(&out.bytes[usize::try_from(out.revisions[0].xref_offset).unwrap()..]);
+        let offset_of = |i: usize| match out.revisions[0].entries[i].location {
+            Location::Offset(at) => at,
+            Location::InObjectStream { .. } => panic!("top-level object"),
+        };
+        let lines: Vec<&str> = xref.lines().take(8).collect();
+        assert_eq!(
+            lines,
+            [
+                "xref",
+                "0 6",
+                "0000000001 65535 f ",
+                "0000000003 00000 f ",
+                &format!("{:010} 00000 n ", offset_of(0)),
+                "0000000004 00000 f ",
+                "0000000000 00000 f ",
+                &format!("{:010} 00000 n ", offset_of(1)),
+            ]
+        );
+        // Smoke: only the two real objects are recorded as in use.
+        assert_eq!(out.revisions[0].objects(), [2, 5]);
     }
 
     #[test]

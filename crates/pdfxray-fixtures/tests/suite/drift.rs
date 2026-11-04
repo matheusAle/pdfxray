@@ -158,9 +158,11 @@ fn committed_json_deserializes_to_the_built_facts() {
 
 #[test]
 fn generated_dir_holds_exactly_the_catalog_files() {
+    // Plus the `pairs` directory, whose contents the `pairs` tests check.
     let expected: BTreeSet<String> = all()
         .iter()
         .flat_map(|f| [f.pdf_file_name(), f.expected_file_name()])
+        .chain(["pairs".to_owned()])
         .collect();
     let actual: BTreeSet<String> = fs::read_dir(fixtures_dir())
         .unwrap()
@@ -168,7 +170,8 @@ fn generated_dir_holds_exactly_the_catalog_files() {
         .collect();
 
     assert_eq!(actual, expected, "stale or missing files in fixtures/generated");
-    assert_eq!(actual.len(), 74);
+    assert_eq!(actual.len(), 75);
+    assert!(fixtures_dir().join("pairs").is_dir());
 }
 
 #[test]

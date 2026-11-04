@@ -1,0 +1,38 @@
+{
+  "name": "retag-figure-as-formula",
+  "description": "The flow diagram's /S changes from Figure to Formula; ink, /Alt and content tag unchanged.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "mutations": [
+    {
+      "kind": "role-changed",
+      "element": {
+        "label": "el.flow",
+        "a": 20,
+        "b": 20,
+        "role": "Figure",
+        "text": null,
+        "page_a": 1,
+        "page_b": 1
+      },
+      "from": "Figure",
+      "to": "Formula"
+    }
+  ]
+}

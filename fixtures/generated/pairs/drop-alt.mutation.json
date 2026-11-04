@@ -1,0 +1,37 @@
+{
+  "name": "drop-alt",
+  "description": "The bar chart Figure loses its /Alt.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "mutations": [
+    {
+      "kind": "alt-removed",
+      "element": {
+        "label": "el.chart",
+        "a": 16,
+        "b": 16,
+        "role": "Figure",
+        "text": null,
+        "page_a": 0,
+        "page_b": 0
+      },
+      "alt": "Bar chart of revenue by region"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "move-paragraph-3pt",
+  "description": "The first paragraph on page 2 is drawn 3 pt lower; nothing else moves.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "mutations": [
+    {
+      "kind": "element-moved",
+      "element": {
+        "label": "el.compare",
+        "a": 18,
+        "b": 18,
+        "role": "P",
+        "text": "We compared invoices against the ledger.",
+        "page_a": 1,
+        "page_b": 1
+      },
+      "dx": 0.0,
+      "dy": -3.0
+    }
+  ]
+}

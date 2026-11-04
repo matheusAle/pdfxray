@@ -1,0 +1,53 @@
+{
+  "name": "artifact-page-number",
+  "description": "The page-number footer artifact reads `- n -` instead of `Page n` on every page.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "mutations": [
+    {
+      "kind": "artifact-text-changed",
+      "changes": [
+        {
+          "page_a": 0,
+          "page_b": 0,
+          "artifact_type": "Pagination",
+          "subtype": "Footer",
+          "a_text": "Page 1",
+          "b_text": "- 1 -"
+        },
+        {
+          "page_a": 1,
+          "page_b": 1,
+          "artifact_type": "Pagination",
+          "subtype": "Footer",
+          "a_text": "Page 2",
+          "b_text": "- 2 -"
+        },
+        {
+          "page_a": 2,
+          "page_b": 2,
+          "artifact_type": "Pagination",
+          "subtype": "Footer",
+          "a_text": "Page 3",
+          "b_text": "- 3 -"
+        }
+      ]
+    }
+  ]
+}

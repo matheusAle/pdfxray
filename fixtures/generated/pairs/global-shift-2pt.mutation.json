@@ -1,0 +1,29 @@
+{
+  "name": "global-shift-2pt",
+  "description": "Every coordinate of the page content, artifacts and Layout BBox attributes included, translated by (2, -2) pt.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "b": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 25
+  },
+  "mutations": [
+    {
+      "kind": "translated",
+      "dx": 2.0,
+      "dy": -2.0
+    }
+  ]
+}

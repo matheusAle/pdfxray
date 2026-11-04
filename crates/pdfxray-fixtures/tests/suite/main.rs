@@ -6,6 +6,7 @@
 //! * `hayro`: what `hayro-syntax` and `hayro` make of each fixture.
 //! * `content_facts`: text, paint, image and Type 3 facts re-derived by a content-stream interpreter.
 //! * `structure_facts`: the rich outline, annotations and namespaces re-derived from the objects.
+//! * `pairs`: the diff pairs re-read from the bytes: validity, ink, tagging and declared mutations.
 //! * `geometry_facts`: page geometry and resource inheritance re-derived from the page tree.
 
 // Helpers in this crate are not `#[test]` functions, so clippy.toml's allow-*-in-tests does not
@@ -31,5 +32,6 @@ mod facts;
 mod geometry_facts;
 mod hayro;
 mod outline;
+mod pairs;
 mod pdfobj;
 mod structure_facts;
