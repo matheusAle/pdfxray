@@ -90,7 +90,7 @@ container → derive `PageMatch` from the element pairs by mutual majority, page
 evidence aligned by their residue → estimate the global offset and re-express every delta as a
 residual.
 
-**Three things this plan had wrong, found in implementation:**
+**Six things this plan had wrong, found in implementation:**
 
 * **No common prefix/suffix trimming.** The usual diff optimisation is unsound for a pairing: cell
   texts and figure boxes repeat from page to page, so on an appended page it paired A's *last* page
@@ -100,6 +100,20 @@ residual.
   agreeing within tolerance, or none is reported.
 * **A pure container is never `Moved` by geometry alone.** Its box is the union of its children's,
   so the children carry the change and the container does not report a move of its own.
+* **Registration and keying are mutually dependent**, so alignment is two passes when an offset
+  exists. Box keys computed before the offset is known bucket text-less elements (figures) into
+  different buckets under a global shift, which is why `global-shift-2pt` first came out as two
+  removals plus two additions rather than empty. When an offset is found the box keys are rebuilt
+  with it removed — each side moved half way, so the result still mirrors — and the alignment runs
+  again.
+* **The generic `Props`-row layer needs the same geometry awareness as the typed layer.** A Layout
+  `/BBox` row differs by exactly the global offset, so the generic layer contradicted the empty diff
+  the typed layer correctly reported. Those rows are now compared like the element's own box: offset
+  removed, within tolerance.
+* **Confidence must report the rung a pair was *anchored* on**, not the best rung on which the keys
+  happened to be equal. Identical rows told apart only by their boxes were claiming a `role+text`
+  match. A pair now never reports better than the anchors bounding its gap — the honesty property
+  decision 9 exists for, and it was silently wrong.
 
 ## 4. Visual diff
 
