@@ -210,6 +210,7 @@ mod tests {
             tolerance: pdfxray_core::diff::TOLERANCE,
             sides: Sides { a: side(), b: side() },
             notes: Vec::new(),
+            diagnostics: pdfxray_core::diff::DiagnosticsDiff::default(),
         }
     }
 

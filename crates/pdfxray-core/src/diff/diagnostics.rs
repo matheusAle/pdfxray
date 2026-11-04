@@ -20,7 +20,7 @@ use super::{Pairing, Side};
 use crate::{Document, NodeId, ObjRef, PageIx, Severity};
 
 /// The diagnostics of A against those of B.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub struct DiagnosticsDiff {
     /// The document model's own diagnostics (syntax, page tree, structure tree checks).
     pub core: FindingsDiff,
@@ -40,10 +40,11 @@ impl DiagnosticsDiff {
 }
 
 /// veraPDF findings compared, or why they were not.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 #[serde(rename_all = "snake_case", tag = "state")]
 pub enum ValidationDiff {
     /// Neither side has a validation run attached.
+    #[default]
     NotRun,
     /// Only one side has a run: there is nothing to compare it with.
     OneSide {
