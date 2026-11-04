@@ -26,6 +26,7 @@ use pdfxray_core::numeric::f32_from_u32;
 use pdfxray_core::{NodeId, PageIx, ReadingOrderSource, TagBox};
 use pdfxray_render::annotate::{self, Anchor, Annotation, Grid, Palette, Scene, TagShow, TagView};
 use pdfxray_render::composite::{self, Fit, Mode};
+use pdfxray_render::score::VisualScore;
 use pdfxray_render::{Overlay, PixelPoint, Transform, page_dimensions};
 
 use super::tag_overlay::{paint, px_rect, ui_rect};
@@ -308,9 +309,9 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
         }
         Shown::Refused(Refusal::Render(why)) => return message(ui, &why),
     };
-    let b_scale = match picture.placed.as_ref() {
-        Placed::Both(c) => c.b_scale,
-        Placed::One(..) => None,
+    let (b_scale, visual) = match picture.placed.as_ref() {
+        Placed::Both(c) => (c.b_scale, c.delta.as_ref().and_then(|d| d.visual()).copied()),
+        Placed::One(..) => (None, None),
     };
     if let Some(by) = b_scale {
         geometry_banner(
@@ -321,7 +322,7 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
         );
     }
     let (scenes, sides) = scenes(state, picture.placed.as_ref(), (a, b));
-    let legend = legend(state, (a, b), b_scale);
+    let legend = legend(state, (a, b), b_scale, visual.as_ref());
     let Some(diff) = state.diff.as_ref() else {
         return;
     };
@@ -462,12 +463,13 @@ fn scenes(
     (scenes, sides)
 }
 
-/// The legend: what each colour means, and what the picture must not be mistaken for (a
-/// degraded page, B scaled, pairs matched on weak evidence).
+/// The legend: what each colour means, the mask's visual score, and what the picture must not
+/// be mistaken for (a degraded page, B scaled, pairs matched on weak evidence).
 fn legend(
     state: &AppState,
     (a, b): (Option<PageIx>, Option<PageIx>),
     b_scale: Option<f64>,
+    visual: Option<&VisualScore>,
 ) -> annotate::Legend {
     let Some(diff) = state.diff.as_ref() else {
         return annotate::Legend::default();
@@ -494,7 +496,7 @@ fn legend(
     if let Some(by) = b_scale {
         warnings.push(format!("B scaled to A by {by:.3}"));
     }
-    annotate::change_legend(diff.mode, diff.show, &warnings, Palette::DESIGN.warn)
+    annotate::change_legend(diff.mode, diff.show, visual, &warnings, Palette::DESIGN.warn)
 }
 
 /// The selected pair's boxes, outlined in the accent colour on the sides it is on.

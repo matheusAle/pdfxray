@@ -56,6 +56,8 @@ fn near_above(img: &image::RgbaImage, rows: u32, color: [u8; 4]) -> usize {
 
 const MOVED: [u8; 4] = [0x8B, 0x5C, 0xF6, 255];
 const MODIFIED: [u8; 4] = [0xF5, 0x9E, 0x0B, 255];
+const ADDED: [u8; 4] = [0x22, 0xC5, 0x5E, 255];
+const REMOVED: [u8; 4] = [0xEF, 0x44, 0x44, 255];
 
 #[test]
 fn side_by_side_is_the_default_and_puts_both_pages_in_one_wide_bitmap() {
@@ -68,8 +70,10 @@ fn side_by_side_is_the_default_and_puts_both_pages_in_one_wide_bitmap() {
     // Two 300 pt pages and a 24-pixel gutter, at scale 1.
     assert_eq!(w, 300 + 24 + 300);
     assert_eq!(json["summary"], serde_json::json!({ "same": 6 }));
-    // Smoke: no pixel is compared side by side, so none is reported.
-    assert_eq!(json["differing_pixels"], Value::Null);
+    // Smoke: two pages of one size are on one grid even side by side, so they are scored, and
+    // renumbered objects draw the same ink.
+    assert_eq!(json["differing_pixels"], 0);
+    assert_eq!(json["visual"]["score"]["anti_aliased"], 0);
 }
 
 #[test]
@@ -83,7 +87,12 @@ fn an_overlay_of_identical_ink_differs_nowhere() {
 
     assert_eq!(json["mode"], "overlay");
     assert_eq!(json["differing_pixels"], 0);
-    assert_eq!(json["tolerance"], 12);
+    // Two files by one engine: compared perceptually, not by a channel tolerance.
+    assert_eq!(json["tolerance"], Value::Null);
+    assert_eq!(
+        json["visual"]["settings"],
+        serde_json::json!({ "scale": 1.0, "threshold": 0.1, "include_aa": false })
+    );
     // Smoke: nothing changed, so no status colour is drawn on the page (400 pt tall at scale
     // 1); the legend below it still shows the swatches.
     assert_eq!(near_above(&img, 400, MOVED), 0);
@@ -140,6 +149,31 @@ fn registration_is_opt_in_labelled_and_removes_the_global_offset() {
     );
     // Smoke: the image is the size of one page, the mask of two on one grid.
     assert_eq!(registered["width"], raw["width"]);
+}
+
+#[test]
+fn a_mask_colours_ink_b_adds_and_removes_apart_and_its_legend_states_the_score() {
+    let (json, img) = against("move-paragraph-3pt", "1", &["--mode", "mask"], "against-mask.png");
+
+    let score = &json["visual"]["score"];
+    let (added, removed) = (
+        score["ink_added"].as_u64().unwrap(),
+        score["ink_removed"].as_u64().unwrap(),
+    );
+    assert!(added > 100 && removed > 100, "{score}");
+    assert_eq!(json["differing_pixels"].as_u64(), Some(added + removed));
+    // Both colours are on the page (400 pt tall at scale 1), not only in the legend.
+    assert!(near_above(&img, 400, ADDED) > 100);
+    assert!(near_above(&img, 400, REMOVED) > 100);
+    // Smoke: the legend band below the page is taller for its score rows than the plain
+    // overlay's.
+    let (overlay, _) = against(
+        "move-paragraph-3pt",
+        "1",
+        &["--mode", "overlay"],
+        "against-mask-overlay.png",
+    );
+    assert!(json["height"].as_u64() > overlay["height"].as_u64());
 }
 
 #[test]
@@ -221,7 +255,12 @@ fn what_a_comparison_cannot_show_is_refused_not_guessed() {
         "cannot be used with",
     );
     fails(&["--mode", "overlay"], "--mode needs --against");
-    fails(&["--tolerance", "4"], "--tolerance needs --against");
+    fails(&["--tolerance", "4"], "--tolerance needs --reference");
+    fails(
+        &["--against", b.to_str().unwrap(), "--tolerance", "4"],
+        "two files are compared with --threshold",
+    );
+    fails(&["--threshold", "0.2"], "--threshold needs --against");
     // Smoke: an output name that is neither PNG nor JPEG is refused.
     pdfxray()
         .arg("render")

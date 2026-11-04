@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use pdfxray_core::{Document, HeaderScope, NodeId, ScopeSource};
 use pdfxray_render::annotate::{self, CONFLICT_RING, Grid, Palette, TagShow, TagView};
-use pdfxray_render::composite::{self, CompositeError, Fit, Mode, Registration, Request};
+use pdfxray_render::composite::{self, Comparator, CompositeError, Fit, Mode, Registration, Request};
 use pdfxray_render::{Overlay, PixelGrid, RenderError, RenderSpec, render_page};
 use pretty_assertions::assert_eq;
 
@@ -26,7 +26,7 @@ fn request(mode: Mode) -> Request {
         scale: 1.0,
         fit: Fit::Refuse,
         registration: None,
-        tolerance: composite::SAME_ENGINE_TOLERANCE,
+        comparator: Comparator::same_engine(),
     }
 }
 
@@ -75,11 +75,12 @@ fn renumbered_objects_overlay_onto_one_grid_without_a_differing_pixel() {
     let overlay = composite::composite((&a, 0), (&b, 0), &request(Mode::Overlay)).unwrap();
     let side = composite::composite((&a, 0), (&b, 0), &request(Mode::SideBySide)).unwrap();
 
-    let delta = overlay.delta.unwrap();
-    assert_eq!((delta.differing_pixels, delta.max_channel_delta), (0, 0));
+    let visual = *overlay.delta.unwrap().visual().unwrap();
+    assert_eq!((visual.differing_pixels, visual.anti_aliased), (0, 0));
     assert_eq!((overlay.a.bounds, overlay.registration), (overlay.b.bounds, None));
     assert!(side.width > 2 * overlay.width, "two pages and a gutter");
-    assert_eq!(side.delta, None);
+    // Side by side, pages of one size are on one grid anyway, so they are scored too.
+    assert_eq!(side.delta.map(|d| d.differing_pixels()), Some(0));
     // Smoke: shared ink is darker than either tint alone, so there is ink at all.
     assert!(overlay.rgba.chunks(4).any(|p| p[0] < 100 && p[2] < 200));
 }
@@ -99,8 +100,8 @@ fn registration_is_opt_in_and_removes_the_offset_the_pairing_reports() {
     let raw = composite::composite((&a, 0), (&b, 0), &request(Mode::Mask)).unwrap();
     let fixed = composite::composite((&a, 0), (&b, 0), &registered).unwrap();
 
-    assert!(raw.delta.unwrap().differing_pixels > 1000, "{:?}", raw.delta);
-    assert_eq!(fixed.delta.unwrap().differing_pixels, 0);
+    assert!(raw.delta.unwrap().differing_pixels() > 1000, "{:?}", raw.delta);
+    assert_eq!(fixed.delta.unwrap().differing_pixels(), 0);
     assert_eq!(fixed.registration, registered.registration);
     assert_eq!((offset.dx, offset.dy), (2.0, -2.0));
     // Smoke: unregistered, nothing says it was.
@@ -158,7 +159,7 @@ fn the_legend_gets_a_band_of_its_own_below_the_pages() {
     let (a, b) = pair("move-paragraph-3pt");
     let mut picture = composite::composite((&a, 1), (&b, 1), &request(Mode::Overlay)).unwrap();
     let height = picture.height;
-    let legend = annotate::change_legend(Mode::Overlay, annotate::ChangeShow::default(), &[], [0; 4]);
+    let legend = annotate::change_legend(Mode::Overlay, annotate::ChangeShow::default(), None, &[], [0; 4]);
 
     let shapes = picture.annotate(1.0, &Palette::DESIGN, &[], &legend);
 

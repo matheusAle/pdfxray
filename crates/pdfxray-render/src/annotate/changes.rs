@@ -11,6 +11,7 @@ use pdfxray_core::{NodeId, PageIx, Rect, RoleClass, TagBox};
 
 use super::{Chip, Corner, Legend, Look, Mark, Scene, chip_text};
 use crate::composite::{Mode, TINT_A, TINT_B};
+use crate::score::{INK_ADDED, INK_REMOVED, VisualScore};
 
 /// The colour of `status`.
 pub const fn status_rgba(status: Status) -> [u8; 4] {
@@ -134,12 +135,29 @@ fn mark(pair: &Pair, node: &NodeId, rect: Rect, container: bool, chip: Option<St
 }
 
 /// The legend of a diff shown as `mode` shows it: a row per status drawn, the two ink colours
-/// of an overlay, and one row per `warning` (a degraded page, a registration) in `warn`.
-pub fn change_legend(mode: Mode, show: ChangeShow, warnings: &[String], warn: [u8; 4]) -> Legend {
+/// of an overlay, the two of a mask with its `visual` score, and one row per `warning` (a
+/// degraded page, a registration) in `warn`.
+pub fn change_legend(
+    mode: Mode,
+    show: ChangeShow,
+    visual: Option<&VisualScore>,
+    warnings: &[String],
+    warn: [u8; 4],
+) -> Legend {
     let mut rows: Vec<([u8; 4], String)> = Vec::new();
     if mode == Mode::Overlay {
         rows.push((TINT_A, "ink of A".to_owned()));
         rows.push((TINT_B, "ink of B".to_owned()));
+    }
+    if mode == Mode::Mask
+        && let Some(visual) = visual
+    {
+        rows.push((INK_ADDED, "ink B adds".to_owned()));
+        rows.push((INK_REMOVED, "ink B removes".to_owned()));
+        rows.push((status_rgba(Status::Same), format!("visual: {}", visual.summary())));
+        if let Some(aa) = visual.anti_aliasing() {
+            rows.push((status_rgba(Status::Same), aa));
+        }
     }
     let statuses = [
         Status::Modified,
@@ -357,8 +375,14 @@ mod tests {
     fn the_legend_names_the_statuses_drawn_the_overlay_inks_and_the_warnings() {
         let warn = [1, 2, 3, 255];
 
-        let overlay = change_legend(Mode::Overlay, LABELS, &["B page 0 is degraded".to_owned()], warn);
-        let side = change_legend(Mode::SideBySide, ChangeShow::default(), &[], warn);
+        let overlay = change_legend(
+            Mode::Overlay,
+            LABELS,
+            None,
+            &["B page 0 is degraded".to_owned()],
+            warn,
+        );
+        let side = change_legend(Mode::SideBySide, ChangeShow::default(), None, &[], warn);
 
         let names = |l: &Legend| l.rows.iter().map(|r| r.1.clone()).collect::<Vec<_>>();
         assert_eq!(
@@ -376,5 +400,43 @@ mod tests {
         assert_eq!(overlay.rows.last().map(|r| r.0), Some(warn));
         // Smoke: side by side there is no ink colour to explain.
         assert_eq!(names(&side), ["modified", "moved", "added", "removed"]);
+    }
+
+    #[test]
+    fn a_mask_legend_names_both_ink_colours_and_states_the_score() {
+        let score = VisualScore {
+            width: 100,
+            height: 50,
+            differing_pixels: 21,
+            ink_added: 20,
+            ink_removed: 1,
+            anti_aliased: 7,
+            threshold: 0.1,
+            include_aa: false,
+            allowed: 0,
+        };
+
+        let mask = change_legend(Mode::Mask, ChangeShow::default(), Some(&score), &[], [0; 4]);
+        let overlay = change_legend(Mode::Overlay, ChangeShow::default(), Some(&score), &[], [0; 4]);
+
+        let gray = status_rgba(Status::Same);
+        assert_eq!(
+            mask.rows[..4],
+            [
+                (INK_ADDED, "ink B adds".to_owned()),
+                (INK_REMOVED, "ink B removes".to_owned()),
+                (gray, "visual: 21 px differ (0.42%)".to_owned()),
+                (gray, "7 px anti-aliasing, ignored".to_owned()),
+            ]
+        );
+        // Smoke: only a mask has ink colours of its own to explain (they are the added and
+        // removed status colours, so a box and a pixel of new ink read alike).
+        assert!(
+            overlay
+                .rows
+                .iter()
+                .all(|r| !r.1.starts_with("ink B") && !r.1.starts_with("visual"))
+        );
+        assert_eq!(INK_ADDED, status_rgba(Status::Added));
     }
 }

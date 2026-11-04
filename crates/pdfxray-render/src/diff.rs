@@ -1,7 +1,10 @@
 //! Pixel comparison of two renders of the same page.
 //!
 //! [`diff`] works on any two [`RenderedPage`]s, whichever engine drew them, so the app, the CLI
-//! and the tests can all use it to show where hayro and a reference renderer disagree.
+//! and the tests can all use it to show where hayro and a reference renderer disagree. Its
+//! largest-channel test against a lenient tolerance is the comparator for two *engines*
+//! ([`crate::composite::Comparator::CrossEngine`]); two *files* drawn by one engine are scored
+//! perceptually by [`crate::score`] instead.
 use pdfxray_core::numeric::{f64_from_u64, usize_from_u32};
 
 use crate::RenderedPage;

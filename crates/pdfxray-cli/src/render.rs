@@ -13,7 +13,7 @@ use pdfxray_core::{
     BoxKind, Document, HeaderScope, NodeId, PageIx, ReadingOrder, ReadingOrderSource, TagBox,
 };
 use pdfxray_render::annotate::{self, ChangeShow, Grid, Legend, Palette, Scene, TagShow, TagView};
-use pdfxray_render::composite::{self, Composite, Fit, Mode, Registration, Request};
+use pdfxray_render::composite::{self, Comparator, Composite, Delta, Fit, Mode, Registration, Request};
 use pdfxray_render::pdfium::PdfiumRenderer;
 use pdfxray_render::{
     ColorBy, ContentFilter, Overlay, RenderSpec, Transform, XrayOptions, alpha_heatmap_overlays,
@@ -21,6 +21,7 @@ use pdfxray_render::{
 };
 use serde_json::{Value, json};
 
+use crate::visual::{ScoreView, VisualArgs};
 use crate::{PresetArg, open, write_json};
 
 /// The debug overlays draw over one page; a comparison draws two.
@@ -115,10 +116,14 @@ pub struct RenderArgs {
     /// engine.
     #[arg(long, value_enum)]
     mode: Option<ModeArg>,
-    /// Per-channel difference that still counts as equal. Default: 12 against a file, 48
-    /// against an engine.
+    /// Against an engine: the per-channel difference that still counts as equal. Default 48,
+    /// lenient because two engines anti-alias every glyph differently. Two files drawn by one
+    /// engine are compared perceptually instead (`--threshold`, `--include-aa`).
     #[arg(long)]
     tolerance: Option<u8>,
+    /// Against a file: how the pixels are compared.
+    #[command(flatten)]
+    visual: VisualArgs,
     /// Remove the global offset the pairing reports from B before overlaying it. Labelled in
     /// the legend and the output.
     #[arg(long, requires = "against")]
@@ -177,7 +182,8 @@ pub(crate) enum ModeArg {
     SideBySide,
     /// A and B in two ink colours, multiplied.
     Overlay,
-    /// A in grey, the pixels that differ in red.
+    /// A in grey, the pixels that differ in colour: against a file, ink B adds and ink B
+    /// removes apart; against an engine, in red.
     Mask,
 }
 
@@ -213,11 +219,13 @@ pub(crate) fn run(args: &RenderArgs, pretty: bool, out: &mut impl Write) -> anyh
     if args.mode.is_some() && args.against.is_none() && args.reference.is_none() {
         return Err(anyhow!("--mode needs --against <file> or --reference <engine>"));
     }
-    if args.tolerance.is_some() && args.against.is_none() && args.reference.is_none() {
+    if args.tolerance.is_some() && args.reference.is_none() {
         return Err(anyhow!(
-            "--tolerance needs --against <file> or --reference <engine>"
+            "--tolerance needs --reference <engine>; two files are compared with --threshold"
         ));
     }
+    args.visual
+        .only_with(args.against.is_some(), "--against <file>")?;
     let doc = open(&args.file)?;
     if doc.page(args.page).is_none() {
         return Err(anyhow!(
@@ -439,7 +447,7 @@ fn against(args: &RenderArgs, doc_a: &Document, file_b: &PathBuf) -> anyhow::Res
             Fit::Refuse
         },
         registration,
-        tolerance: args.tolerance.unwrap_or(composite::SAME_ENGINE_TOLERANCE),
+        comparator: Comparator::SameEngine(args.visual.perceptual()),
     };
     let mut picture = composite::composite((doc_a, page_a), (&doc_b, page_b), &request)?;
 
@@ -474,7 +482,8 @@ fn against(args: &RenderArgs, doc_a: &Document, file_b: &PathBuf) -> anyhow::Res
         (_, SideArg::A) => scenes.push(order_a),
         (_, SideArg::B) => scenes.push(map_b(&picture, order_b)),
     }
-    let legend = annotate::change_legend(mode, show, &warnings, Palette::DESIGN.warn);
+    let visual = picture.delta.as_ref().and_then(Delta::visual).copied();
+    let legend = annotate::change_legend(mode, show, visual.as_ref(), &warnings, Palette::DESIGN.warn);
     picture.annotate(args.scale, &Palette::DESIGN, &scenes, &legend);
 
     let (registration, b_scale) = (picture.registration, picture.b_scale);
@@ -488,6 +497,9 @@ fn against(args: &RenderArgs, doc_a: &Document, file_b: &PathBuf) -> anyhow::Res
     report["summary"] = json!(page_summary(&pairing, page_a, page_b));
     report["warnings"] = json!(warnings);
     report["notes"] = json!(notes);
+    if visual.is_some() {
+        report["visual"]["settings"] = json!(args.visual.settings(args.scale));
+    }
     Ok(report)
 }
 
@@ -530,12 +542,20 @@ fn written(args: &RenderArgs, picture: Composite) -> anyhow::Result<Value> {
         "height": picture.height,
         "mode": mode_name(picture.mode),
     });
-    if let Some(d) = picture.delta {
-        report["differing_pixels"] = json!(d.differing_pixels);
-        report["differing_fraction"] = json!(d.differing_fraction);
-        report["max_channel_delta"] = json!(d.max_channel_delta);
-        report["mean_delta"] = json!(d.mean_delta);
-        report["tolerance"] = json!(d.tolerance);
+    match picture.delta {
+        Some(Delta::Channel(d)) => {
+            report["differing_pixels"] = json!(d.differing_pixels);
+            report["differing_fraction"] = json!(d.differing_fraction);
+            report["max_channel_delta"] = json!(d.max_channel_delta);
+            report["mean_delta"] = json!(d.mean_delta);
+            report["tolerance"] = json!(d.tolerance);
+        }
+        Some(Delta::Visual(v)) => {
+            report["differing_pixels"] = json!(v.differing_pixels);
+            report["differing_fraction"] = json!(v.ratio());
+            report["visual"] = json!({ "score": ScoreView::from(&v) });
+        }
+        None => {}
     }
     write_image(&picture.into_page(), &args.output)
         .with_context(|| format!("writing {}", args.output.display()))?;
@@ -568,8 +588,10 @@ fn reference(args: &RenderArgs, doc: &Document, engine: EngineArg) -> anyhow::Re
         .render_page(doc, page, args.scale)
         .with_context(|| format!("rendering page {page} with PDFium"))?;
     let mode = args.mode.map_or(Mode::Mask, Mode::from);
-    let tolerance = args.tolerance.unwrap_or(48);
-    let mut picture = composite::compose(mode, &ours, &theirs, None, None, tolerance);
+    let comparator = Comparator::CrossEngine {
+        tolerance: args.tolerance.unwrap_or(composite::CROSS_ENGINE_TOLERANCE),
+    };
+    let mut picture = composite::compose(mode, &ours, &theirs, None, None, &comparator);
     let scene = tag_scene(args, doc, page);
     let mut scenes = vec![scene.clone()];
     if mode == Mode::SideBySide {

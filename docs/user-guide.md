@@ -304,11 +304,22 @@ Pick a row and the canvas goes to its page and the inspector shows both sides of
 paths, what moved, every field and row that changed, and what the match rests on.
 
 The canvas shows the two pages side by side, overlaid (A's ink and B's in two colours, multiplied)
-or as a mask of the pixels that differ. Only changed elements are outlined; ⇧T outlines the
-unchanged ones too, L names them, R numbers the reading order (overlaid: of the side picked with
-A/B, which is also the side a click picks on). Pages that differ in size or rotation are never
-scaled silently: overlaid, a banner says why and offers *Scale B to A*. The picture is the one
-`pdfxray render a.pdf --against b.pdf` writes.
+or as a mask of the pixels that differ: green where B adds ink, red where it removes some. Only
+changed elements are outlined; ⇧T outlines the unchanged ones too, L names them, R numbers the
+reading order (overlaid: of the side picked with A/B, which is also the side a click picks on).
+Pages that differ in size or rotation are never scaled silently: overlaid, a banner says why and
+offers *Scale B to A*. The picture is the one `pdfxray render a.pdf --against b.pdf` writes.
+
+**Visual score.** Once the canvas has drawn a page pair, its row in the Changes list shows the
+share of its pixels that differ (*visual 0.40%*; the tooltip and the mask's legend give the count).
+It sits beside the count of changes, not in place of it: the two answer different questions. A
+changed page number is many differing items but a fraction of a percent of the page; a colour
+change with the same geometry is no changed item at all but a large score. Pixels are compared
+perceptually (a colour distance, not a channel difference), and the soft edges a shape gets when
+it lands a fraction of a pixel elsewhere are recognised as anti-aliasing and left out.
+`pdfxray diff a.pdf b.pdf --visual` scores every page pair the same way (`--include-aa`,
+`--threshold`, `--max-diff-pixels` and `--max-diff-ratio` adjust it); it draws every page twice,
+so it is opt-in, and it never changes the exit status.
 
 ## Encrypted files
 

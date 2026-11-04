@@ -30,6 +30,7 @@ mod overlay;
 pub mod pdfium;
 mod preview;
 mod rewrite;
+pub mod score;
 mod transform;
 mod update;
 pub mod xray;
@@ -55,6 +56,7 @@ pub use preview::{
     render_preview,
 };
 pub use rewrite::filtered_pdf;
+pub use score::{page_score, page_scores};
 pub use transform::{PixelPoint, PixelRect, Transform};
 pub use xray::{
     ColorBy, ROLE_COLORS, XrayOptions, alpha_heatmap_overlays, clip_overlays, role_rgba, xray_overlays,

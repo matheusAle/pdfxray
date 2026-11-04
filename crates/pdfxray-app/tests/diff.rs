@@ -523,3 +523,57 @@ fn the_modes_are_disabled_with_the_reason_on_a_page_only_one_side_has() {
     assert_eq!(mode_enabled(&harness), [true, true, true]);
     assert_eq!(nothing_to_compare(Some(1), Some(2)), None);
 }
+
+#[test]
+fn a_page_pair_the_canvas_drew_shows_its_visual_score_beside_its_changes() {
+    let (a, b) = pair("move-paragraph-3pt");
+    let mut harness = launched(&a, &b);
+    let page_of = |harness: &Harness<'_, PdfxrayApp>, a: u32| {
+        let diff = state(harness).diff.as_ref().unwrap();
+        diff.pairing()
+            .unwrap()
+            .pages
+            .iter()
+            .position(|m| m.a == Some(a))
+            .unwrap()
+    };
+    let moved = page_of(&harness, 1);
+    let renders_before = state(&harness).diff.as_ref().unwrap().pictures_drawn();
+
+    show_page_pair(&mut harness, Some(1), Some(1));
+    harness.run();
+
+    let diff = state(&harness).diff.as_ref().unwrap();
+    let score = *diff.visual_score(moved).expect("scored as the canvas drew it");
+    assert!(score.differing_pixels > 0, "{score:?}");
+    // Side by side, the default: the pages are one size, so drawing them scored them too.
+    assert_eq!(diff.mode, Mode::SideBySide);
+    let shown = format!("visual {}", pdfxray_render::score::percent(score.ratio()));
+    let texts = common::texts_in(&harness, Region::Navigator, Role::Label);
+    let at = |text: &str| texts.iter().position(|t| t == text);
+    // On the moved paragraph's page row, after its change count: beside it, not instead of it.
+    let (count, visual) = (at("1 change"), at(&shown));
+    assert!(
+        count.is_some() && visual > count,
+        "{shown} after `1 change` in {texts:?}"
+    );
+    // Kept per page pair: moving away and back draws nothing more and keeps the score.
+    show_page_pair(&mut harness, Some(0), Some(0));
+    let drawn = state(&harness).diff.as_ref().unwrap().pictures_drawn();
+    show_page_pair(&mut harness, Some(1), Some(1));
+    let diff = state(&harness).diff.as_ref().unwrap();
+    assert_eq!(
+        diff.pictures_drawn(),
+        drawn,
+        "the picture was cached, the score with it"
+    );
+    assert_eq!(diff.visual_score(moved), Some(&score));
+    // Smoke: a page pair never drawn has no score, and one drawn with no change scores zero.
+    assert!(diff.pictures_drawn() > renders_before);
+    assert_eq!(
+        diff.visual_score(page_of(&harness, 0))
+            .map(|s| s.differing_pixels),
+        Some(0)
+    );
+    assert_eq!(diff.visual_score(page_of(&harness, 2)), None);
+}

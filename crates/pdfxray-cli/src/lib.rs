@@ -2,6 +2,7 @@
 
 mod diff;
 mod render;
+mod visual;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -16,6 +17,7 @@ use serde::Serialize;
 
 pub use self::diff::ScopeArg;
 pub use self::render::RenderArgs;
+pub use self::visual::VisualArgs;
 
 /// Command-line arguments.
 #[derive(Debug, Parser)]
@@ -152,6 +154,17 @@ pub enum Command {
         /// Exit 0 when the documents differ too (errors still exit 2).
         #[arg(long)]
         exit_zero: bool,
+        /// Also score each page pair visually: both pages drawn by hayro on one pixel grid and
+        /// compared perceptually, beside the residue (never instead of it). Costs two renders
+        /// per page pair; without it nothing is drawn. Never changes the exit status.
+        #[arg(long)]
+        visual: bool,
+        /// Pixels per point the pages are drawn at for `--visual`. Default 2.
+        #[arg(long)]
+        visual_scale: Option<f32>,
+        /// How `--visual` compares the pixels.
+        #[command(flatten)]
+        perceptual: VisualArgs,
     },
     /// Validate with veraPDF (run as a separate Java process) and map failures to nodes.
     Validate {
@@ -346,6 +359,9 @@ impl From<LayerArg> for LayerMode {
     }
 }
 
+/// Default `--visual-scale`: `render`'s default scale, and a retina canvas at 100 %.
+const DEFAULT_VISUAL_SCALE: f32 = 2.0;
+
 /// Runs `cli`, writing JSON to `out`.
 pub fn run(cli: &Cli, out: &mut impl Write) -> anyhow::Result<Outcome> {
     let mut outcome = Outcome::Done;
@@ -353,10 +369,19 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> anyhow::Result<Outcome> {
     Ok(outcome)
 }
 
-/// `pdfxray diff`: pairs the two files and prints the part `view` asks for.
+/// `pdfxray diff --visual`: how the pages are scored.
+#[derive(Debug, Clone, Copy)]
+struct VisualRequest {
+    scale: f32,
+    args: visual::VisualArgs,
+}
+
+/// `pdfxray diff`: pairs the two files and prints the part `view` asks for, with the visual
+/// score of each page pair in it when `visual` asks for one.
 fn run_diff(
     (a, b): (&PathBuf, &PathBuf),
     view: diff::DiffView,
+    visual: Option<VisualRequest>,
     exit_zero: bool,
     pretty: bool,
     out: &mut impl Write,
@@ -372,7 +397,24 @@ fn run_diff(
         ));
     }
     let pairing = pdfxray_core::diff::pair(&doc_a, &doc_b);
-    let shown = diff::narrow(&pairing, view);
+    let scores = visual.map(|v| {
+        let how = v.args.perceptual();
+        let scores = match view.page {
+            None => pdfxray_render::page_scores(&doc_a, &doc_b, &pairing, v.scale, &how),
+            // Only the page pair shown is drawn.
+            Some(n) => pairing
+                .pages
+                .iter()
+                .filter(|m| m.a == Some(n))
+                .map(|m| pdfxray_render::page_score(&doc_a, &doc_b, m, v.scale, &how))
+                .collect(),
+        };
+        diff::Scores {
+            settings: v.args.settings(v.scale),
+            pages: scores,
+        }
+    });
+    let shown = diff::narrow(&pairing, view, scores.as_ref());
     write_json(out, &shown, pretty)?;
     Ok(if shown.identical || exit_zero {
         Outcome::Done
@@ -407,13 +449,33 @@ fn run_command(cli: &Cli, out: &mut impl Write, outcome: &mut Outcome) -> anyhow
             scope,
             include_unchanged,
             exit_zero,
+            visual,
+            visual_scale,
+            perceptual,
         } => {
             let view = diff::DiffView {
                 scope: *scope,
                 page: *page,
                 include_unchanged: *include_unchanged,
             };
-            *outcome = run_diff((a, b), view, *exit_zero, cli.pretty, out)?;
+            perceptual.only_with(*visual, "--visual")?;
+            if visual_scale.is_some() && !*visual {
+                return Err(anyhow!("--visual-scale needs --visual"));
+            }
+            if *visual && *scope == ScopeArg::Tags {
+                return Err(anyhow!(
+                    "--visual scores ink: use it with --scope all or --scope ink"
+                ));
+            }
+            let scale = visual_scale.unwrap_or(DEFAULT_VISUAL_SCALE);
+            if !(scale.is_finite() && scale > 0.0) {
+                return Err(anyhow!("--visual-scale must be a positive number"));
+            }
+            let request = visual.then_some(VisualRequest {
+                scale,
+                args: *perceptual,
+            });
+            *outcome = run_diff((a, b), view, request, *exit_zero, cli.pretty, out)?;
             Ok(())
         }
         Command::Info { file } => write_json(out, &open(file)?.info(), cli.pretty),

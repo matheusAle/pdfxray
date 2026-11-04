@@ -8,7 +8,39 @@ use pdfxray_core::diff::{
     Anchor, DiagnosticsDiff, FindingChange, FindingsDiff, Note, Offset, PageMatch, Pair, Pairing, Sides,
     Status, Summary, ValidationDiff,
 };
+use pdfxray_render::score::PageScore;
 use serde::Serialize;
+
+use crate::visual::{ScoreView, Settings};
+
+/// The visual layer of a pairing (`--visual`): how it was measured, and the score of the page
+/// pairs in scope, each naming its pages.
+#[derive(Debug, Clone)]
+pub(crate) struct Scores {
+    /// How.
+    pub(crate) settings: Settings,
+    /// The scores; a page pair without one here was not scored.
+    pub(crate) pages: Vec<PageScore>,
+}
+
+impl Scores {
+    fn of(&self, m: &PageMatch) -> Option<&PageScore> {
+        self.pages.iter().find(|s| (s.a, s.b) == (m.a, m.b))
+    }
+}
+
+/// The visual score of a page pair as JSON: the score, or why there is none.
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub(crate) enum PageVisual {
+    /// Both pages drawn and compared.
+    Scored(ScoreView),
+    /// They could not be drawn on one grid.
+    Refused {
+        /// Why.
+        refused: String,
+    },
+}
 
 /// `--scope` values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize)]
@@ -64,6 +96,9 @@ pub(crate) struct DiffOutput<'a> {
     /// Diagnostics fixed and introduced (`all`); narrowed to the page with `--page`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) diagnostics: Option<Cow<'a, DiagnosticsDiff>>,
+    /// How the page pairs were scored visually (`--visual`); each page pair carries its score.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) visual: Option<Settings>,
 }
 
 /// A page pair as shown under a scope: the residue only where it is in scope.
@@ -80,6 +115,20 @@ pub(crate) struct PageView<'a> {
     /// Content outside the structure tree (`all`, `ink`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) residue: Option<&'a pdfxray_core::diff::Residue>,
+    /// The visual score (`--visual`), beside the residue: they answer different questions. Absent
+    /// for a page only one side has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) visual: Option<PageVisual>,
+}
+
+/// The visual score of `m` in `scores`, as JSON.
+fn page_visual(scores: Option<&Scores>, m: &PageMatch) -> Option<PageVisual> {
+    match scores?.of(m)?.visual.as_ref()? {
+        Ok(v) => Some(PageVisual::Scored(ScoreView::from(v))),
+        Err(why) => Some(PageVisual::Refused {
+            refused: why.to_string(),
+        }),
+    }
 }
 
 /// True when a page pair changed in what `scope` looks at.
@@ -94,8 +143,11 @@ fn page_changed(m: &PageMatch, scope: ScopeArg) -> bool {
     }
 }
 
-/// Narrows `pairing` to what `view` asks for.
-pub(crate) fn narrow(pairing: &Pairing, view: DiffView) -> DiffOutput<'_> {
+/// Narrows `pairing` to what `view` asks for, with the visual `scores` of its page pairs when
+/// there are any. A page pair whose score exceeds its limit is listed even when nothing else
+/// changed on it; it does not make the documents differ (`identical`, and the exit status, come
+/// from the pairing).
+pub(crate) fn narrow<'a>(pairing: &'a Pairing, view: DiffView, scores: Option<&Scores>) -> DiffOutput<'a> {
     let partner = view
         .page
         .and_then(|n| pairing.pages.iter().find(|m| m.a == Some(n)).and_then(|m| m.b));
@@ -141,14 +193,21 @@ pub(crate) fn narrow(pairing: &Pairing, view: DiffView) -> DiffOutput<'_> {
             .filter(|x| view.include_unchanged || x.status != Status::Same)
             .collect()
     });
+    let looks_changed = |m: &PageMatch| {
+        scores
+            .and_then(|s| s.of(m))
+            .and_then(|s| s.visual.as_ref())
+            .is_some_and(|v| v.as_ref().is_ok_and(pdfxray_render::score::VisualScore::exceeds))
+    };
     let pages = in_scope_pages
         .into_iter()
-        .filter(|m| view.include_unchanged || page_changed(m, view.scope))
+        .filter(|m| view.include_unchanged || page_changed(m, view.scope) || looks_changed(m))
         .map(|m| PageView {
             a: m.a,
             b: m.b,
             pairs: m.pairs,
             residue: (view.scope != ScopeArg::Tags).then_some(&m.residue),
+            visual: page_visual(scores, m),
         })
         .collect();
     DiffOutput {
@@ -163,6 +222,7 @@ pub(crate) fn narrow(pairing: &Pairing, view: DiffView) -> DiffOutput<'_> {
         pairs,
         pages,
         diagnostics,
+        visual: scores.map(|s| s.settings),
     }
 }
 
@@ -223,20 +283,20 @@ mod tests {
     fn diagnostics_follow_the_scope_and_the_page() {
         let p = drop_alt();
         // The figure that lost its /Alt is on page 0.
-        let whole = narrow(&p, view(ScopeArg::All, None));
+        let whole = narrow(&p, view(ScopeArg::All, None), None);
         assert_eq!(codes(&whole), Some(vec!["figure-alt-missing".to_owned()]));
         assert!(!whole.identical);
         assert_eq!(
-            codes(&narrow(&p, view(ScopeArg::All, Some(0)))),
+            codes(&narrow(&p, view(ScopeArg::All, Some(0)), None)),
             Some(vec!["figure-alt-missing".to_owned()])
         );
         // Page 1 has neither a changed pair nor a changed diagnostic: identical.
-        let page1 = narrow(&p, view(ScopeArg::All, Some(1)));
+        let page1 = narrow(&p, view(ScopeArg::All, Some(1)), None);
         assert_eq!(codes(&page1), Some(vec![]));
         assert!(page1.identical);
         // Only `all` carries diagnostics.
-        assert_eq!(codes(&narrow(&p, view(ScopeArg::Tags, None))), None);
-        assert_eq!(codes(&narrow(&p, view(ScopeArg::Ink, None))), None);
+        assert_eq!(codes(&narrow(&p, view(ScopeArg::Tags, None), None)), None);
+        assert_eq!(codes(&narrow(&p, view(ScopeArg::Ink, None), None)), None);
         // Smoke: the typed change is there too, so the finding rides a real pair.
         assert_eq!(whole.summary.map(|s| s.modified), Some(1));
     }

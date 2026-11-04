@@ -9,6 +9,11 @@
 //! The global offset a pairing reports is applied only when asked ([`Registration`]), and the
 //! composite says that it was.
 //!
+//! Pixels are compared by a [`Comparator`] that says which question is asked: two engines on one
+//! file ([`Comparator::CrossEngine`], a lenient channel tolerance) or one engine on two files
+//! ([`Comparator::SameEngine`], the perceptual [`crate::score`]). Side by side, the pages are
+//! scored too when they share a grid anyway (same size), so the default mode costs nothing more.
+//!
 //! The composite carries where each side's page space landed on it ([`Composite::a`],
 //! [`Composite::b`]), so the annotation layer can be laid out over both sides at once, and the
 //! app and an export draw the same picture.
@@ -19,6 +24,7 @@ use pdfxray_core::{Document, PageIx, Point, Rect};
 
 use crate::annotate::{self, Annotation, Grid, Legend, Palette, Scene};
 use crate::diff::{diff, luma};
+use crate::score::{self, Perceptual, VisualScore};
 use crate::transform::PixelRect;
 use crate::{Overlay, PixelGrid, RenderError, RenderSpec, RenderedPage, Transform, overlay, render_page};
 
@@ -30,8 +36,8 @@ pub enum Mode {
     /// A's ink in [`TINT_A`], B's in [`TINT_B`], multiplied: ink both share comes out dark, ink
     /// of one side only keeps that side's colour.
     Overlay,
-    /// A in grey with every pixel that differs from B beyond the tolerance in red (see
-    /// [`crate::diff`]).
+    /// A in grey with every pixel that differs from B: in the two ink colours of
+    /// [`Perceptual`] for two files, in red for two engines (see [`Comparator`]).
     Mask,
 }
 
@@ -72,9 +78,58 @@ pub struct Placement {
     pub bounds: PixelRect,
 }
 
-/// The pixel comparison of the two sides, when they share a grid.
+/// How the pixels of the two sides are compared: the question decides the comparator.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Delta {
+pub enum Comparator {
+    /// One file drawn by two engines ([`crate::pdfium`]): a pixel differs when a channel
+    /// differs by more than `tolerance` ([`crate::diff`]). Engines anti-alias differently, so
+    /// the tolerance is lenient: [`CROSS_ENGINE_TOLERANCE`].
+    CrossEngine {
+        /// The per-channel difference that still counts as equal.
+        tolerance: u8,
+    },
+    /// Two files drawn by the same engine on the same grid: the perceptual score
+    /// ([`crate::score`]), anti-aliasing left out by default.
+    SameEngine(Perceptual),
+}
+
+impl Comparator {
+    /// Two files, one engine, the default [`Perceptual`] comparison.
+    pub fn same_engine() -> Self {
+        Self::SameEngine(Perceptual::default())
+    }
+}
+
+/// The pixel comparison of the two sides.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Delta {
+    /// By [`Comparator::CrossEngine`].
+    Channel(ChannelDelta),
+    /// By [`Comparator::SameEngine`].
+    Visual(VisualScore),
+}
+
+impl Delta {
+    /// Pixels that differ, as the comparator counts them.
+    pub const fn differing_pixels(&self) -> u64 {
+        match self {
+            Self::Channel(d) => d.differing_pixels,
+            Self::Visual(v) => v.differing_pixels,
+        }
+    }
+
+    /// The visual score, for two files.
+    pub const fn visual(&self) -> Option<&VisualScore> {
+        match self {
+            Self::Visual(v) => Some(v),
+            Self::Channel(_) => None,
+        }
+    }
+}
+
+/// The channel comparison of two engines' renders ([`Comparator::CrossEngine`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChannelDelta {
     /// Pixels whose largest channel difference exceeds the tolerance.
     pub differing_pixels: u64,
     /// Share of the bitmap's pixels that differ, `0.0..=1.0`.
@@ -106,7 +161,8 @@ pub struct Composite {
     pub registration: Option<Registration>,
     /// B's scale relative to A's when [`Fit::ScaleBToA`] scaled it; `None` when it was not.
     pub b_scale: Option<f64>,
-    /// Where the pixels differ; `None` side by side, where no pixel is compared.
+    /// Where the pixels differ. Side by side, only two files on grids of the same size are
+    /// compared; two engines side by side are not.
     pub delta: Option<Delta>,
 }
 
@@ -137,9 +193,9 @@ const GUTTER: f32 = 24.0;
 const BACKDROP: [u8; 4] = [0xD5, 0xD9, 0xDE, 255];
 /// How far two page sizes may differ, points, and still be drawn into one grid unscaled.
 pub const SIZE_TOLERANCE: f32 = 1.0;
-/// Default mask tolerance for two files drawn by the same engine. Cross-engine comparison (see
-/// [`crate::pdfium`]) needs a looser one, 48.
-pub const SAME_ENGINE_TOLERANCE: u8 = 12;
+/// Default [`Comparator::CrossEngine`] tolerance: tuned for hayro against `PDFium`, whose
+/// anti-aliasing differs on every glyph edge.
+pub const CROSS_ENGINE_TOLERANCE: u8 = 48;
 
 /// What to composite and how.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -152,8 +208,8 @@ pub struct Request {
     pub fit: Fit,
     /// The offset to remove from B, if any.
     pub registration: Option<Registration>,
-    /// The per-channel difference that still counts as equal.
-    pub tolerance: u8,
+    /// How the pixels are compared.
+    pub comparator: Comparator,
 }
 
 /// Draws page `a.1` of `a.0` and page `b.1` of `b.0` into one bitmap as `request` says.
@@ -162,9 +218,9 @@ pub fn composite(
     b: (&Document, PageIx),
     request: &Request,
 ) -> Result<Composite, CompositeError> {
-    let side = |side: char| move |error| CompositeError::Render { side, error };
-    let page_a = render_page(a.0, a.1, &RenderSpec::new(request.scale)).map_err(side('A'))?;
     if !request.mode.shares_grid() {
+        let side = |side: char| move |error| CompositeError::Render { side, error };
+        let page_a = render_page(a.0, a.1, &RenderSpec::new(request.scale)).map_err(side('A'))?;
         let page_b = render_page(b.0, b.1, &RenderSpec::new(request.scale)).map_err(side('B'))?;
         return Ok(compose(
             request.mode,
@@ -172,9 +228,35 @@ pub fn composite(
             &page_b,
             None,
             None,
-            request.tolerance,
+            &request.comparator,
         ));
     }
+    let drawn = shared_grid(a, b, request)?;
+    Ok(compose(
+        request.mode,
+        &drawn.a,
+        &drawn.b,
+        request.registration,
+        drawn.b_scale,
+        &request.comparator,
+    ))
+}
+
+/// The two pages of a pair on A's grid, B scaled as [`Fit`] allows and registered as asked.
+struct OneGrid {
+    a: RenderedPage,
+    b: RenderedPage,
+    b_scale: Option<f64>,
+}
+
+/// Draws A on its own grid and B into it, as `request` says (its mode and comparator aside).
+fn shared_grid(
+    a: (&Document, PageIx),
+    b: (&Document, PageIx),
+    request: &Request,
+) -> Result<OneGrid, CompositeError> {
+    let side = |side: char| move |error| CompositeError::Render { side, error };
+    let page_a = render_page(a.0, a.1, &RenderSpec::new(request.scale)).map_err(side('A'))?;
     let b_scale = b_scale(a, b, request.fit).map_err(|e| match e {
         Refusal::Geometry(why) => CompositeError::Geometry(why),
         Refusal::Render(side_of, error) => CompositeError::Render { side: side_of, error },
@@ -199,14 +281,32 @@ pub fn composite(
         ..RenderSpec::new(scale_b)
     };
     let page_b = render_page(b.0, b.1, &spec).map_err(side('B'))?;
-    Ok(compose(
-        request.mode,
-        &page_a,
-        &page_b,
-        request.registration,
+    Ok(OneGrid {
+        a: page_a,
+        b: page_b,
         b_scale,
-        request.tolerance,
-    ))
+    })
+}
+
+/// The visual score of page `a.1` of `a.0` against page `b.1` of `b.0`: B drawn into A's grid at
+/// `scale` pixels per point, unregistered, compared as `how` says. Refused, with the reason,
+/// when the page geometry differs (nothing is scaled) or a side cannot be drawn. What the mask
+/// of [`composite`] counts, without drawing the mask.
+pub fn score_pages(
+    a: (&Document, PageIx),
+    b: (&Document, PageIx),
+    scale: f32,
+    how: &Perceptual,
+) -> Result<VisualScore, CompositeError> {
+    let request = Request {
+        mode: Mode::Mask,
+        scale,
+        fit: Fit::Refuse,
+        registration: None,
+        comparator: Comparator::SameEngine(*how),
+    };
+    let drawn = shared_grid(a, b, &request)?;
+    Ok(score::score(&drawn.a, &drawn.b, how))
 }
 
 enum Refusal {
@@ -240,13 +340,16 @@ fn b_scale(a: (&Document, PageIx), b: (&Document, PageIx), fit: Fit) -> Result<O
 /// Puts two rendered pages into one bitmap: side by side, or, for the modes that share a grid,
 /// blended pixel by pixel (B is expected on A's grid; where it is not, what only one side covers
 /// counts as differing). `registration` and `b_scale` are what was done to B, recorded.
+///
+/// Side by side, two files ([`Comparator::SameEngine`]) are still scored when both bitmaps have
+/// the same size: each page is then on the same grid as the other.
 pub fn compose(
     mode: Mode,
     a: &RenderedPage,
     b: &RenderedPage,
     registration: Option<Registration>,
     b_scale: Option<f64>,
-    tolerance: u8,
+    comparator: &Comparator,
 ) -> Composite {
     let bounds = |page: &RenderedPage, x: f64| PixelRect {
         x0: x,
@@ -269,6 +372,12 @@ pub fn compose(
         blit(&mut rgba, width, a, 0);
         blit(&mut rgba, width, b, a.width + gutter);
         let b_at = f64::from(a.width + gutter);
+        let delta = match comparator {
+            Comparator::SameEngine(how) if (a.width, a.height) == (b.width, b.height) => {
+                Some(Delta::Visual(score::score(a, b, how)))
+            }
+            Comparator::SameEngine(_) | Comparator::CrossEngine { .. } => None,
+        };
         return Composite {
             mode,
             width,
@@ -278,25 +387,34 @@ pub fn compose(
             b: placement(b, b_at),
             registration: None,
             b_scale: None,
-            delta: None,
+            delta,
         };
     }
-    let compared = diff(a, b, tolerance);
-    let delta = Delta {
-        differing_pixels: compared.differing_pixels,
-        differing_fraction: compared.differing_fraction(),
-        max_channel_delta: compared.max_channel_delta,
-        mean_delta: compared.mean_delta,
-        tolerance,
+    let wants_mask = mode == Mode::Mask;
+    let (delta, mask) = match comparator {
+        Comparator::CrossEngine { tolerance } => {
+            let compared = diff(a, b, *tolerance);
+            let delta = Delta::Channel(ChannelDelta {
+                differing_pixels: compared.differing_pixels,
+                differing_fraction: compared.differing_fraction(),
+                max_channel_delta: compared.max_channel_delta,
+                mean_delta: compared.mean_delta,
+                tolerance: *tolerance,
+            });
+            (delta, wants_mask.then_some(compared.image))
+        }
+        Comparator::SameEngine(how) if wants_mask => {
+            let (visual, image) = score::mask(a, b, how);
+            (Delta::Visual(visual), Some(image))
+        }
+        Comparator::SameEngine(how) => (Delta::Visual(score::score(a, b, how)), None),
     };
-    let rgba = match mode {
-        Mode::Mask => compared.image,
-        _ => overlay_pixels(a, b, compared.width, compared.height),
-    };
+    let (width, height) = (a.width.max(b.width), a.height.max(b.height));
+    let rgba = mask.unwrap_or_else(|| overlay_pixels(a, b, width, height));
     Composite {
         mode,
-        width: compared.width,
-        height: compared.height,
+        width,
+        height,
         rgba,
         a: placement(a, 0.0),
         b: placement(b, 0.0),
@@ -491,7 +609,7 @@ mod tests {
             &page(5, 6, WHITE),
             None,
             None,
-            0,
+            &Comparator::same_engine(),
         );
 
         // Scale 2: a 48-pixel gutter.
@@ -503,8 +621,26 @@ mod tests {
         assert_eq!(at(&c, 0, 4), BACKDROP, "below the shorter page");
         assert_eq!(c.b.bounds.x0, 52.0);
         assert_eq!(c.b.to_pixel.to_pixel(Point::new(0.0, 0.0)).x, 52.0);
-        // Smoke: nothing is compared side by side.
+        // Smoke: pages of different sizes side by side are on different grids: not compared.
         assert_eq!(c.delta, None);
+    }
+
+    #[test]
+    fn side_by_side_scores_two_files_on_grids_of_one_size_but_never_two_engines() {
+        let a = page(2, 1, WHITE);
+        let mut b = a.clone();
+        b.rgba[4..8].copy_from_slice(&BLACK);
+        let side = |comparator| compose(Mode::SideBySide, &a, &b, None, None, &comparator);
+
+        let files = side(Comparator::same_engine());
+        let engines = side(Comparator::CrossEngine {
+            tolerance: CROSS_ENGINE_TOLERANCE,
+        });
+
+        assert_eq!(files.delta.map(|d| d.differing_pixels()), Some(1));
+        assert_eq!(engines.delta, None);
+        // Smoke: the picture is side by side either way, not a mask.
+        assert_eq!(files.rgba, engines.rgba);
     }
 
     #[test]
@@ -516,7 +652,7 @@ mod tests {
         b.rgba[4..8].copy_from_slice(&BLACK);
         b.rgba[8..12].copy_from_slice(&BLACK);
 
-        let c = compose(Mode::Overlay, &a, &b, None, None, 0);
+        let c = compose(Mode::Overlay, &a, &b, None, None, &Comparator::same_engine());
 
         let shared = [
             mul(TINT_A[0], TINT_B[0]),
@@ -528,21 +664,51 @@ mod tests {
             [at(&c, 0, 0), at(&c, 1, 0), at(&c, 2, 0)],
             [TINT_A, TINT_B, shared]
         );
-        assert_eq!(c.delta.map(|d| d.differing_pixels), Some(2));
+        assert_eq!(c.delta.map(|d| d.differing_pixels()), Some(2));
         // Smoke: white on both sides stays white.
         assert_eq!(tint(WHITE, TINT_A), [255, 255, 255]);
     }
 
     #[test]
-    fn mask_is_the_pixel_diff_of_the_two_sides() {
+    fn a_mask_of_two_files_colours_ink_added_and_removed_apart() {
+        let a = page(3, 1, WHITE);
+        let mut b = a.clone();
+        b.rgba[4..8].copy_from_slice(&BLACK);
+        let mut a = a;
+        a.rgba[8..12].copy_from_slice(&BLACK);
+        let how = Perceptual::default();
+
+        let c = compose(Mode::Mask, &a, &b, None, None, &Comparator::SameEngine(how));
+
+        assert_eq!(
+            [at(&c, 0, 0), at(&c, 1, 0), at(&c, 2, 0)],
+            [WHITE, how.ink_added, how.ink_removed]
+        );
+        let visual = *c.delta.unwrap().visual().unwrap();
+        assert_eq!((visual.ink_added, visual.ink_removed), (1, 1));
+        // Smoke: the ratio is of the whole bitmap.
+        assert!((visual.ratio() - 2.0 / 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_mask_of_two_engines_is_the_channel_diff_in_red() {
         let a = page(2, 1, WHITE);
         let mut b = a.clone();
         b.rgba[4..8].copy_from_slice(&BLACK);
 
-        let c = compose(Mode::Mask, &a, &b, None, None, 12);
+        let c = compose(
+            Mode::Mask,
+            &a,
+            &b,
+            None,
+            None,
+            &Comparator::CrossEngine { tolerance: 12 },
+        );
 
         assert_eq!([at(&c, 0, 0), at(&c, 1, 0)], [WHITE, [255, 0, 0, 255]]);
-        let delta = c.delta.unwrap();
+        let Some(Delta::Channel(delta)) = c.delta else {
+            panic!("two engines compare channels: {:?}", c.delta);
+        };
         assert_eq!((delta.differing_pixels, delta.tolerance), (1, 12));
         // Smoke: the fraction is of the whole bitmap.
         assert!((delta.differing_fraction - 0.5).abs() < 1e-9);
@@ -556,7 +722,7 @@ mod tests {
             &page(4, 4, WHITE),
             None,
             None,
-            0,
+            &Comparator::same_engine(),
         );
 
         let r = c.b_in_a(Rect::new(0.0, 0.0, 1.0, 1.0));

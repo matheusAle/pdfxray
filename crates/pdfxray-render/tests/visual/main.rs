@@ -272,13 +272,14 @@ fn the_visual_diff_modes_match_their_baselines() {
             scale: 1.0,
             fit: Fit::Refuse,
             registration: None,
-            tolerance: composite::SAME_ENGINE_TOLERANCE,
+            comparator: composite::Comparator::same_engine(),
         };
         let mut picture = composite::composite((&a, 1), (&b, 1), &request).unwrap();
         let [scene_a, scene_b] =
             annotate::change_scenes(&pairing, (Some(1), Some(1)), mode, show, &|_, _| None);
         let scene_b = scene_b.mapped(|rect| picture.b_in_a(rect));
-        let legend = annotate::change_legend(mode, show, &[], Palette::DESIGN.warn);
+        let visual = picture.delta.as_ref().and_then(|d| d.visual().copied());
+        let legend = annotate::change_legend(mode, show, visual.as_ref(), &[], Palette::DESIGN.warn);
 
         picture.annotate(1.0, &Palette::DESIGN, &[scene_a, scene_b], &legend);
 

@@ -5,7 +5,13 @@
 //! export writes, so the app shows that very bitmap and lays the annotations over it with the
 //! same layout ([`pdfxray_render::composite::layout`]). A page only one side has is that side's
 //! page alone.
+//!
+//! Each picture of two pages on one grid also carries their visual score
+//! ([`pdfxray_render::score`]): the mask counts it anyway, overlaid and side by side (pages of
+//! one size) it is one more pass over pixels already drawn. The score is kept per page pair, so
+//! the Changes list shows it for every page pair the canvas has drawn, at no further rendering.
 
+use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -16,7 +22,8 @@ use egui::{ColorImage, Context, TextureHandle, TextureOptions};
 use pdfxray_core::diff::Side;
 use pdfxray_core::numeric::usize_from_u32;
 use pdfxray_core::{Document, PageIx};
-use pdfxray_render::composite::{self, Composite, CompositeError, Fit, Mode, Request};
+use pdfxray_render::composite::{self, Comparator, Composite, CompositeError, Fit, Mode, Request};
+use pdfxray_render::score::VisualScore;
 use pdfxray_render::{RenderSpec, Transform, render_page};
 
 use crate::page_cache::pixel_digest;
@@ -104,6 +111,11 @@ pub(crate) struct DiffFrames {
     outstanding: Option<PictureKey>,
     shown: Option<(PictureKey, Picture)>,
     renders: usize,
+    /// The visual score of every page pair drawn on one grid, by A's and B's page: kept when
+    /// the picture is evicted, so moving between page pairs never draws one again for it.
+    scores: HashMap<(PageIx, PageIx), VisualScore>,
+    /// Page pairs scored since [`DiffFrames::take_scored`] last asked.
+    scored: Vec<(PageIx, PageIx)>,
 }
 
 impl DiffFrames {
@@ -120,6 +132,21 @@ impl DiffFrames {
     /// The digest of the picture last shown, and the key it answers.
     pub(crate) fn shown(&self) -> Option<(PictureKey, u64)> {
         self.shown.as_ref().map(|(key, p)| (*key, p.digest))
+    }
+
+    /// The visual score of the page pair `(a, b)`, once the canvas has drawn it unscaled.
+    pub(crate) fn score(&self, a: PageIx, b: PageIx) -> Option<&VisualScore> {
+        self.scores.get(&(a, b))
+    }
+
+    /// Every score so far, by page pair.
+    pub(crate) fn scores(&self) -> &HashMap<(PageIx, PageIx), VisualScore> {
+        &self.scores
+    }
+
+    /// The page pairs scored since the last call.
+    pub(crate) fn take_scored(&mut self) -> Vec<(PageIx, PageIx)> {
+        std::mem::take(&mut self.scored)
     }
 
     /// Drops everything: a side was read again, or the comparison ended.
@@ -182,6 +209,15 @@ impl DiffFrames {
             if self.outstanding == Some(key) {
                 self.outstanding = None;
             }
+            if let (Some(a), Some(b), Ok(picture)) = (key.a, key.b, &outcome)
+                && let Placed::Both(c) = picture.placed.as_ref()
+                // A score of B scaled onto A is not the page pair's.
+                && c.b_scale.is_none()
+                && let Some(visual) = c.delta.as_ref().and_then(|d| d.visual())
+                && self.scores.insert((a, b), *visual).is_none_or(|old| old != *visual)
+            {
+                self.scored.push((a, b));
+            }
             self.entries.retain(|(k, _)| *k != key);
             if self.entries.len() == CAPACITY {
                 drop(self.entries.remove(0));
@@ -231,7 +267,7 @@ fn draw(ctx: &Context, a: &Document, b: &Document, key: PictureKey) -> Outcome {
                 scale,
                 fit: key.fit,
                 registration: None,
-                tolerance: composite::SAME_ENGINE_TOLERANCE,
+                comparator: Comparator::same_engine(),
             };
             let mut picture = composite::composite((a, pa), (b, pb), &request).map_err(|e| match e {
                 CompositeError::Geometry(why) => Refusal::Geometry(why),

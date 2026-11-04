@@ -28,6 +28,7 @@ use pdfxray_core::diff::{Method, Pair, Pairing, Rung, Side, Status};
 use pdfxray_core::{Badge, Document, NodeId, PageIx, Severity, TagBox, TreeNode};
 use pdfxray_render::annotate::{ChangeShow, status_rgba};
 use pdfxray_render::composite::{Fit, Mode};
+use pdfxray_render::score::{VisualScore, percent};
 
 use super::{AppState, LoadedDocument};
 use crate::components::{Annotation, Tone};
@@ -284,15 +285,47 @@ impl DiffSession {
     }
 
     /// The Changes list, built from the pairing on first use and again when its filter changes.
+    /// A page pair's row takes its visual score as soon as the canvas has drawn it.
     pub fn tree(&mut self) -> Option<&mut TreeModel> {
         let pairing = Arc::clone(self.pairing()?);
         if self.tree.is_none() {
             let (rows, roots) = change_tree(&pairing, self.show_unchanged);
             self.rows = rows;
             let rows = self.rows.clone();
-            self.tree = Some(TreeModel::with_decor(roots, |node| decor(&pairing, &rows, node)));
+            let scores = self.frames.scores();
+            self.tree = Some(TreeModel::with_decor(roots, |node| {
+                decor(&pairing, &rows, scores, node)
+            }));
+            // Every score so far is in the rows just built.
+            drop(self.frames.take_scored());
         }
-        self.tree.as_mut()
+        let updates: Vec<_> = self
+            .frames
+            .take_scored()
+            .into_iter()
+            .filter_map(|(a, b)| {
+                let page = pairing
+                    .pages
+                    .iter()
+                    .position(|m| (m.a, m.b) == (Some(a), Some(b)))?;
+                Some((
+                    self.row_id(ChangeRow::Page(page))?,
+                    visual_decor(self.frames.score(a, b)?),
+                ))
+            })
+            .collect();
+        let tree = self.tree.as_mut()?;
+        for (id, (right, hover)) in updates {
+            tree.set_right(&id, right, hover);
+        }
+        Some(tree)
+    }
+
+    /// The visual score of the page pair at `page` in [`Pairing::pages`], once the canvas has
+    /// drawn it on one grid.
+    pub fn visual_score(&self, page: usize) -> Option<&VisualScore> {
+        let m = self.pairing()?.pages.get(page)?;
+        self.frames.score(m.a?, m.b?)
     }
 
     /// Shows or hides the unchanged pairs in the Changes list.
@@ -516,9 +549,40 @@ fn pair_node(id: NodeId, pair: &Pair) -> TreeNode {
     node
 }
 
+/// What a page pair's row shows of its visual score: the share of pixels that differ at the
+/// right end, toned like a change when it exceeds, and the score in words as the tooltip.
+fn visual_decor(score: &VisualScore) -> (Vec<Annotation>, Option<String>) {
+    let tone = if score.exceeds() {
+        Tone::Kind(status_color(Status::Modified))
+    } else {
+        Tone::Neutral
+    };
+    let mut hover = format!("Visual score: {}", score.summary());
+    if let Some(aa) = score.anti_aliasing() {
+        hover.push_str("; ");
+        hover.push_str(&aa);
+    }
+    hover.push_str(
+        ". Measured where the canvas drew the page pair; the residue (artifacts) is counted \
+         apart.",
+    );
+    (
+        vec![Annotation::Toned(
+            format!("visual {}", percent(score.ratio())),
+            tone,
+        )],
+        Some(hover),
+    )
+}
+
 /// How a row of the Changes list is drawn: a pair's dot and tag in its status colour, a page's
-/// count of changes, the residue's counts.
-fn decor(pairing: &Pairing, rows: &[ChangeRow], node: &TreeNode) -> Decor {
+/// count of changes and its visual score once there is one, the residue's counts.
+fn decor(
+    pairing: &Pairing,
+    rows: &[ChangeRow],
+    scores: &HashMap<(PageIx, PageIx), VisualScore>,
+    node: &TreeNode,
+) -> Decor {
     let row = match &node.id {
         NodeId::Group(n) => usize::try_from(*n).ok().and_then(|n| rows.get(n)),
         _ => None,
@@ -544,12 +608,17 @@ fn decor(pairing: &Pairing, rows: &[ChangeRow], node: &TreeNode) -> Decor {
                 .iter()
                 .filter(|p| p.status != Status::Same && DiffSession::page_of(pairing, p) == Some(*page))
                 .count();
+            let m = &pairing.pages[*page];
+            let score = m.a.zip(m.b).and_then(|key| scores.get(&key));
+            let (right, hover_text) = score.map(visual_decor).unwrap_or_default();
             Decor {
                 detail: Some(match changes {
                     0 => "no changes".to_owned(),
                     1 => "1 change".to_owned(),
                     n => format!("{n} changes"),
                 }),
+                right,
+                hover_text,
                 ..Decor::default()
             }
         }

@@ -188,6 +188,19 @@ impl TreeModel {
         model
     }
 
+    /// Replaces what the row `id` shows at its right end and its tooltip, for a fact that
+    /// arrived after the tree was built (a page pair's visual score): expansion, scroll and
+    /// filter stay as they are. False when no row has `id`.
+    pub fn set_right(&mut self, id: &NodeId, right: Vec<Annotation>, hover_text: Option<String>) -> bool {
+        let Some(&at) = self.index.get(id) else {
+            return false;
+        };
+        let slot = &mut self.slots[at];
+        slot.right = right;
+        slot.hover_text = hover_text;
+        true
+    }
+
     /// The colour of the dot of the row with `id`.
     pub fn dot_of(&self, id: &NodeId) -> Option<Color32> {
         self.index.get(id).map(|&at| self.slots[at].dot)
