@@ -8,8 +8,8 @@ use super::align::{self, Keys, Match};
 use super::keys::{self, ElemKey};
 use super::pages::{self, Residues};
 use super::{
-    Confidence, Field, FieldChange, Method, Note, Offset, PageMatch, Pair, PairKind, Pairing, Rung, Side,
-    SideInfo, Sides, Status, TOLERANCE, rows,
+    Confidence, DiagnosticsDiff, Field, FieldChange, FindingsDiff, Method, Note, Offset, PageMatch, Pair,
+    PairKind, Pairing, Rung, Side, SideInfo, Sides, Status, TOLERANCE, ValidationDiff, rows,
 };
 use crate::capture::Alignment;
 use crate::numeric::usize_from_u32;
@@ -67,42 +67,43 @@ pub(super) fn pair_with(a: &Document, ka: &[ElemKey], b: &Document, kb: &[ElemKe
     let parents = |k: &[ElemKey]| k.iter().map(|e| e.parent).collect::<Vec<_>>();
     let roles = |k: &[ElemKey]| k.iter().map(|e| keys::role_key(e.role())).collect::<Vec<_>>();
     let (pa, pb, ra, rb) = (parents(ka), parents(kb), roles(ka), roles(kb));
-    let aligned = align::pair_parents(
-        align::align(&seq(ka), &seq(kb)),
-        align::Tree {
-            parent: &pa,
-            role: &ra,
-        },
-        align::Tree {
-            parent: &pb,
-            role: &rb,
-        },
-    );
-
-    let mut votes: BTreeMap<(PageIx, PageIx), usize> = BTreeMap::new();
-    for m in &aligned.matches {
-        if let (Some((pa, _)), Some((pb, _))) = (ka[m.a].placed, kb[m.b].placed) {
-            *votes.entry((pa, pb)).or_default() += 1;
-        }
-    }
+    let align_keys = |sa: &[Keys], sb: &[Keys]| {
+        align::pair_parents(
+            align::align(sa, sb),
+            align::Tree {
+                parent: &pa,
+                role: &ra,
+            },
+            align::Tree {
+                parent: &pb,
+                role: &rb,
+            },
+        )
+    };
     let order = |doc: &Document| page_order(doc, visit);
     let residue_a = pages::residues(a, &order(a), (0.0, 0.0));
     let residue_b = pages::residues(b, &order(b), (0.0, 0.0));
-    let correspondence = pages::correspond(&votes, &residue_a, &residue_b);
-    let mut a_to_b: Vec<Option<PageIx>> = vec![None; a.page_count()];
-    for &(pa, pb, _) in &correspondence {
-        if let (Some(pa), Some(pb)) = (pa, pb) {
-            a_to_b[usize_from_u32(pa)] = Some(pb);
-        }
-    }
-    let corresponds = |pa: PageIx, pb: PageIx| a_to_b.get(usize_from_u32(pa)).copied().flatten() == Some(pb);
 
-    let offset = estimate_offset(&aligned.matches, ka, kb, &corresponds);
+    let first = align_keys(&seq(ka), &seq(kb));
+    let (correspondence, a_to_b) = correspond(&first.matches, ka, kb, &residue_a, &residue_b, a.page_count());
+    let offset = estimate_offset(&first.matches, ka, kb, &a_to_b);
     let shift = offset.map_or((0.0, 0.0), |o| (o.dx, o.dy));
-    let residue_b: Vec<Residues> = if offset.is_some() {
-        pages::residues(b, &order(b), shift)
+    // The offset comes from text matches, which no translation affects; the box rungs were
+    // keyed before it was known, so a shifted figure keys differently on each side. With an
+    // offset, both sides are re-keyed halfway towards each other (so B with A mirrors A with B
+    // exactly) and aligned again.
+    let (aligned, correspondence, a_to_b, residue_b) = if offset.is_some() {
+        let half = (shift.0 / 2.0, shift.1 / 2.0);
+        let aligned = align_keys(
+            &keys::registered(ka, half),
+            &keys::registered(kb, (-half.0, -half.1)),
+        );
+        let residue_b = pages::residues(b, &order(b), shift);
+        let (correspondence, a_to_b) =
+            correspond(&aligned.matches, ka, kb, &residue_a, &residue_b, a.page_count());
+        (aligned, correspondence, a_to_b, residue_b)
     } else {
-        residue_b
+        (first, correspondence, a_to_b, residue_b)
     };
     let empty = Residues::new();
     let page_matches = correspondence
@@ -152,7 +153,7 @@ pub(super) fn pair_with(a: &Document, ka: &[ElemKey], b: &Document, kb: &[ElemKe
             count: aligned.unbounded_gaps,
         });
     }
-    Pairing {
+    let mut pairing = Pairing {
         pairs,
         pages: page_matches,
         offset,
@@ -162,7 +163,43 @@ pub(super) fn pair_with(a: &Document, ka: &[ElemKey], b: &Document, kb: &[ElemKe
             b: side_info(b, kb.len()),
         },
         notes,
+        diagnostics: DiagnosticsDiff {
+            core: FindingsDiff::default(),
+            validation: ValidationDiff::NotRun,
+        },
+    };
+    pairing.diagnostics = super::diagnostics(a, b, &pairing);
+    pairing
+}
+
+/// `(page of A, page of B, element pairs between them)`.
+type PagePair = (Option<PageIx>, Option<PageIx>, usize);
+
+/// The page correspondence `matches` give: the page pairs, and for each page of A its partner.
+fn correspond(
+    matches: &[Match],
+    ka: &[ElemKey],
+    kb: &[ElemKey],
+    residue_a: &[Residues],
+    residue_b: &[Residues],
+    a_pages: usize,
+) -> (Vec<PagePair>, Vec<Option<PageIx>>) {
+    let mut votes: BTreeMap<(PageIx, PageIx), usize> = BTreeMap::new();
+    for m in matches {
+        if let (Some((pa, _)), Some((pb, _))) = (ka[m.a].placed, kb[m.b].placed) {
+            *votes.entry((pa, pb)).or_default() += 1;
+        }
     }
+    let correspondence = pages::correspond(&votes, residue_a, residue_b);
+    let mut a_to_b: Vec<Option<PageIx>> = vec![None; a_pages];
+    for &(pa, pb, _) in &correspondence {
+        if let (Some(pa), Some(pb)) = (pa, pb)
+            && let Some(slot) = a_to_b.get_mut(usize_from_u32(pa))
+        {
+            *slot = Some(pb);
+        }
+    }
+    (correspondence, a_to_b)
 }
 
 /// Every page of `doc`, in the order `visit` asks for.
@@ -240,12 +277,12 @@ fn estimate_offset(
     matches: &[Match],
     ka: &[ElemKey],
     kb: &[ElemKey],
-    corresponds: &dyn Fn(PageIx, PageIx) -> bool,
+    a_to_b: &[Option<PageIx>],
 ) -> Option<Offset> {
     let mut deltas = Vec::new();
     for m in matches.iter().filter(|m| m.rung <= 1) {
         if let (Some((pa, ra)), Some((pb, rb))) = (ka[m.a].placed, kb[m.b].placed)
-            && corresponds(pa, pb)
+            && a_to_b.get(usize_from_u32(pa)).copied().flatten() == Some(pb)
         {
             let (ca, cb) = (centre(ra), centre(rb));
             deltas.push((cb.0 - ca.0, cb.1 - ca.1));
@@ -292,7 +329,7 @@ fn matched(
     (ox, oy): (f64, f64),
     a_to_b: &[Option<PageIx>],
 ) -> Pair {
-    let row_changes = rows::diff(&rows::rows(a, ea), &rows::rows(b, eb));
+    let row_changes = rows::diff(&rows::rows(a, ea), &rows::rows(b, eb), (ox, oy));
     let mut changed = rows::typed(&row_changes, ea, eb);
 
     let (la, lb) = (

@@ -13,8 +13,13 @@
 //! `geometry`. The two sequences are aligned by patience anchoring on keys unique on both sides,
 //! recursing into the gaps, with a bounded full alignment inside gaps that have no anchor at any
 //! rung, and a move pass over what is left. Page correspondence is *derived* from where paired
-//! elements live; the global offset is estimated from the pairs and every per-pair delta is the
-//! residual after removing it.
+//! elements live; the global offset is estimated from the pairs matched on their text and every
+//! per-pair delta is the residual after removing it. When there is an offset, the box rungs are
+//! keyed again with it removed (each side moved half way, so the result mirrors) and the
+//! alignment is repeated: a figure without text is otherwise keyed on a box the shift moved.
+//!
+//! A pair's [`Confidence::rung`] is the rung that told it apart, not merely one its keys agree
+//! on: rows with the same text, distinguished by their boxes, are paired on the box rung.
 //!
 //! # Two payload layers
 //!
@@ -29,8 +34,15 @@
 //! output says so. Pairs whose content sits on an [`Alignment::Degraded`](crate::capture::Alignment)
 //! page, whose text was matched without `/ToUnicode`, or that were matched inside an anchorless
 //! gap say so in their [`Confidence`]. Content streams are never compared across files.
+//!
+//! # What got fixed, what broke
+//!
+//! Each pairing also compares the two sides' diagnostics through it ([`DiagnosticsDiff`]): a
+//! finding is placed on the element pair or page pair it concerns, so a check that failed on an
+//! element of A and no longer fails on its partner in B reads as fixed. See [`diagnostics`].
 
 mod align;
+mod diagnostics;
 mod keys;
 mod pages;
 mod pair;
@@ -38,6 +50,9 @@ mod rows;
 
 use serde::Serialize;
 
+pub use self::diagnostics::{
+    Anchor, DiagnosticsDiff, FindingChange, FindingsDiff, ValidationDiff, diagnostics,
+};
 pub use self::pair::{DocKeys, pair, pair_keyed};
 use crate::{NodeId, PageIx, Rect, UnicodeSource};
 
@@ -62,6 +77,10 @@ pub struct Pairing {
     /// What limited the comparison.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<Note>,
+    /// The diagnostics fixed and introduced, placed through the pairs. Computed with the
+    /// pairing from whatever validation runs the documents carried then; call [`diagnostics`]
+    /// again after attaching one.
+    pub diagnostics: DiagnosticsDiff,
 }
 
 impl Pairing {

@@ -223,5 +223,26 @@ expression: text
       }
     }
   ],
-  "pages": []
+  "pages": [],
+  "diagnostics": {
+    "core": {
+      "fixed": [
+        {
+          "code": "reading-order-backtrack",
+          "severity": "warning",
+          "message": "Caption (step 3) is read before Figure (step 4), but Figure sits above it on page 1, so a screen reader jumps back up the page",
+          "on": {
+            "kind": "element",
+            "pair": 4,
+            "a": "struct:11:0"
+          }
+        }
+      ],
+      "introduced": [],
+      "unchanged": 0
+    },
+    "validation": {
+      "state": "not_run"
+    }
+  }
 }

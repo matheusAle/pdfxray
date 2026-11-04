@@ -398,15 +398,33 @@ fn rung_keys(e: &ElemKey, classes: &[String]) -> Keys {
         h.num(text.bits()).0
     });
     let text_only = (!text.is_empty()).then(|| Fnv::new("text").num(text.bits()).0);
-    let bbox = e.placed.map(|(_, b)| b);
-    let role_box = Some(
-        Fnv::new("role+box")
-            .str(role)
-            .str(&bbox.map_or_else(|| "none".to_owned(), |b| quantised(b, BOX_QUANTUM)))
-            .0,
-    );
-    let geometry = bbox.map(|b| Fnv::new("geometry").str(&quantised(b, GEOMETRY_QUANTUM)).0);
+    let [role_box, geometry] = box_keys(role, e.placed.map(|(_, b)| b));
     [role_text, text_only, role_box, geometry]
+}
+
+/// The two box rungs: `role + box` and `geometry`.
+fn box_keys(role: &str, bbox: Option<Rect>) -> [Option<u128>; 2] {
+    let role_box = Fnv::new("role+box")
+        .str(role)
+        .str(&bbox.map_or_else(|| "none".to_owned(), |b| quantised(b, BOX_QUANTUM)))
+        .0;
+    let geometry = bbox.map(|b| Fnv::new("geometry").str(&quantised(b, GEOMETRY_QUANTUM)).0);
+    [Some(role_box), geometry]
+}
+
+/// The keys of `elements` with every box translated by `(dx, dy)` first: the box rungs of a
+/// side registered onto the other. The text rungs are unchanged.
+pub(super) fn registered(elements: &[ElemKey], (dx, dy): (f64, f64)) -> Vec<Keys> {
+    elements
+        .iter()
+        .map(|e| {
+            let moved = e
+                .placed
+                .map(|(_, b)| Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy));
+            let [role_box, geometry] = box_keys(e.role(), moved);
+            [e.keys[0], e.keys[1], role_box, geometry]
+        })
+        .collect()
 }
 
 #[cfg(test)]

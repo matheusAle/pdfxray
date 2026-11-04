@@ -63,7 +63,10 @@ pub(crate) struct Match {
     pub(crate) a: usize,
     /// Index into B.
     pub(crate) b: usize,
-    /// The best rung on which the two keys are equal.
+    /// The rung the match rests on: for an anchor, the rung its key was unique on, never better
+    /// than the anchors bounding its gap (see [`Gap::floor`]). Keys equal on a better rung but
+    /// repeated there are no evidence: four identical table rows told apart by their boxes are
+    /// paired on the box, whatever their texts say.
     pub(crate) rung: usize,
     /// How the match was made.
     pub(crate) method: Method,
@@ -233,6 +236,9 @@ fn mirror(r: Aligned) -> Aligned {
 struct Gap {
     a: (usize, usize),
     b: (usize, usize),
+    /// The weakest rung among the anchors the gap was cut by. A key unique inside the gap is
+    /// unique only because those anchors narrowed it, so a match inside is no stronger.
+    floor: usize,
 }
 
 fn align_ordered(a: &[Keys], b: &[Keys]) -> Aligned {
@@ -240,6 +246,7 @@ fn align_ordered(a: &[Keys], b: &[Keys]) -> Aligned {
     let mut work = vec![Gap {
         a: (0, a.len()),
         b: (0, b.len()),
+        floor: 0,
     }];
     while let Some(gap) = work.pop() {
         align_gap(a, b, gap, &mut out, &mut work);
@@ -280,33 +287,30 @@ fn align_gap(a: &[Keys], b: &[Keys], gap: Gap, out: &mut Aligned, work: &mut Vec
         if anchors.is_empty() {
             continue;
         }
+        let floor = gap.floor.max(rung);
         let (mut ai, mut bi) = (gap.a.0, gap.b.0);
         for &(i, j) in &anchors {
-            push_anchor(a, b, i, j, out);
+            out.matches.push(Match {
+                a: i,
+                b: j,
+                rung: floor,
+                method: Method::Anchor,
+            });
             work.push(Gap {
                 a: (ai, i),
                 b: (bi, j),
+                floor,
             });
             (ai, bi) = (i + 1, j + 1);
         }
         work.push(Gap {
             a: (ai, gap.a.1),
             b: (bi, gap.b.1),
+            floor,
         });
         return;
     }
     bounded(a, b, gap, out);
-}
-
-fn push_anchor(a: &[Keys], b: &[Keys], i: usize, j: usize, out: &mut Aligned) {
-    if let Some(rung) = common_rung(&a[i], &b[j]) {
-        out.matches.push(Match {
-            a: i,
-            b: j,
-            rung,
-            method: Method::Anchor,
-        });
-    }
 }
 
 /// Where a key occurs in a range: its only position, or `None` once it repeats.
@@ -411,7 +415,7 @@ fn bounded(a: &[Keys], b: &[Keys], gap: Gap, out: &mut Aligned) {
             out.matches.push(Match {
                 a: gap.a.0 + row,
                 b: gap.b.0 + col,
-                rung,
+                rung: rung.max(gap.floor),
                 method: Method::Bounded,
             });
             row += 1;
@@ -621,6 +625,26 @@ mod tests {
         assert_eq!(r.matches.len(), 3);
         let m = r.matches[1];
         assert_eq!((m.a, m.b, m.rung, m.method), (1, 1, 2, Method::Anchor));
+        assert_mirrored(&a, &b);
+    }
+
+    #[test]
+    fn identical_rows_told_apart_by_their_boxes_pair_on_the_box_rung() {
+        // Three rows with the same text (7), each with one cell whose text repeats too (9);
+        // only the rows' boxes (rung 2) differ. B lost the middle row and its cell.
+        let row = |bx: u128| -> Keys { [Some(7), Some(7), Some(bx), None] };
+        let cell = |bx: u128| -> Keys { [Some(9), Some(9), Some(bx), None] };
+        let a = vec![t(1), row(50), cell(60), row(51), cell(61), row(52), cell(62)];
+        let b = vec![t(1), row(50), cell(60), row(52), cell(62)];
+        let r = align(&a, &b);
+        assert_eq!((r.removed.clone(), r.added.clone()), (vec![3, 4], vec![]));
+        // The rows anchor on their boxes; the cells are unique only inside the gaps those
+        // anchors cut, so they are no stronger. Equal texts are claimed by nobody.
+        assert_eq!(
+            r.matches.iter().map(|m| (m.a, m.b, m.rung)).collect::<Vec<_>>(),
+            vec![(0, 0, 0), (1, 1, 2), (2, 2, 2), (5, 3, 2), (6, 4, 2)]
+        );
+        assert!(r.matches.iter().all(|m| m.method == Method::Anchor));
         assert_mirrored(&a, &b);
     }
 

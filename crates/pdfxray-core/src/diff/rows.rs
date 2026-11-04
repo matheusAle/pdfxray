@@ -8,21 +8,56 @@
 //! and the inherited effective language, which shows on the element that carries it. The
 //! subtree's text is replaced by the element's own, so a change deep in the tree belongs to the
 //! element whose content changed, not to every ancestor.
+//!
+//! A row that holds a page-space box (the Layout `/BBox` attribute) is compared the way the
+//! element's own box is: after the global offset is removed, to [`TOLERANCE`]. Every file
+//! translated as a whole would otherwise report each figure's `/BBox` as changed.
 
 use std::collections::BTreeMap;
 
 use super::keys::ElemKey;
-use super::{Field, FieldChange, RowChange};
-use crate::{Document, NodeId};
+use super::{Field, FieldChange, RowChange, TOLERANCE};
+use crate::{Document, NodeId, Rect};
 
 /// One comparable row.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(super) struct Row {
     group: String,
     key: String,
     value: String,
     /// When set, rows are equal when these are, whatever their (shortened) display values.
     identity: Option<u128>,
+    /// For a row holding a page-space box: the box and the rest of the value after it.
+    place: Option<(Rect, String)>,
+}
+
+/// Attribute rows whose value is a box in page space.
+const PAGE_BOXES: [&str; 1] = ["Layout: BBox"];
+
+/// `[x0 y0 x1 y1]` at the start of `value`, and what follows it.
+fn page_box(value: &str) -> Option<(Rect, String)> {
+    let (inside, rest) = value.strip_prefix('[')?.split_once(']')?;
+    let v: Vec<f64> = inside
+        .split_whitespace()
+        .map(str::parse)
+        .collect::<Result<_, _>>()
+        .ok()?;
+    let &[x0, y0, x1, y1] = v.as_slice() else {
+        return None;
+    };
+    Some((Rect::new(x0, y0, x1, y1), rest.to_owned()))
+}
+
+/// True when `b`, with the offset removed, is within [`TOLERANCE`] of `a` on every edge.
+fn same_place(a: &(Rect, String), b: &(Rect, String), (dx, dy): (f64, f64)) -> bool {
+    let (ra, rb) = (a.0, b.0);
+    let edges = [
+        rb.x0 - dx - ra.x0,
+        rb.y0 - dy - ra.y0,
+        rb.x1 - dx - ra.x1,
+        rb.y1 - dy - ra.y1,
+    ];
+    a.1 == b.1 && edges.iter().all(|e| e.abs() <= TOLERANCE)
 }
 
 /// Rows of the `Element` group that are inherited, so a change shows on the element that
@@ -43,11 +78,15 @@ pub(super) fn rows(doc: &Document, e: &ElemKey) -> Vec<Row> {
             if skipped || names_an_object(r.link.as_ref()) {
                 continue;
             }
+            let place = (g.name == "Attributes" && PAGE_BOXES.contains(&r.key.as_str()))
+                .then(|| page_box(&r.value))
+                .flatten();
             out.push(Row {
                 group: g.name.clone(),
                 key: r.key.clone(),
                 value: r.value.clone(),
                 identity: None,
+                place,
             });
         }
     }
@@ -58,6 +97,7 @@ pub(super) fn rows(doc: &Document, e: &ElemKey) -> Vec<Row> {
             key: "Text".to_owned(),
             value: e.own_text.display(),
             identity: Some(e.own_text.hash.bits()),
+            place: None,
         });
     }
     out
@@ -71,7 +111,8 @@ struct Same<'a> {
 }
 
 /// The rows that differ, by group and label; rows that repeat a label are compared in order.
-pub(super) fn diff(old: &[Row], new: &[Row]) -> Vec<RowChange> {
+/// `offset` is the global translation of `new` relative to `old`.
+pub(super) fn diff(old: &[Row], new: &[Row], offset: (f64, f64)) -> Vec<RowChange> {
     let mut by_key: BTreeMap<(&str, &str), Same<'_>> = BTreeMap::new();
     for r in old {
         by_key.entry((&r.group, &r.key)).or_default().old.push(r);
@@ -84,10 +125,13 @@ pub(super) fn diff(old: &[Row], new: &[Row]) -> Vec<RowChange> {
         for n in 0..rows.old.len().max(rows.new.len()) {
             let (before, after) = (rows.old.get(n).copied(), rows.new.get(n).copied());
             let equal = match (before, after) {
-                (Some(before), Some(after)) => match (before.identity, after.identity) {
-                    (Some(left), Some(right)) => left == right,
-                    _ => before.value == after.value,
-                },
+                (Some(before), Some(after)) => {
+                    match (&before.identity, &after.identity, &before.place, &after.place) {
+                        (Some(left), Some(right), _, _) => left == right,
+                        (_, _, Some(left), Some(right)) => same_place(left, right, offset),
+                        _ => before.value == after.value,
+                    }
+                }
                 _ => false,
             };
             if !equal {
@@ -135,4 +179,51 @@ pub(super) fn typed(rows: &[RowChange], a: &ElemKey, b: &ElemKey) -> Vec<FieldCh
         out.push(FieldChange { field, a: va, b: vb });
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    fn bbox_row(value: &str) -> Row {
+        Row {
+            group: "Attributes".to_owned(),
+            key: PAGE_BOXES[0].to_owned(),
+            value: value.to_owned(),
+            identity: None,
+            place: page_box(value),
+        }
+    }
+
+    #[test]
+    fn a_page_box_row_is_compared_after_the_offset_is_removed() {
+        let (a, b) = (bbox_row("[30 148 150 230]"), bbox_row("[32 146 152 228]"));
+        assert!(a.place.is_some() && b.place.is_some(), "both parse");
+        assert_eq!(
+            diff(std::slice::from_ref(&a), std::slice::from_ref(&b), (2.0, -2.0)),
+            vec![]
+        );
+        // Without the offset, the same rows differ, and the change carries both values.
+        let changed = diff(&[a], &[b], (0.0, 0.0));
+        assert_eq!(changed.len(), 1);
+        assert_eq!(
+            (changed[0].a.as_deref(), changed[0].b.as_deref()),
+            (Some("[30 148 150 230]"), Some("[32 146 152 228]"))
+        );
+    }
+
+    #[test]
+    fn a_page_box_from_another_class_is_a_change_even_in_place() {
+        let a = bbox_row("[0 0 10 10] (from class A)");
+        let b = bbox_row("[0 0 10 10] (from class B)");
+        assert_eq!(diff(&[a], &[b], (0.0, 0.0)).len(), 1);
+        assert_eq!(page_box("[1 2 3]"), None);
+        assert_eq!(page_box("not a box"), None);
+        assert_eq!(
+            page_box("[1 2 3 4]").map(|(r, rest)| (r.x1, rest)),
+            Some((3.0, String::new()))
+        );
+    }
 }

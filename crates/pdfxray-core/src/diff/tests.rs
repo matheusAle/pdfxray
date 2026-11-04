@@ -23,6 +23,28 @@ fn pdfs_below(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// Both sides of every fixture pair, in catalog order.
+fn fixture_pairs() -> Vec<(Document, Document)> {
+    pdfxray_fixtures::pairs::PAIRS
+        .iter()
+        .map(|name| {
+            let (a, b) = pdfxray_fixtures::pairs::pair(name);
+            (Document::open(&a).unwrap(), Document::open(&b).unwrap())
+        })
+        .collect()
+}
+
+/// Consecutive vendored files, then the fixture pairs: the documents the cross-module checks
+/// compare.
+fn compared<'a>(
+    docs: &'a [Document],
+    pairs: &'a [(Document, Document)],
+) -> impl Iterator<Item = (&'a Document, &'a Document)> {
+    docs.windows(2)
+        .map(|w| (&w[0], &w[1]))
+        .chain(pairs.iter().map(|(a, b)| (a, b)))
+}
+
 /// The vendored veraPDF files that open, sorted by path.
 fn vendored() -> Vec<Document> {
     let root = pdfxray_fixtures::fixtures_dir();
@@ -75,10 +97,10 @@ fn bottom_up_keys_agree_with_the_per_element_queries() {
 
 #[test]
 fn the_typed_layer_never_disagrees_with_the_row_layer() {
-    let docs = vendored();
+    let (docs, pairs) = (vendored(), fixture_pairs());
     let mut typed_seen = 0;
-    for w in docs.windows(2) {
-        let p = super::pair(&w[0], &w[1]);
+    for (a, b) in compared(&docs, &pairs) {
+        let p = super::pair(a, b);
         for pair in &p.pairs {
             for r in &pair.rows {
                 if let Some(field) = rows::field_of(&r.group, &r.key) {
@@ -111,21 +133,20 @@ fn the_typed_layer_never_disagrees_with_the_row_layer() {
 
 #[test]
 fn output_is_byte_identical_across_runs_and_page_visit_orders() {
-    let docs = vendored();
-    let mut compared = 0;
-    for w in docs.windows(2) {
-        let (ka, kb) = (keys::build(&w[0]), keys::build(&w[1]));
-        let json = |visit| serde_json::to_string(&pair_with(&w[0], &ka, &w[1], &kb, visit)).unwrap();
+    let (docs, pairs) = (vendored(), fixture_pairs());
+    let mut count = 0;
+    let mut with_offset = 0;
+    for (a, b) in compared(&docs, &pairs) {
+        let (ka, kb) = (keys::build(a), keys::build(b));
+        let pairing = |visit| pair_with(a, &ka, b, &kb, visit);
+        let json = |visit| serde_json::to_string(&pairing(visit)).unwrap();
         let first = json(Visit::Forward);
-        assert_eq!(json(Visit::Forward), first, "{:?} vs {:?}: two runs", w[0], w[1]);
-        assert_eq!(
-            json(Visit::Reverse),
-            first,
-            "{:?} vs {:?}: page order",
-            w[0],
-            w[1]
-        );
-        compared += 1;
+        assert_eq!(json(Visit::Forward), first, "{a:?} vs {b:?}: two runs");
+        assert_eq!(json(Visit::Reverse), first, "{a:?} vs {b:?}: page order");
+        with_offset += usize::from(pairing(Visit::Forward).offset.is_some());
+        count += 1;
     }
-    assert!(compared >= 30);
+    // Smoke: the corpus windows and every fixture pair, the registered pass included.
+    assert!(count >= 30 + pdfxray_fixtures::pairs::PAIRS.len());
+    assert!(with_offset >= 1, "the global-shift pair is registered");
 }

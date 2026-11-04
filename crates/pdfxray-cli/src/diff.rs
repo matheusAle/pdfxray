@@ -1,15 +1,20 @@
 //! `pdfxray diff`: the pairing of two documents as JSON, narrowed to a scope and a page.
 
+use std::borrow::Cow;
+
 use clap::ValueEnum;
 use pdfxray_core::PageIx;
-use pdfxray_core::diff::{Note, Offset, PageMatch, Pair, Pairing, Sides, Status, Summary};
+use pdfxray_core::diff::{
+    Anchor, DiagnosticsDiff, FindingChange, FindingsDiff, Note, Offset, PageMatch, Pair, Pairing, Sides,
+    Status, Summary, ValidationDiff,
+};
 use serde::Serialize;
 
 /// `--scope` values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScopeArg {
-    /// Structure element pairs and the page residue.
+    /// Structure element pairs, the page residue and the diagnostics fixed and introduced.
     All,
     /// Structure element pairs and the page correspondence.
     Tags,
@@ -56,6 +61,9 @@ pub(crate) struct DiffOutput<'a> {
     pub(crate) pairs: Option<Vec<&'a Pair>>,
     /// Page pairs.
     pub(crate) pages: Vec<PageView<'a>>,
+    /// Diagnostics fixed and introduced (`all`); narrowed to the page with `--page`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) diagnostics: Option<Cow<'a, DiagnosticsDiff>>,
 }
 
 /// A page pair as shown under a scope: the residue only where it is in scope.
@@ -116,9 +124,17 @@ pub(crate) fn narrow(pairing: &Pairing, view: DiffView) -> DiffOutput<'_> {
             Status::Removed => &mut summary.removed,
         } += 1;
     }
+    let diagnostics = (view.scope == ScopeArg::All).then(|| match view.page {
+        None => Cow::Borrowed(&pairing.diagnostics),
+        Some(_) => Cow::Owned(on_page_only(pairing, &on_page, |a, b| {
+            view.page
+                .is_some_and(|n| a == Some(n) || (a.is_none() && partner.is_some() && b == partner))
+        })),
+    });
     let identical = summary.is_unchanged()
         && pairing.offset.is_none()
-        && !in_scope_pages.iter().any(|m| page_changed(m, view.scope));
+        && !in_scope_pages.iter().any(|m| page_changed(m, view.scope))
+        && diagnostics.as_deref().is_none_or(DiagnosticsDiff::is_unchanged);
     let pairs = with_pairs.then(|| {
         scoped_pairs
             .into_iter()
@@ -146,5 +162,82 @@ pub(crate) fn narrow(pairing: &Pairing, view: DiffView) -> DiffOutput<'_> {
         notes: &pairing.notes,
         pairs,
         pages,
+        diagnostics,
+    }
+}
+
+/// The diagnostics of `pairing` whose anchor is on the page asked for: an element pair that
+/// `on_page` keeps, or a page pair `page_pair` keeps. Document-wide findings are on no page.
+fn on_page_only(
+    pairing: &Pairing,
+    on_page: &dyn Fn(&Pair) -> bool,
+    page_pair: impl Fn(Option<PageIx>, Option<PageIx>) -> bool,
+) -> DiagnosticsDiff {
+    let keep = |c: &&FindingChange| match &c.on {
+        Anchor::Element { pair, .. } => pairing.pairs.get(*pair).is_some_and(on_page),
+        Anchor::Page { a, b } => page_pair(*a, *b),
+        Anchor::Document => false,
+    };
+    let narrow = |f: &FindingsDiff| FindingsDiff {
+        fixed: f.fixed.iter().filter(keep).cloned().collect(),
+        introduced: f.introduced.iter().filter(keep).cloned().collect(),
+        unchanged: f.unchanged,
+    };
+    DiagnosticsDiff {
+        core: narrow(&pairing.diagnostics.core),
+        validation: match &pairing.diagnostics.validation {
+            ValidationDiff::Compared(f) => ValidationDiff::Compared(narrow(f)),
+            other => other.clone(),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pdfxray_core::Document;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    fn drop_alt() -> Pairing {
+        let (a, b) = pdfxray_fixtures::pairs::pair("drop-alt");
+        let open = |p: &std::path::Path| Document::open(p).unwrap_or_else(|e| panic!("{e}"));
+        pdfxray_core::diff::pair(&open(&a), &open(&b))
+    }
+
+    fn view(scope: ScopeArg, page: Option<PageIx>) -> DiffView {
+        DiffView {
+            scope,
+            page,
+            include_unchanged: false,
+        }
+    }
+
+    fn codes(out: &DiffOutput<'_>) -> Option<Vec<String>> {
+        out.diagnostics
+            .as_deref()
+            .map(|d| d.core.introduced.iter().map(|c| c.code.clone()).collect())
+    }
+
+    #[test]
+    fn diagnostics_follow_the_scope_and_the_page() {
+        let p = drop_alt();
+        // The figure that lost its /Alt is on page 0.
+        let whole = narrow(&p, view(ScopeArg::All, None));
+        assert_eq!(codes(&whole), Some(vec!["figure-alt-missing".to_owned()]));
+        assert!(!whole.identical);
+        assert_eq!(
+            codes(&narrow(&p, view(ScopeArg::All, Some(0)))),
+            Some(vec!["figure-alt-missing".to_owned()])
+        );
+        // Page 1 has neither a changed pair nor a changed diagnostic: identical.
+        let page1 = narrow(&p, view(ScopeArg::All, Some(1)));
+        assert_eq!(codes(&page1), Some(vec![]));
+        assert!(page1.identical);
+        // Only `all` carries diagnostics.
+        assert_eq!(codes(&narrow(&p, view(ScopeArg::Tags, None))), None);
+        assert_eq!(codes(&narrow(&p, view(ScopeArg::Ink, None))), None);
+        // Smoke: the typed change is there too, so the finding rides a real pair.
+        assert_eq!(whole.summary.map(|s| s.modified), Some(1));
     }
 }
