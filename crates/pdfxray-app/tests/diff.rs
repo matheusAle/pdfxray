@@ -409,6 +409,67 @@ fn snapshot_diff_side_by_side() {
     harness.snapshot("app_diff_side_by_side");
 }
 
+/// An untagged comparison has no element pairs at all, so nothing the canvas used to know how
+/// to outline. Clicking an operator must still ring it, as it does outside a comparison.
+#[test]
+fn snapshot_diff_rings_a_selection_that_belongs_to_no_pair() {
+    let _gpu = common::gpu_lock();
+    let (a, b) = pair("untagged-edits");
+    let mut harness = launched(&a, &b);
+    assert!(
+        state(&harness)
+            .diff
+            .as_ref()
+            .unwrap()
+            .pairing()
+            .unwrap()
+            .pairs
+            .is_empty(),
+        "the fixture is untagged, so there is nothing paired to fall back on"
+    );
+
+    // The canvas opens on the first page with a change, which here is the page only B has.
+    // Move to a pair that has an A side, and select an operator on it: something the
+    // comparison knows nothing about.
+    let at = state(&harness)
+        .diff
+        .as_ref()
+        .unwrap()
+        .pairing()
+        .unwrap()
+        .pages
+        .iter()
+        .position(|m| m.a.is_some())
+        .expect("a page pair with an A side");
+    harness.state_mut().state.diff.as_mut().unwrap().page = at;
+    settle(&mut harness);
+    let page = state(&harness).diff.as_ref().unwrap().pages().unwrap().0.unwrap();
+    let op = state(&harness)
+        .document
+        .as_ref()
+        .unwrap()
+        .doc
+        .captured(page)
+        .unwrap()
+        .ops
+        .iter()
+        .find_map(|o| {
+            let id = NodeId::Op { page, ix: o.ix };
+            state(&harness)
+                .document
+                .as_ref()
+                .unwrap()
+                .doc
+                .bbox(&id)
+                .map(|_| id)
+        })
+        .expect("an operator with geometry");
+    harness.state_mut().state.select_in(Side::A, op);
+    settle(&mut harness);
+
+    harness.snapshot("app_diff_unpaired_selection");
+}
+
 #[test]
 fn snapshot_diff_overlay_with_reading_order() {
     let _gpu = common::gpu_lock();

@@ -23,7 +23,7 @@ use egui::{
 };
 use pdfxray_core::diff::{Side, Status};
 use pdfxray_core::numeric::f32_from_u32;
-use pdfxray_core::{NodeId, PageIx, ReadingOrderSource, TagBox};
+use pdfxray_core::{NodeId, PageIx, ReadingOrderSource, Rect, TagBox};
 use pdfxray_render::annotate::{self, Anchor, Annotation, Grid, Palette, Scene, TagShow, TagView};
 use pdfxray_render::composite::{self, Fit, Mode};
 use pdfxray_render::score::VisualScore;
@@ -499,7 +499,10 @@ fn legend(
     annotate::change_legend(diff.mode, diff.show, visual, &warnings, Palette::DESIGN.warn)
 }
 
-/// The selected pair's boxes, outlined in the accent colour on the sides it is on.
+/// What the selection outlines: the selected pair's boxes on the sides it is on, and — when
+/// nothing paired was selected — the selected nodes' own boxes on the side they belong to, so a
+/// click on an operator, a glyph or an artifact is ringed here exactly as it is on the ordinary
+/// canvas. An untagged comparison has no pairs at all, so without this nothing is ever ringed.
 fn outline_selection(
     painter: &egui::Painter,
     state: &AppState,
@@ -507,21 +510,23 @@ fn outline_selection(
     grid: &Grid,
     (a, b): (Option<PageIx>, Option<PageIx>),
 ) {
-    let Some(pair) = state.diff.as_ref().and_then(|d| d.selected()) else {
-        return;
-    };
     let mut rects = Vec::new();
-    match placed {
-        Placed::Both(c) => {
-            if let Some(r) = pair.bbox_a.filter(|_| pair.page_a.is_some() && pair.page_a == a) {
-                rects.push(r);
+    if let Some(pair) = state.diff.as_ref().and_then(|d| d.selected()) {
+        match placed {
+            Placed::Both(c) => {
+                if let Some(r) = pair.bbox_a.filter(|_| pair.page_a.is_some() && pair.page_a == a) {
+                    rects.push(r);
+                }
+                if let Some(r) = pair.bbox_b.filter(|_| pair.page_b.is_some() && pair.page_b == b) {
+                    rects.push(c.b_in_a(r));
+                }
             }
-            if let Some(r) = pair.bbox_b.filter(|_| pair.page_b.is_some() && pair.page_b == b) {
-                rects.push(c.b_in_a(r));
-            }
+            Placed::One(Side::A, _) => rects.extend(pair.bbox_a.filter(|_| pair.page_a == a)),
+            Placed::One(Side::B, _) => rects.extend(pair.bbox_b.filter(|_| pair.page_b == b)),
         }
-        Placed::One(Side::A, _) => rects.extend(pair.bbox_a.filter(|_| pair.page_a == a)),
-        Placed::One(Side::B, _) => rects.extend(pair.bbox_b.filter(|_| pair.page_b == b)),
+    }
+    if rects.is_empty() {
+        rects = selected_boxes(state, placed, (a, b));
     }
     for rect in rects {
         painter.rect_stroke(
@@ -531,6 +536,31 @@ fn outline_selection(
             StrokeKind::Outside,
         );
     }
+}
+
+/// The boxes of the selected nodes on the side they were selected on, when that side's page is
+/// the one shown. The page-space box comes from that side's own document, so B's nodes are read
+/// from B.
+fn selected_boxes(state: &AppState, placed: &Placed, (a, b): (Option<PageIx>, Option<PageIx>)) -> Vec<Rect> {
+    let side = state.selection.side();
+    if let Placed::One(shown, _) = placed
+        && *shown != side
+    {
+        return Vec::new();
+    }
+    let (Some(doc), Some(page)) = (state.doc_of(side), if side == Side::A { a } else { b }) else {
+        return Vec::new();
+    };
+    state
+        .selection
+        .nodes()
+        .iter()
+        .filter_map(|id| crate::selection::selection_rect(doc, id).filter(|s| s.page == page))
+        .map(|s| match (placed, side) {
+            (Placed::Both(c), Side::B) => c.b_in_a(s.rect),
+            _ => s.rect,
+        })
+        .collect()
 }
 
 /// The interaction of one shape: a chip or a badge is a button that selects its element on its
