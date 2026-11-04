@@ -16,18 +16,21 @@ pub use title_bar::ua_verdict;
 
 /// Render the whole app into the root `ui` and apply input (file drops, clicks) to `state`.
 pub fn show(ui: &mut egui::Ui, state: &mut AppState) {
-    let dropped: Vec<PathBuf> = ui.ctx().input(|i| {
-        i.raw
+    let (dropped, alt): (Vec<PathBuf>, bool) = ui.ctx().input(|i| {
+        let paths = i
+            .raw
             .dropped_files
             .iter()
             .map(|file| file.path().to_path_buf())
-            .collect()
+            .collect();
+        (paths, i.modifiers.alt)
     });
     if let Some(path) = dropped.first() {
-        state.accept_drop(path);
+        state.accept_drop(path, alt);
     }
 
     state.poll_open(ui.ctx());
+    state.poll_diff(ui.ctx());
     state.poll_background(&ui.ctx().clone());
     keys::handle(ui, state);
     state.refresh_object_facts();

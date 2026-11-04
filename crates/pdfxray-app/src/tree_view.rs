@@ -571,6 +571,7 @@ pub fn badge_word(code: &str) -> &str {
         "table-header-missing" | "table-header-unresolved" | "table-headers-id-missing" => "header",
         "table-irregular" => "table",
         "table-header-scope-conflict" => "scope",
+        crate::state::diff::LOW_CONFIDENCE => "low confidence",
         // Otherwise the last word of the code: `mcid-orphan` → `orphan`.
         other => other.rsplit('-').next().unwrap_or(other),
     }
@@ -595,6 +596,7 @@ mod tests {
     fn a_header_scope_conflict_reads_as_scope_in_a_tree_row() {
         assert_eq!(badge_word("table-header-scope-conflict"), "scope");
         assert_eq!(badge_word("table-headers-id-missing"), "header");
+        assert_eq!(badge_word(crate::state::diff::LOW_CONFIDENCE), "low confidence");
         // Smoke: any other code shows its last word.
         assert_eq!(badge_word("mcid-orphan"), "orphan");
     }

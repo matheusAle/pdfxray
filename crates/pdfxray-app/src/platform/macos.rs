@@ -183,6 +183,12 @@ fn build() -> muda::Result<MenuBar> {
         "Validate",
         Some(key(cmd | Modifiers::SHIFT, Code::KeyV)),
     );
+    let compare = command_item(
+        MenuCommand::CompareWith,
+        "Compare With\u{2026}",
+        Some(key(cmd | Modifiers::ALT, Code::KeyO)),
+    );
+    let reload = command_item(MenuCommand::Reload, "Reload", Some(key(cmd, Code::KeyR)));
     let file = Submenu::with_items(
         "File",
         true,
@@ -190,6 +196,8 @@ fn build() -> muda::Result<MenuBar> {
             &command_item(MenuCommand::NewWindow, "New Window", Some(key(cmd, Code::KeyN))),
             &command_item(MenuCommand::Open, "Open\u{2026}", Some(key(cmd, Code::KeyO))),
             &recent,
+            &compare,
+            &reload,
             &PredefinedMenuItem::separator(),
             &command_item(
                 MenuCommand::CloseWindow,
@@ -245,7 +253,7 @@ fn build() -> muda::Result<MenuBar> {
     let mut bar = MenuBar {
         menu,
         recent,
-        document_items: vec![validate, zoom_in, zoom_out, actual, fit],
+        document_items: vec![validate, compare, reload, zoom_in, zoom_out, actual, fit],
         listed: None,
         enabled: None,
         updates: check_updates.map(|item| AutoUpdate {

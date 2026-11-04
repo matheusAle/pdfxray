@@ -21,6 +21,8 @@ pub enum RailItem {
     Revisions,
     /// veraPDF validation.
     Validation,
+    /// The changes of a comparison, page by page: only while one is open, and first then.
+    Changes,
 }
 
 impl RailItem {
@@ -35,9 +37,23 @@ impl RailItem {
         Self::Validation,
     ];
 
+    /// The entries at the top of the rail in a comparison: Changes first, it is the primary
+    /// view there.
+    pub const DIFF: [Self; 8] = [
+        Self::Changes,
+        Self::Tags,
+        Self::Content,
+        Self::Artifacts,
+        Self::Pages,
+        Self::Objects,
+        Self::Revisions,
+        Self::Validation,
+    ];
+
     /// Name of the entry: its tooltip and accessible name.
     pub const fn title(self) -> &'static str {
         match self {
+            Self::Changes => "Changes",
             Self::Tags => "Tags",
             Self::Content => "Content",
             Self::Artifacts => "Artifacts",
@@ -65,13 +81,14 @@ impl RailItem {
             Self::Objects => "Filter by obj num, /Type, key…",
             Self::Revisions => "Filter revisions…",
             Self::Validation => "Filter by rule…",
+            Self::Changes => "Filter by role, text, status…",
         }
     }
 
     /// The drawer tab that opens with this entry; `None` leaves the drawer as it is.
     pub const fn drawer_default(self) -> Option<DrawerTab> {
         match self {
-            Self::Tags => Some(DrawerTab::HitStack),
+            Self::Tags | Self::Changes => Some(DrawerTab::HitStack),
             Self::Content | Self::Artifacts => Some(DrawerTab::Operators),
             Self::Pages => Some(DrawerTab::Diagnostics),
             Self::Validation => Some(DrawerTab::Validation),

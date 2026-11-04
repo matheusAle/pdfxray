@@ -289,6 +289,27 @@ own fields and lists, and an Edit menu would take those keys away from them.
 On Windows and Linux the same shortcuts use Ctrl: Ctrl+N opens a new window, Ctrl+O opens a file
 (in a new window when this one shows a document), Ctrl+W closes the window. There is no menu bar.
 
+## Comparing two files
+
+File › Compare With… (⌥⌘O) compares the open file (A) with another (B): two versions of one
+file, most often. You can also drop B onto the window with ⌥ held, or start
+`pdfxray-app a.pdf --compare b.pdf`. While comparing, a plain drop replaces B (the version you
+are iterating on) and an ⌥-drop replaces A; ⌘R reads B again from disk and compares again.
+
+The **Changes** entry of the rail lists what changed, page by page: each element added, removed,
+moved or modified, in its status colour, and one *Artifacts* row per page whose painted content
+outside the tags differs. Unchanged elements are hidden until you turn on *Unchanged*. A pair
+matched on weak evidence (no unique anchor, a box alone, a degraded page) says *low confidence*.
+Pick a row and the canvas goes to its page and the inspector shows both sides of the pair: their
+paths, what moved, every field and row that changed, and what the match rests on.
+
+The canvas shows the two pages side by side, overlaid (A's ink and B's in two colours, multiplied)
+or as a mask of the pixels that differ. Only changed elements are outlined; ⇧T outlines the
+unchanged ones too, L names them, R numbers the reading order (overlaid: of the side picked with
+A/B, which is also the side a click picks on). Pages that differ in size or rotation are never
+scaled silently: overlaid, a banner says why and offers *Scale B to A*. The picture is the one
+`pdfxray render a.pdf --against b.pdf` writes.
+
 ## Encrypted files
 
 pdfxray v1 shows the structure of encrypted files (objects, xref, pages and boxes, the

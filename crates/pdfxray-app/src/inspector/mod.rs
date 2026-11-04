@@ -5,6 +5,7 @@
 //! is in the right-click menu of the title and of every value, and on the canvas action bar. The
 //! Validation entry keeps its Previous, Rule docs and Next finding bar.
 
+pub mod change;
 pub mod defaults;
 pub mod diagnostic_card;
 pub mod font;
@@ -63,6 +64,11 @@ pub(crate) struct Action {
 
 /// Draws the inspector host for the current selection.
 pub fn ui(ui: &mut Ui, state: &mut AppState) {
+    // In a comparison, a change, a node of B or a paired element of A: the pair, both sides.
+    if change::wants(state) {
+        change::ui(ui, state);
+        return;
+    }
     // Three or more selected: their summary, unless the inspector is pinned to a node.
     let pinned = state.selection.pinned.is_some();
     if !pinned && state.selection.shows_summary() {

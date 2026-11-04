@@ -126,6 +126,17 @@ out together, and the legend gets a band of its own below the pages. A diff colo
 never by role; the role is the chip's text. The app and the export call the same function, so
 they draw the same picture.
 
+In the app a comparison is `AppState::diff` (`state/diff.rs`): the B document beside the open
+one (A), and the pairing, computed on a thread of its own and recomputed whenever either side is
+read again (a drop, ⌘R). B arrives by File › Compare With…, an ⌥-drop or
+`pdfxray-app a.pdf --compare b.pdf`; in a comparison a plain drop replaces B and an ⌥-drop A.
+The canvas (`center/canvas/diff.rs`) shows the composite of one page pair, drawn on its own
+thread (`diff_frames.rs`), and draws `composite::layout` over it: the scenes and the layout are
+the export's. Each shape says which scene it was laid out for (`Annotation::scene`), because the
+two files' element ids can be equal, so a chip is bound to its side. Only what is about a
+comparison knows sides: the selection, the hit stack and the breadcrumb. The Changes list is the
+primary view; the canvas and the inspector's pair card follow its selection.
+
 ## Node identity
 
 Every inspectable thing has a `NodeId` with a stable string form, used by the CLI:

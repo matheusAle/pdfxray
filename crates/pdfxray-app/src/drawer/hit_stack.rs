@@ -6,6 +6,7 @@
 
 use egui::{RichText, ScrollArea, Ui};
 use pdfxray_core::capture::{CapturedPage, MarkedSeq, OpRecord};
+use pdfxray_core::diff::Side;
 use pdfxray_core::numeric::usize_from_u32;
 use pdfxray_core::{Document, LayerMode, NodeId, fmt_rect};
 
@@ -60,15 +61,20 @@ pub fn header_note(state: &AppState) -> Option<String> {
 
 /// The rows of the table for the last canvas click, topmost first.
 pub fn lines(state: &AppState) -> Vec<HitLine> {
-    let (Some(stack), Some(loaded)) = (&state.drawer.hit_stack, &state.document) else {
+    let Some(stack) = &state.drawer.hit_stack else {
+        return Vec::new();
+    };
+    // The side that was clicked: B's nodes are read in B.
+    let Some(doc) = state.doc_of(stack.side) else {
         return Vec::new();
     };
     stack
         .entries
         .iter()
         .map(|entry| {
-            let lacking_alt = state.tag_index().is_some_and(|tags| tags.lacks_alt(&entry.id));
-            line(&loaded.doc, entry, lacking_alt)
+            let lacking_alt =
+                stack.side == Side::A && state.tag_index().is_some_and(|tags| tags.lacks_alt(&entry.id));
+            line(doc, entry, lacking_alt)
         })
         .collect()
 }
@@ -115,7 +121,11 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
         state.canvas.preview = hovered;
     }
     if let Some(id) = clicked {
-        select_with_modifiers(ui, state, id);
+        if stack.side == Side::A {
+            select_with_modifiers(ui, state, id);
+        } else {
+            state.select_in(stack.side, id);
+        }
     }
 }
 

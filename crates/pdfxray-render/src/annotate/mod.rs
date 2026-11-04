@@ -181,6 +181,10 @@ pub struct Annotation {
     pub shape: Overlay,
     /// What it stands for.
     pub anchor: Anchor,
+    /// The index in the laid-out scenes of the scene it belongs to; `None` for the legend. Both
+    /// sides of a comparison are laid out together and the ids of their elements can be equal
+    /// (object numbers are reused from file to file), so this is what says which side a shape is.
+    pub scene: Option<usize>,
 }
 
 /// The overlays of `annotations`, in order: what [`crate::RenderSpec::overlays`] rasterises.
@@ -296,20 +300,25 @@ pub struct Legend {
 pub fn layout(grid: &Grid, palette: &Palette, scenes: &[Scene], legend: Option<&Legend>) -> Vec<Annotation> {
     let mut placed: Vec<PixelRect> = Vec::new();
     let mut out = Vec::new();
-    for scene in scenes {
+    for (index, scene) in scenes.iter().enumerate() {
+        let from = out.len();
         for mark in scene.marks.iter().filter(|m| m.outlined) {
             out.push(outline(grid, mark));
         }
+        of_scene(&mut out[from..], index);
     }
-    for scene in scenes {
+    for (index, scene) in scenes.iter().enumerate() {
+        let from = out.len();
         for mark in &scene.marks {
             if let Some(chip) = &mark.chip {
                 chip_shapes(grid, palette, mark, chip, &mut placed, &mut out);
             }
         }
+        of_scene(&mut out[from..], index);
     }
     let mut badges = Vec::new();
-    for scene in scenes {
+    for (index, scene) in scenes.iter().enumerate() {
+        let (from, badges_from) = (out.len(), badges.len());
         let points: Vec<PixelPoint> = scene
             .path
             .iter()
@@ -351,14 +360,24 @@ pub fn layout(grid: &Grid, palette: &Palette, scenes: &[Scene], legend: Option<&
                     step: n,
                     node: step.node.clone(),
                 },
+                scene: None,
             });
         }
+        of_scene(&mut out[from..], index);
+        of_scene(&mut badges[badges_from..], index);
     }
     out.extend(badges);
     if let Some(legend) = legend {
         legend_shapes(grid, palette, legend, &mut out);
     }
     out
+}
+
+/// Marks `shapes` as laid out for scene `index`.
+fn of_scene(shapes: &mut [Annotation], index: usize) {
+    for shape in shapes {
+        shape.scene = Some(index);
+    }
 }
 
 /// The box of `mark`.
@@ -377,6 +396,7 @@ fn outline(grid: &Grid, mark: &Mark) -> Annotation {
             stroke: Some(stroke.on(Edge::Outside)),
         },
         anchor: Anchor::Box(mark.node.clone()),
+        scene: None,
     }
 }
 
@@ -440,6 +460,7 @@ fn chip_shapes(
             stroke: Some(body.1),
         },
         anchor: part.clone(),
+        scene: None,
     });
     out.push(Annotation {
         shape: Overlay::Text {
@@ -453,11 +474,13 @@ fn chip_shapes(
             ink,
         },
         anchor: Anchor::Chip(mark.node.clone()),
+        scene: None,
     });
     let mut push = |shape| {
         out.push(Annotation {
             shape,
             anchor: part.clone(),
+            scene: None,
         });
     };
     if let Some(scope) = &chip.scope {
@@ -628,12 +651,14 @@ fn segment(
     out.push(Annotation {
         shape,
         anchor: Anchor::Segment(at),
+        scene: None,
     });
     if let Some(note) = &step.note {
         for shape in note_shapes(grid, palette, placed, (from, to), note) {
             out.push(Annotation {
                 shape,
                 anchor: Anchor::Segment(at),
+                scene: None,
             });
         }
     }
@@ -750,6 +775,7 @@ fn legend_shapes(grid: &Grid, palette: &Palette, legend: &Legend, out: &mut Vec<
         out.push(Annotation {
             shape,
             anchor: Anchor::None,
+            scene: None,
         });
     };
     push(Overlay::Frame {

@@ -1,6 +1,7 @@
-//! Memory budget of the app's render threads (lazy-loading plan §4.1): the page, thumbnail and
-//! preview threads share the UI's document, so having all three running costs little more than
-//! the document itself.
+//! Memory budgets of the app: its render threads (lazy-loading plan §4.1), which share the UI's
+//! document, so having all three running costs little more than the document itself; and a
+//! comparison (diff plan §8), which holds two documents, their pairing and one composite, and so
+//! costs little more than the two documents themselves.
 //!
 //! Resident size is meaningless in a debug build and noisy next to other tests, so the test is
 //! `#[ignore]`d and measures in child processes. Run with
@@ -28,6 +29,10 @@ const PAGES: u32 = 200;
 /// document); before the threads shared the document each opened its own copy and it measured
 /// 4.04× (see `docs/spec/lazy-loading-plan.md` §4.1).
 const APP_DOCS_RSS: f64 = 1.25;
+/// What the app may hold for a comparison of two documents, pairing done and a composite on the
+/// canvas, as a multiple of what the two documents alone hold. The pairing is hashes, not
+/// strings (single-digit MiB for 20k pairs), and the composite is one bitmap.
+const APP_DIFF_RSS: f64 = 1.35;
 /// The synthetic document's image `XObject` (see `synthetic`: object 7), previewed by the preview
 /// thread.
 const IMAGE: ObjRef = ObjRef::new(7, 0);
@@ -124,6 +129,55 @@ fn app_with_every_render_thread_probe() {
     harness.state_mut().state.select(NodeId::Object(IMAGE));
     step_until(&mut harness, "the image preview", |s| {
         s.preview_digest(IMAGE).is_some()
+    });
+    println!("grew_mb={}", rss_mb() - before);
+}
+
+#[test]
+#[ignore = "memory budget; run with --release -- --ignored"]
+fn a_comparison_holds_little_more_than_its_two_documents() {
+    let alone = probe("two_documents_alone_probe");
+    let in_app = probe("app_comparing_two_documents_probe");
+    let ratio = in_app / alone;
+    eprintln!(
+        "two synthetic documents, {PAGES} pages each: alone {alone:.0} MiB, compared in the app \
+         {in_app:.0} MiB ({ratio:.2}x)"
+    );
+
+    assert!(alone > 200.0, "the two documents alone grew only {alone:.0} MiB");
+    assert!(
+        ratio <= APP_DIFF_RSS,
+        "a comparison holds {ratio:.2}x its two documents, budget {APP_DIFF_RSS}x"
+    );
+}
+
+/// Opens the synthetic document twice with the core alone and prints how much the process grew.
+#[test]
+#[ignore = "helper of a_comparison_holds_little_more_than_its_two_documents"]
+fn two_documents_alone_probe() {
+    let path = synthetic_path();
+    let before = rss_mb();
+    let a = Document::open(&path).unwrap();
+    let b = Document::open(&path).unwrap();
+    assert_eq!(a.page_count() + b.page_count(), 2 * PAGES as usize);
+    println!("grew_mb={}", rss_mb() - before);
+}
+
+/// Compares the synthetic document with itself in the app, waits for the pairing and the first
+/// composite, and prints how much the process grew since before the files were opened.
+#[test]
+#[ignore = "helper of a_comparison_holds_little_more_than_its_two_documents"]
+fn app_comparing_two_documents_probe() {
+    let mut harness = common::app();
+    let before = rss_mb();
+    let path = synthetic_path();
+    harness.state_mut().state.open_path(&path);
+    harness.state_mut().state.compare_with(&path);
+    step_until(&mut harness, "the pairing and a composite", |s| {
+        s.opening.job().is_none()
+            && s.diff
+                .as_ref()
+                .is_some_and(|d| d.pairing().is_some() && d.shown_picture().is_some())
     });
     println!("grew_mb={}", rss_mb() - before);
 }

@@ -15,7 +15,7 @@ use pdfxray_core::numeric::f32_from_usize;
 use pdfxray_core::{CoreError, Document, OpenStage};
 
 use crate::object_facts::{human_bytes, thousands};
-use crate::state::AppState;
+use crate::state::{AppState, Target};
 
 /// Asks the user for a PDF and returns its path, or `None` when they cancel.
 ///
@@ -340,6 +340,8 @@ fn write_sample(temp: &Path) -> Result<PathBuf, SampleWriteError> {
 /// The opening machinery of the app: the job in flight and how it is shown.
 pub struct Opener {
     job: Option<OpenJob>,
+    /// Where the file of the job goes: the document, or a side of a comparison.
+    target: Target,
     /// How long a job runs before the Opening card shows.
     pub card_delay: Duration,
     /// Told about every report of the next jobs.
@@ -353,6 +355,7 @@ impl Default for Opener {
     fn default() -> Self {
         Self {
             job: None,
+            target: Target::Document,
             card_delay: CARD_DELAY,
             observer: None,
             spinner_turns: true,
@@ -387,9 +390,19 @@ impl AppState {
     }
 
     fn start_open(&mut self, source: Source) {
+        self.start_job(source, Target::Document);
+    }
+
+    /// Starts opening `path` for `target`: B of a comparison, or A replaced in one.
+    pub(crate) fn start_open_into(&mut self, path: &Path, target: Target) {
+        self.start_job(Source::Path(path.to_path_buf()), target);
+    }
+
+    fn start_job(&mut self, source: Source, target: Target) {
         if let Some(previous) = self.opening.job.take() {
             previous.cancel();
         }
+        self.opening.target = target;
         self.opening.job = Some(OpenJob::start(source, self.opening.observer.clone()));
     }
 
@@ -434,9 +447,26 @@ impl AppState {
                     },
                 };
                 let remember = matches!(job.source(), Source::Path(_));
-                self.install(*doc, &path, job.elapsed(), remember);
+                match self.opening.target {
+                    Target::CompareB if self.document.is_some() => {
+                        self.install_b(*doc, &path, job.elapsed());
+                    }
+                    Target::ReplaceA if self.diff.is_some() => {
+                        let diff = self.diff.take();
+                        self.install(*doc, &path, job.elapsed(), remember);
+                        self.diff = diff;
+                        self.set_rail(crate::state::RailItem::Changes);
+                        self.restart_diff();
+                    }
+                    Target::Document | Target::CompareB | Target::ReplaceA => {
+                        self.install(*doc, &path, job.elapsed(), remember);
+                    }
+                }
                 if let Some(error) = unwritten {
                     self.status = sample_not_written(&error);
+                }
+                if let Some(b) = self.take_pending_compare() {
+                    self.compare_with(&b);
                 }
             }
             Outcome::Failed(CoreError::Cancelled) => {}
@@ -448,6 +478,8 @@ impl AppState {
     }
 
     fn fail_open(&mut self, name: &str, why: &str) {
+        // Nothing opened, so nothing waits to be compared with.
+        self.take_pending_compare();
         let message = format!("Cannot open {name}: {why}");
         self.status.clone_from(&message);
         self.open_error = Some(message);

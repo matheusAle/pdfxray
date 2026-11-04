@@ -15,12 +15,17 @@ use egui::text::{LayoutJob, TextFormat, TextWrapping};
 use egui::{CursorIcon, Frame, Label, Margin, RichText, Role, Sense, Shape, Stroke, Ui, WidgetInfo, vec2};
 
 use pdfxray_core::Severity;
+use pdfxray_core::diff::Side;
 use pdfxray_core::numeric::usize_from_u32;
 
 use crate::components::{Badge, Tone, focus};
 use crate::state::drawer::{Opened, STRIP_H};
 use crate::state::{AppState, DrawerTab};
 use crate::theme::{fonts, tokens};
+
+/// The References tab while a node of B is selected: it lists A's objects.
+pub const B_REFERENCES: &str =
+    "References list the objects of A. Select an element of A, or read B's hits in the Hit stack.";
 
 const HANDLE_H: f32 = 5.0;
 
@@ -113,6 +118,9 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
             DrawerTab::Validation => validation::ui(ui, state),
             DrawerTab::Operators => operators::ui(ui, state),
             DrawerTab::PaintOrder => paint_order::ui(ui, state),
+            DrawerTab::References if state.selection.side() == Side::B => {
+                ui.label(RichText::new(B_REFERENCES).color(tokens::TEXT_3));
+            }
             DrawerTab::References => references::ui(ui, state),
             DrawerTab::Speech => speech::ui(ui, state),
         });

@@ -1,6 +1,6 @@
 //! Global shortcuts (the keyboard table of the design).
 //!
-//! ⌘N new window · ⌘O open · ⌘W close window (the macOS menu bar has these, so there the window
+//! ⌘N new window · ⌘O open · ⌥⌘O compare with · ⌘R reload · ⌘W close window (the macOS menu bar has these, so there the window
 //! leaves them to it; ⌘Q is egui's own quit shortcut, or the menu's) · ⌘F navigator filter · ⌘1 to ⌘5 drawer tabs · ⌘[ and ⌘] object history (previous and
 //! next finding on the Validation entry) · 1 to 6 the toolbar's Pick menu (layer mode) · X I H P C
 //! A the View menu's modes · ⇧T L R its tag overlay options · M B tools · ⌘A selects all of the
@@ -42,6 +42,10 @@ fn window_keys(ctx: &Context, state: &mut AppState) {
     if state.native_menu {
         return;
     }
+    // Before ⌘O, which would take ⌥⌘O for itself.
+    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::ALT, Key::O)) {
+        MenuCommand::CompareWith.apply(state, ctx);
+    }
     for (key, command) in [
         (Key::N, MenuCommand::NewWindow),
         (Key::O, MenuCommand::Open),
@@ -50,6 +54,9 @@ fn window_keys(ctx: &Context, state: &mut AppState) {
         if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, key)) {
             command.apply(state, ctx);
         }
+    }
+    if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::R)) {
+        MenuCommand::Reload.apply(state, ctx);
     }
 }
 
@@ -94,15 +101,17 @@ fn plain_keys(ctx: &Context, state: &mut AppState) {
             tool.toggle(state);
         }
     }
-    // The tag overlay of the X-ray: ⇧T all tag boxes, L labels, R reading order.
-    if ctx.input(|i| i.key_pressed(Key::T) && i.modifiers.shift_only()) {
-        state.canvas.view.show.all_boxes = !state.canvas.view.show.all_boxes;
-    }
-    if pressed(Key::L) {
-        state.canvas.view.show.labels = !state.canvas.view.show.labels;
-    }
-    if pressed(Key::R) {
-        state.canvas.view.show.reading_order = !state.canvas.view.show.reading_order;
+    // The tag overlay of the X-ray: ⇧T all tag boxes, L labels, R reading order. In a
+    // comparison the same keys act on its canvas: ⇧T the unchanged elements too.
+    let all_boxes = ctx.input(|i| i.key_pressed(Key::T) && i.modifiers.shift_only());
+    if let Some(diff) = &mut state.diff {
+        diff.show.unchanged ^= all_boxes;
+        diff.show.labels ^= pressed(Key::L);
+        diff.order ^= pressed(Key::R);
+    } else {
+        state.canvas.view.show.all_boxes ^= all_boxes;
+        state.canvas.view.show.labels ^= pressed(Key::L);
+        state.canvas.view.show.reading_order ^= pressed(Key::R);
     }
     if pressed(Key::M) {
         state.canvas.measure.toggle();

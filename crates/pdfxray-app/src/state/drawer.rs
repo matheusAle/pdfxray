@@ -8,6 +8,7 @@
 
 use std::time::Instant;
 
+use pdfxray_core::diff::Side;
 use pdfxray_core::{NodeId, PageIx, Point};
 
 use super::{RailItem, SpeechState};
@@ -108,6 +109,8 @@ pub struct HitEntry {
 /// Everything found under the last click on the canvas, most specific first.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HitStack {
+    /// The document that was clicked: A but on B's side of a comparison.
+    pub side: Side,
     /// Page that was clicked.
     pub page: PageIx,
     /// Clicked point in page space.
@@ -258,6 +261,7 @@ mod tests {
 
     fn stack() -> HitStack {
         HitStack {
+            side: Side::A,
             page: 0,
             point: Point::new(1.0, 2.0),
             entries: Vec::new(),

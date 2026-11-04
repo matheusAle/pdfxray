@@ -26,6 +26,7 @@ pub mod brand;
 pub mod center;
 pub mod commands;
 pub mod components;
+mod diff_frames;
 pub mod drawer;
 pub mod findings;
 pub mod inspector;
@@ -53,6 +54,7 @@ pub mod units;
 pub mod validation;
 pub mod view;
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -81,6 +83,33 @@ pub use units::{Lengths, Unit};
 pub use validation::{
     Availability, Environment, InstallProgress, ValidationState, Validator, ValidatorError, VeraPdfValidator,
 };
+
+/// What the app was launched with: `pdfxray-app [a.pdf [--compare b.pdf]]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Launch {
+    /// The file to open.
+    pub document: Option<PathBuf>,
+    /// The file to compare it with: the e2e tests' way into a comparison, without a dialog.
+    pub compare: Option<PathBuf>,
+}
+
+impl Launch {
+    /// Reads the arguments after the program name. The first plain argument is the document,
+    /// `--compare` takes the next one; anything else is ignored, as before (macOS adds its own,
+    /// such as `-psn_…`).
+    pub fn parse(args: impl IntoIterator<Item = OsString>) -> Self {
+        let mut launch = Self::default();
+        let mut args = args.into_iter();
+        while let Some(arg) = args.next() {
+            if arg == "--compare" {
+                launch.compare = args.next().map(PathBuf::from);
+            } else if launch.document.is_none() && !arg.to_string_lossy().starts_with('-') {
+                launch.document = Some(PathBuf::from(arg));
+            }
+        }
+        launch
+    }
+}
 
 /// The app's name: the window title without a file, and the name in the menu bar.
 pub const APP_TITLE: &str = brand::NAME;
@@ -118,6 +147,15 @@ impl PdfxrayApp {
     pub fn with_document(mut self, path: Option<PathBuf>) -> Self {
         if let Some(path) = path {
             self.state.open_path(&path);
+        }
+        self
+    }
+
+    /// Compares the document being opened with `path` as soon as it is open.
+    #[must_use]
+    pub fn with_comparison(mut self, path: Option<PathBuf>) -> Self {
+        if let Some(path) = path {
+            self.state.compare_with(&path);
         }
         self
     }
@@ -196,12 +234,13 @@ pub fn native_options() -> eframe::NativeOptions {
     }
 }
 
-/// Open the native window, optionally with `document` already loaded, and run until it is closed.
+/// Open the native window, with what `launch` asks for already loading, and run until it is
+/// closed.
 ///
 /// The event loop is built here rather than by eframe so that, on macOS, the handler of the files
 /// Finder and the Dock send is in place before the loop starts (the files a launch was asked to
 /// open arrive then), and so the menu bar replaces winit's default one.
-pub fn run(document: Option<PathBuf>) -> eframe::Result {
+pub fn run(launch: Launch) -> eframe::Result {
     let event_loop = event_loop()?;
     let inbox = Arc::new(Inbox::default());
     #[cfg(target_os = "macos")]
@@ -209,7 +248,8 @@ pub fn run(document: Option<PathBuf>) -> eframe::Result {
     let creator: eframe::AppCreator<'_> = Box::new(move |cc| {
         let app = PdfxrayApp::new(cc)
             .with_recents_in_data_dir()
-            .with_document(document)
+            .with_document(launch.document)
+            .with_comparison(launch.compare)
             .with_inbox(inbox, &cc.egui_ctx);
         #[cfg(target_os = "macos")]
         let app = app.with_menu_bar(menu_bar);

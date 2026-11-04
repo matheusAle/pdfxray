@@ -16,6 +16,7 @@
 pub mod action_bar;
 pub mod cards;
 mod connector;
+pub mod diff;
 pub mod footnotes;
 pub mod geometry;
 pub mod header_scope;

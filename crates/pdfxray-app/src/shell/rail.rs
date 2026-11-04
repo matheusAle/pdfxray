@@ -31,6 +31,7 @@ fn icon_of(item: RailItem) -> Icon {
         RailItem::Objects => Icon::Objects,
         RailItem::Revisions => Icon::Revisions,
         RailItem::Validation => Icon::Validation,
+        RailItem::Changes => Icon::History,
     }
 }
 
@@ -42,7 +43,12 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     ui.vertical_centered(|ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
         logo(ui);
-        for item in RailItem::TOP {
+        let items: &[RailItem] = if state.in_diff() {
+            &RailItem::DIFF
+        } else {
+            &RailItem::TOP
+        };
+        for &item in items {
             let active = state.nav.rail == item;
             let entry = button(
                 ui,

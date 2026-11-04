@@ -22,6 +22,10 @@ pub enum MenuCommand {
     OpenRecent(usize),
     /// File › Open Recent › Clear Menu.
     ClearRecent,
+    /// File › Compare With… (⌥⌘O): a second file to compare the open document with.
+    CompareWith,
+    /// File › Reload (⌘R): reads the side being iterated again, B in a comparison.
+    Reload,
     /// File › Close Window (⌘W): closes this window, which ends its process.
     CloseWindow,
     /// File › Validate (⇧⌘V): the title bar's Validate.
@@ -43,10 +47,12 @@ const RECENT_PREFIX: &str = "file.recent.";
 
 impl MenuCommand {
     /// Every command except the recent files, in menu order.
-    pub const FIXED: [Self; 10] = [
+    pub const FIXED: [Self; 12] = [
         Self::NewWindow,
         Self::Open,
         Self::ClearRecent,
+        Self::CompareWith,
+        Self::Reload,
         Self::CloseWindow,
         Self::Validate,
         Self::ZoomIn,
@@ -63,6 +69,8 @@ impl MenuCommand {
             Self::Open => "file.open",
             Self::OpenRecent(index) => return format!("{RECENT_PREFIX}{index}"),
             Self::ClearRecent => "file.recent-clear",
+            Self::CompareWith => "file.compare-with",
+            Self::Reload => "file.reload",
             Self::CloseWindow => "file.close-window",
             Self::Validate => "file.validate",
             Self::ZoomIn => "view.zoom-in",
@@ -87,7 +95,13 @@ impl MenuCommand {
     pub const fn needs_document(self) -> bool {
         matches!(
             self,
-            Self::Validate | Self::ZoomIn | Self::ZoomOut | Self::ActualSize | Self::FitPage
+            Self::Validate
+                | Self::ZoomIn
+                | Self::ZoomOut
+                | Self::ActualSize
+                | Self::FitPage
+                | Self::CompareWith
+                | Self::Reload
         )
     }
 
@@ -103,6 +117,8 @@ impl MenuCommand {
             Self::ClearRecent => {
                 state.recents_error = state.recents.clear().err();
             }
+            Self::CompareWith => state.request_compare(),
+            Self::Reload => state.reload(),
             Self::CloseWindow => ctx.send_viewport_cmd(ViewportCommand::Close),
             Self::Validate => state.request_validation(ctx),
             Self::ZoomIn => state.zoom_in(),

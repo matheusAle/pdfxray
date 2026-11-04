@@ -365,6 +365,28 @@ fn mul(a: u8, b: u8) -> u8 {
     u8::try_from((u32::from(a) * u32::from(b) + 127) / 255).unwrap_or(u8::MAX)
 }
 
+/// Lays `scenes` out on `grid`, a composite's grid in A's page space onto any output (the
+/// composite's own pixels, or the screen it is shown on), with `legend` in a band of its own
+/// below `grid.bounds`. Returns the shapes and the height of that band in output units: what
+/// [`Composite::annotate`] paints, and what the app draws over the same composite, so the two
+/// are one picture.
+pub fn layout(grid: &Grid, palette: &Palette, scenes: &[Scene], legend: &Legend) -> (Vec<Annotation>, f64) {
+    let mut shapes = annotate::layout(grid, palette, scenes, None);
+    let (_, height) = annotate::legend_extent(grid, legend);
+    if height > 0.0 {
+        let below = Grid {
+            bounds: PixelRect {
+                y0: grid.bounds.y1,
+                y1: grid.bounds.y1 + height,
+                ..grid.bounds
+            },
+            ..*grid
+        };
+        shapes.extend(annotate::layout(&below, palette, &[], Some(legend)));
+    }
+    (shapes, height)
+}
+
 impl Composite {
     /// The annotation grid of the whole composite in A's page space: B's rects go through
     /// [`Composite::b_in_a`] first, so both sides are laid out together and their chips clear
@@ -384,26 +406,19 @@ impl Composite {
         Rect::new(p.x.min(q.x), p.y.min(q.y), p.x.max(q.x), p.y.max(q.y))
     }
 
-    /// Adds `height` pixels of backdrop below the pages and returns that band: room for a
-    /// legend of its own, clear of what the pages show. The pages stay where they are.
-    pub fn extend_below(&mut self, height: f64) -> PixelRect {
+    /// Adds `height` pixels of backdrop below the pages: room for a legend of its own, clear of
+    /// what the pages show (see [`layout`]). The pages stay where they are.
+    fn extend_below(&mut self, height: f64) {
         let rows = u32_from_f64_round(height.max(0.0).ceil());
-        let top = f64::from(self.height);
         self.rgba
             .extend(BACKDROP.repeat(usize_from_u32(self.width) * usize_from_u32(rows)));
         self.height += rows;
-        PixelRect {
-            x0: 0.0,
-            y0: top,
-            x1: f64::from(self.width),
-            y1: f64::from(self.height),
-        }
     }
 
     /// Lays `scenes` (in A's page space, see [`Composite::b_in_a`]) out over the whole
     /// composite, `unit` pixels per annotation unit, puts `legend` in a band of its own below
-    /// the pages, paints all of it and returns the shapes with what they stand for: what the app
-    /// binds its widgets to and the export draws.
+    /// the pages, paints all of it and returns the shapes with what they stand for: what the
+    /// export draws. The app draws the same [`layout`] on its own grid over the same composite.
     pub fn annotate(
         &mut self,
         unit: f32,
@@ -411,16 +426,9 @@ impl Composite {
         scenes: &[Scene],
         legend: &Legend,
     ) -> Vec<Annotation> {
-        let grid = self.grid(unit);
-        let mut shapes = annotate::layout(&grid, palette, scenes, None);
-        let (_, height) = annotate::legend_extent(&grid, legend);
-        if height > 0.0 {
-            let band = self.extend_below(height);
-            let below = Grid {
-                bounds: band,
-                ..self.grid(unit)
-            };
-            shapes.extend(annotate::layout(&below, palette, &[], Some(legend)));
+        let (shapes, band) = layout(&self.grid(unit), palette, scenes, legend);
+        if band > 0.0 {
+            self.extend_below(band);
         }
         self.paint(&annotate::overlays(&shapes));
         shapes

@@ -12,9 +12,11 @@
 //!   and what it reads are in [`speech`], the table behind the selection in [`tables`].
 //! * [`CanvasState`]: page, zoom, layer mode and debug tools ([`canvas`]); the tag roles the
 //!   canvas focuses on are in [`role_focus`].
+//! * [`DiffSession`]: the comparison with a second document, while there is one ([`diff`]).
 
 pub mod canvas;
 pub mod derived;
+pub mod diff;
 pub mod drawer;
 pub mod history;
 pub mod marquee;
@@ -39,6 +41,7 @@ use pdfxray_render::ColorBy;
 
 pub use canvas::CanvasState;
 pub use derived::{PageStats, RoleMapEntry, TagIndex};
+pub use diff::{ChangeRow, DiffSession, Target};
 pub use drawer::{DrawerState, DrawerTab, HitEntry, HitStack};
 pub use history::ObjectHistory;
 pub use marquee::Marquee;
@@ -86,6 +89,20 @@ pub struct LoadedDocument {
     pub encryption: Option<EncryptionInfo>,
 }
 
+impl LoadedDocument {
+    /// `doc`, read from `path` in `opened_in`, with its summary facts.
+    pub(crate) fn new(doc: Document, path: &Path, opened_in: Duration) -> Self {
+        Self {
+            info: doc.info(),
+            tagged: !doc.tree(TreeKind::Tags).is_empty(),
+            encryption: doc.encryption(),
+            doc: Arc::new(doc),
+            path: path.to_path_buf(),
+            opened_in,
+        }
+    }
+}
+
 /// A tree the navigator can show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NavTree {
@@ -99,8 +116,12 @@ pub enum NavTree {
 pub struct AppState {
     /// Status bar message.
     pub status: String,
-    /// The open document, if any.
+    /// The open document, if any: the A side of a comparison.
     pub document: Option<LoadedDocument>,
+    /// The comparison with a second document (B), while there is one: diff mode.
+    pub diff: Option<DiffSession>,
+    /// A file to compare with as soon as the document being opened is there.
+    pending_compare: Option<PathBuf>,
     /// Why the last attempt to open a file failed; cleared by the next success.
     pub open_error: Option<String>,
     /// The unit every length is shown in, switched in the status bar.
@@ -153,6 +174,8 @@ impl Default for AppState {
         Self {
             status: READY.to_owned(),
             document: None,
+            diff: None,
+            pending_compare: None,
             open_error: None,
             unit: Unit::default(),
             nav: NavState::default(),
@@ -187,14 +210,7 @@ impl AppState {
         // The title bar names the file; the status bar keeps its message slot for news.
         READY.clone_into(&mut self.status);
         self.open_error = None;
-        let loaded = LoadedDocument {
-            info: doc.info(),
-            tagged: !doc.tree(TreeKind::Tags).is_empty(),
-            encryption: doc.encryption(),
-            doc: Arc::new(doc),
-            path: path.to_path_buf(),
-            opened_in,
-        };
+        let loaded = LoadedDocument::new(doc, path, opened_in);
         if remember {
             let recent = Recent {
                 path: std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()),
@@ -208,6 +224,8 @@ impl AppState {
         }
         self.explainer = loaded.encryption.is_some();
         self.document = Some(loaded);
+        // A new document ends a comparison; one that replaces A keeps it (see `poll_open`).
+        self.diff = None;
         self.invalidate_trees();
         self.derived.clear();
         if let Some(loaded) = &self.document {
@@ -231,16 +249,27 @@ impl AppState {
             self.drawer.tab = DrawerTab::Diagnostics;
             self.drawer.page_boxes_only = false;
         }
+        if self.nav.rail == RailItem::Changes {
+            // The comparison it belonged to is over.
+            self.nav.set_rail(RailItem::Tags);
+        }
         self.reset_drawer(self.nav.rail);
         self.selection = SelectionState::default();
         self.select(NodeId::Document);
     }
 
-    /// Opens a file dropped onto the window here, replacing the document it shows: the drop says
-    /// which window the file is meant for. Files asked for in other ways may open in a new window
-    /// ([`AppState::open_files`]).
-    pub fn accept_drop(&mut self, path: &Path) {
-        self.open_path(path);
+    /// Opens a file dropped onto the window here: the drop says which window the file is meant
+    /// for. Files asked for in other ways may open in a new window ([`AppState::open_files`]).
+    ///
+    /// A plain drop replaces the document; with ⌥ (`alt`) it is compared with it instead. In a
+    /// comparison a plain drop replaces B, the side being iterated, and ⌥ replaces A.
+    pub fn accept_drop(&mut self, path: &Path, alt: bool) {
+        match (self.in_diff(), alt) {
+            (false, false) => self.open_path(path),
+            (false, true) => self.compare_with(path),
+            (true, false) => self.start_open_into(path, Target::CompareB),
+            (true, true) => self.start_open_into(path, Target::ReplaceA),
+        }
     }
 
     /// Number of pages of the open document, 0 without one.
@@ -277,7 +306,11 @@ impl AppState {
             // The structure view colours by how content is marked: tagged, artifact, untagged.
             RailItem::Tags => self.canvas.view.color_by = ColorBy::Artifact,
             RailItem::Pages => self.canvas.show_boxes = true,
-            RailItem::Content | RailItem::Objects | RailItem::Revisions | RailItem::Validation => {}
+            RailItem::Content
+            | RailItem::Objects
+            | RailItem::Revisions
+            | RailItem::Validation
+            | RailItem::Changes => {}
         }
     }
 
@@ -318,7 +351,7 @@ impl AppState {
                 Some(NavTree::Core(TreeKind::Content(self.canvas.page)))
             }
             RailItem::Revisions => Some(NavTree::Revisions),
-            RailItem::Pages | RailItem::Objects | RailItem::Validation => None,
+            RailItem::Pages | RailItem::Objects | RailItem::Validation | RailItem::Changes => None,
         }
     }
 

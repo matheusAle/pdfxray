@@ -43,7 +43,7 @@ pub const fn collapsed(rail: RailItem) -> &'static [&'static str] {
             STRUCTURE_SECTION,
             ACCESSIBILITY_SECTION,
         ],
-        RailItem::Validation => &[],
+        RailItem::Validation | RailItem::Changes => &[],
     }
 }
 

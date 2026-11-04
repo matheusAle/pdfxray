@@ -444,7 +444,7 @@ fn the_window_title_names_the_file_and_is_sent_once_per_change() {
     harness
         .state_mut()
         .state
-        .accept_drop(&fixture_path("struct-rich"));
+        .accept_drop(&fixture_path("struct-rich"), false);
     assert_eq!(
         titles_until_open(&mut harness),
         ["struct-rich.pdf \u{2014} pdfxray"]

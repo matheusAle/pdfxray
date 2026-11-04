@@ -5,6 +5,7 @@
 //! case; two are the compare view (the gap is measured from the primary); three or more are a
 //! multi-selection the inspector summarises. See `docs/spec/multi-selection.md`.
 
+use pdfxray_core::diff::Side;
 use pdfxray_core::{NodeId, Point, Rect};
 
 use super::AppState;
@@ -37,7 +38,7 @@ pub enum Combine {
 }
 
 /// The selected nodes, in the order they joined, and which one is the primary.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SelectionState {
     /// Never twice the same node.
     nodes: Vec<NodeId>,
@@ -48,6 +49,21 @@ pub struct SelectionState {
     stepped_in: bool,
     /// The node the inspector keeps showing while the selection moves on (the pin button).
     pub pinned: Option<NodeId>,
+    /// The document the nodes are of: A (the open document) but for a node of B picked in a
+    /// comparison. A [`NodeId`] has no side of its own.
+    side: Side,
+}
+
+impl Default for SelectionState {
+    fn default() -> Self {
+        Self {
+            nodes: Vec::new(),
+            primary: 0,
+            stepped_in: false,
+            pinned: None,
+            side: Side::A,
+        }
+    }
 }
 
 impl SelectionState {
@@ -98,15 +114,31 @@ impl SelectionState {
         self.nodes.len() >= SUMMARY_FROM && self.stepped_in
     }
 
-    /// `id` alone.
+    /// The document the selected nodes are of.
+    pub fn side(&self) -> Side {
+        self.side
+    }
+
+    /// `id` alone, a node of A.
     fn set_one(&mut self, id: NodeId) {
+        self.set_one_on(Side::A, id);
+    }
+
+    /// `id` alone, a node of `side`.
+    pub(super) fn set_one_on(&mut self, side: Side, id: NodeId) {
         self.nodes = vec![id];
         self.primary = 0;
         self.stepped_in = false;
+        self.side = side;
     }
 
     /// Adds `id` at the end, leaving the primary where it is. False when it was selected.
     fn insert(&mut self, id: NodeId) -> bool {
+        if self.side != Side::A {
+            // A multi-selection is of A's nodes: a node of A joining one of B's starts over.
+            self.set_one(id);
+            return true;
+        }
         if self.contains(&id) {
             return false;
         }
@@ -142,7 +174,29 @@ impl SelectionState {
         self.nodes.clear();
         self.primary = 0;
         self.stepped_in = false;
+        self.side = Side::A;
     }
+}
+
+/// Everything under `point` on page `page` of `doc` that `layer` picks, most specific first, as
+/// the hit stack lists it.
+pub(crate) fn hit_entries(
+    doc: &pdfxray_core::Document,
+    page: pdfxray_core::PageIx,
+    point: Point,
+    layer: pdfxray_core::LayerMode,
+) -> Vec<HitEntry> {
+    doc.hit(page, point, layer)
+        .into_iter()
+        .map(|id| {
+            let props = doc.node(&id);
+            HitEntry {
+                label: props.as_ref().map_or_else(|| id.to_string(), |p| p.title.clone()),
+                kind: props.map_or_else(String::new, |p| p.kind.to_owned()),
+                id,
+            }
+        })
+        .collect()
 }
 
 impl AppState {
@@ -340,22 +394,11 @@ impl AppState {
     /// Everything under `point` on the page shown, most specific first.
     pub(super) fn collect_hit_stack(&self, point: Point) -> Option<HitStack> {
         let doc = &self.document.as_ref()?.doc;
-        let entries: Vec<HitEntry> = doc
-            .hit(self.canvas.page, point, self.canvas.layer_mode)
-            .into_iter()
-            .map(|id| {
-                let props = doc.node(&id);
-                HitEntry {
-                    label: props.as_ref().map_or_else(|| id.to_string(), |p| p.title.clone()),
-                    kind: props.map_or_else(String::new, |p| p.kind.to_owned()),
-                    id,
-                }
-            })
-            .collect();
         Some(HitStack {
+            side: Side::A,
             page: self.canvas.page,
             point,
-            entries,
+            entries: hit_entries(doc, self.canvas.page, point, self.canvas.layer_mode),
         })
     }
 

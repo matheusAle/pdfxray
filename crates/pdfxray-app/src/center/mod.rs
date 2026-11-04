@@ -14,6 +14,8 @@ use crate::state::AppState;
 pub fn ui(ui: &mut Ui, state: &mut AppState) {
     if state.nav.rail.replaces_canvas() {
         object_view::ui(ui, state);
+    } else if state.in_diff() {
+        canvas::diff::ui(ui, state);
     } else {
         canvas::ui(ui, state);
     }

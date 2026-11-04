@@ -2,6 +2,7 @@
 //!
 //! Each entry has its own file; they share the tree body drawn here.
 
+pub mod changes;
 pub mod content;
 pub mod objects;
 pub mod pages;
@@ -11,6 +12,7 @@ pub mod validation;
 
 use egui::{Align, Frame, Id, Layout, Margin, RichText, TextEdit, Ui};
 use pdfxray_core::NodeId;
+use pdfxray_core::diff::Side;
 
 use crate::components::{Icon, ToolButton, context_menu, tooltip};
 use crate::state::{AppState, NavTree, RailItem};
@@ -78,6 +80,7 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
                 RailItem::Objects => objects::ui(ui, state),
                 RailItem::Revisions => revisions::ui(ui, state),
                 RailItem::Validation => validation::ui(ui, state),
+                RailItem::Changes => changes::ui(ui, state),
             }
         });
 }
@@ -102,6 +105,7 @@ const fn count_unit(rail: RailItem) -> &'static str {
         RailItem::Content | RailItem::Artifacts | RailItem::Objects => "nodes",
         RailItem::Revisions => "revisions",
         RailItem::Pages | RailItem::Validation => "",
+        RailItem::Changes => "changes",
     }
 }
 
@@ -114,6 +118,7 @@ fn header_stats(state: &mut AppState, tree: Option<NavTree>) -> Option<String> {
         RailItem::Content | RailItem::Artifacts => content::stats_text(state),
         RailItem::Pages => pages::header_text(state),
         RailItem::Objects => objects::header_text(state),
+        RailItem::Changes => changes::header_text(state),
         rail => {
             let count = state.tree_model(tree?).map(|model| model.len())?;
             Some(format!("{} {}", thousands(count), count_unit(rail)))
@@ -138,6 +143,11 @@ fn header(ui: &mut Ui, state: &mut AppState) {
             if rail == RailItem::Validation {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     validation::header_action(ui, state);
+                });
+            }
+            if rail == RailItem::Changes {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    changes::header_action(ui, state);
                 });
             }
             return;
@@ -221,12 +231,17 @@ fn tree_body(ui: &mut Ui, state: &mut AppState, tree: NavTree, extra: &[&str], e
     let mut words = filter_words(state);
     words.extend(extra.iter().map(|w| (*w).to_owned()));
     let filtered = !state.nav.filter.trim().is_empty();
-    let paths: Vec<Vec<NodeId>> = state
-        .selection
-        .nodes()
-        .iter()
-        .map(|selected| state.path_to(selected))
-        .collect();
+    // The trees are A's: a node of B selected in a comparison has no row here.
+    let paths: Vec<Vec<NodeId>> = if state.selection.side() == Side::A {
+        state
+            .selection
+            .nodes()
+            .iter()
+            .map(|selected| state.path_to(selected))
+            .collect()
+    } else {
+        Vec::new()
+    };
     let primary = state.selection.primary_index();
     let rail = state.nav.rail;
     let Some(model) = state.tree_model(tree) else {
