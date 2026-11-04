@@ -1,0 +1,227 @@
+---
+source: crates/pdfxray-cli/tests/diff.rs
+expression: text
+---
+{
+  "identical": false,
+  "scope": "all",
+  "summary": {
+    "same": 1,
+    "modified": 0,
+    "moved": 2,
+    "added": 4,
+    "removed": 3
+  },
+  "sides": {
+    "a": {
+      "name": "reading-order.pdf",
+      "pages": 1,
+      "elements": 6,
+      "structure_only": false
+    },
+    "b": {
+      "name": "reading-order-footnote.pdf",
+      "pages": 1,
+      "elements": 7,
+      "structure_only": false
+    }
+  },
+  "tolerance": 1.0,
+  "pairs": [
+    {
+      "kind": "element",
+      "status": "removed",
+      "a": "struct:8:0",
+      "role": "H1",
+      "text": "Quarterly report",
+      "page_a": 0,
+      "bbox_a": {
+        "x0": 40.0,
+        "y0": 354.864,
+        "x1": 208.0480004043579,
+        "y1": 377.688
+      },
+      "confidence": {
+        "unicode_a": "Encoding"
+      }
+    },
+    {
+      "kind": "element",
+      "status": "moved",
+      "a": "struct:9:0",
+      "b": "struct:8:0",
+      "role": "P",
+      "text": "Revenue grew in every region.",
+      "page_a": 0,
+      "page_b": 0,
+      "bbox_a": {
+        "x0": 40.0,
+        "y0": 327.36,
+        "x1": 202.73199823951722,
+        "y1": 338.616
+      },
+      "bbox_b": {
+        "x0": 40.0,
+        "y0": 337.36,
+        "x1": 202.73199823951722,
+        "y1": 348.616
+      },
+      "delta": [
+        0.0,
+        10.0
+      ],
+      "changed": [
+        {
+          "field": "bbox",
+          "a": "[40 327.36 202.732 338.616]",
+          "b": "[40 337.36 202.732 348.616]"
+        }
+      ],
+      "confidence": {
+        "rung": "role_text",
+        "method": "anchor",
+        "unicode_a": "Encoding",
+        "unicode_b": "Encoding"
+      }
+    },
+    {
+      "kind": "element",
+      "status": "removed",
+      "a": "struct:10:0",
+      "role": "Caption",
+      "text": "Figure 1: Revenue by region",
+      "page_a": 0,
+      "bbox_a": {
+        "x0": 40.0,
+        "y0": 177.8,
+        "x1": 166.16999941825867,
+        "y1": 187.18
+      },
+      "confidence": {
+        "unicode_a": "Encoding"
+      }
+    },
+    {
+      "kind": "element",
+      "status": "removed",
+      "a": "struct:11:0",
+      "role": "Figure",
+      "page_a": 0,
+      "bbox_a": {
+        "x0": 40.0,
+        "y0": 200.0,
+        "x1": 140.0,
+        "y1": 300.0
+      },
+      "confidence": {}
+    },
+    {
+      "kind": "element",
+      "status": "added",
+      "b": "struct:9:0",
+      "role": "Note",
+      "text": "1 Source: annual report.",
+      "page_b": 0,
+      "bbox_b": {
+        "x0": 40.0,
+        "y0": 58.344,
+        "x1": 129.15199949645995,
+        "y1": 65.896
+      },
+      "confidence": {
+        "unicode_b": "Encoding"
+      }
+    },
+    {
+      "kind": "element",
+      "status": "added",
+      "b": "struct:10:0",
+      "role": "Lbl",
+      "text": "1",
+      "page_b": 0,
+      "bbox_b": {
+        "x0": 40.0,
+        "y0": 58.344,
+        "x1": 44.448,
+        "y1": 65.744
+      },
+      "confidence": {
+        "unicode_b": "Encoding"
+      }
+    },
+    {
+      "kind": "element",
+      "status": "added",
+      "b": "struct:11:0",
+      "role": "P",
+      "text": "Source: annual report.",
+      "page_b": 0,
+      "bbox_b": {
+        "x0": 50.0,
+        "y0": 58.344,
+        "x1": 129.15199949645995,
+        "y1": 65.896
+      },
+      "confidence": {
+        "unicode_b": "Encoding"
+      }
+    },
+    {
+      "kind": "element",
+      "status": "added",
+      "b": "struct:12:0",
+      "role": "P",
+      "text": "Costs stayed flat this year.",
+      "page_b": 0,
+      "bbox_b": {
+        "x0": 40.0,
+        "y0": 307.432,
+        "x1": 180.7239988193512,
+        "y1": 318.844
+      },
+      "confidence": {
+        "unicode_b": "Encoding"
+      }
+    },
+    {
+      "kind": "element",
+      "status": "moved",
+      "a": "struct:12:0",
+      "b": "struct:13:0",
+      "role": "P",
+      "text": "Closing remarks follow.",
+      "page_a": 0,
+      "page_b": 0,
+      "bbox_a": {
+        "x0": 40.0,
+        "y0": 137.36,
+        "x1": 164.01999906158449,
+        "y1": 148.844
+      },
+      "bbox_b": {
+        "x0": 40.0,
+        "y0": 277.36,
+        "x1": 164.01999906158449,
+        "y1": 288.844
+      },
+      "delta": [
+        0.0,
+        140.0
+      ],
+      "changed": [
+        {
+          "field": "bbox",
+          "a": "[40 137.36 164.02 148.844]",
+          "b": "[40 277.36 164.02 288.844]"
+        }
+      ],
+      "confidence": {
+        "rung": "role_text",
+        "method": "anchor",
+        "unicode_a": "Encoding",
+        "unicode_b": "Encoding"
+      }
+    }
+  ],
+  "pages": []
+}

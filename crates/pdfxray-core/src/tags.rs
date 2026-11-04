@@ -26,6 +26,7 @@
 //! diagnostic names the folded element.
 
 mod checks;
+mod facts;
 mod order;
 mod parse;
 mod roles;
@@ -37,6 +38,7 @@ mod view;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+pub(crate) use self::facts::KidFact;
 pub use self::order::{OrderComparison, OrderStep, ReadingOrder, ReadingOrderSource, StepKind, TagBox};
 pub use self::roles::RoleClass;
 pub use self::speech::{

@@ -1,5 +1,7 @@
 //! `pdfxray` command line: JSON over the core query API.
 
+mod diff;
+
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::PathBuf;
@@ -18,6 +20,8 @@ use pdfxray_render::{
 };
 use pdfxray_verapdf::{Discovery, DiscoveryConfig, Profile, RunOptions, VeraPdf, discover};
 use serde::Serialize;
+
+pub use self::diff::ScopeArg;
 
 /// Command-line arguments.
 #[derive(Debug, Parser)]
@@ -189,6 +193,28 @@ pub enum Command {
         /// (`PDFXRAY_PDFIUM`, `target/pdfium`, the pdfxray data directory).
         #[arg(long)]
         pdfium: Option<PathBuf>,
+    },
+    /// Compare two PDFs: which structure elements correspond and what changed (modified,
+    /// moved, added, removed), matched by what they say and where they are, never by object
+    /// number. Exits 0 when nothing in scope changed, 1 when something did, 2 on error.
+    Diff {
+        /// The PDF compared against (A).
+        a: PathBuf,
+        /// The PDF compared (B).
+        b: PathBuf,
+        /// Only page N of A (zero-based) and what corresponds to it in B.
+        #[arg(long)]
+        page: Option<PageIx>,
+        /// Which part of the comparison: element pairs and page residue, element pairs only, or
+        /// only the residue of each page (painted content outside the structure tree).
+        #[arg(long, value_enum, default_value_t = ScopeArg::All)]
+        scope: ScopeArg,
+        /// Also list the pairs and pages that did not change.
+        #[arg(long)]
+        include_unchanged: bool,
+        /// Exit 0 when the documents differ too (errors still exit 2).
+        #[arg(long)]
+        exit_zero: bool,
     },
     /// Validate with veraPDF (run as a separate Java process) and map failures to nodes.
     Validate {
@@ -384,8 +410,75 @@ impl From<LayerArg> for LayerMode {
 }
 
 /// Runs `cli`, writing JSON to `out`.
-pub fn run(cli: &Cli, out: &mut impl Write) -> anyhow::Result<()> {
+pub fn run(cli: &Cli, out: &mut impl Write) -> anyhow::Result<Outcome> {
+    let mut outcome = Outcome::Done;
+    run_command(cli, out, &mut outcome)?;
+    Ok(outcome)
+}
+
+/// `pdfxray diff`: pairs the two files and prints the part `view` asks for.
+fn run_diff(
+    (a, b): (&PathBuf, &PathBuf),
+    view: diff::DiffView,
+    exit_zero: bool,
+    pretty: bool,
+    out: &mut impl Write,
+) -> anyhow::Result<Outcome> {
+    let (doc_a, doc_b) = (open(a)?, open(b)?);
+    if let Some(n) = view.page
+        && doc_a.page(n).is_none()
+    {
+        return Err(anyhow!(
+            "page {n} out of range ({} has {})",
+            a.display(),
+            doc_a.page_count()
+        ));
+    }
+    let pairing = pdfxray_core::diff::pair(&doc_a, &doc_b);
+    let shown = diff::narrow(&pairing, view);
+    write_json(out, &shown, pretty)?;
+    Ok(if shown.identical || exit_zero {
+        Outcome::Done
+    } else {
+        Outcome::Differences
+    })
+}
+
+/// How a successful run ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    /// The command did what it was asked; exit status 0.
+    Done,
+    /// `diff` found differences; exit status 1.
+    Differences,
+}
+
+impl Command {
+    /// The exit status of a run of this command that failed: 2 for `diff` (whose 1 means
+    /// "differences"), 1 for the others.
+    pub fn error_status(&self) -> u8 {
+        if matches!(self, Self::Diff { .. }) { 2 } else { 1 }
+    }
+}
+
+fn run_command(cli: &Cli, out: &mut impl Write, outcome: &mut Outcome) -> anyhow::Result<()> {
     match &cli.command {
+        Command::Diff {
+            a,
+            b,
+            page,
+            scope,
+            include_unchanged,
+            exit_zero,
+        } => {
+            let view = diff::DiffView {
+                scope: *scope,
+                page: *page,
+                include_unchanged: *include_unchanged,
+            };
+            *outcome = run_diff((a, b), view, *exit_zero, cli.pretty, out)?;
+            Ok(())
+        }
         Command::Info { file } => write_json(out, &open(file)?.info(), cli.pretty),
         Command::Tree { file, kind } => write_json(out, &open(file)?.tree(kind.0), cli.pretty),
         Command::Node { file, id } => {

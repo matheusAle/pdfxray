@@ -21,6 +21,12 @@ const SYNTH_RSS_MB: u64 = 500;
 const CORPUS_FILE_OPEN: Duration = Duration::from_millis(200);
 const QUERY: Duration = Duration::from_millis(5);
 const SYNTH_PAGES: u32 = 200;
+/// Pairing two 200-page documents (20 001 elements each), both key passes included: 64 ms
+/// measured where the 200-page open took 269 ms. The headroom is about the open budget's.
+const PAIR_200: Duration = Duration::from_millis(750);
+/// The bottom-up key pass over one 200-page document, alone, so that a regression in it cannot
+/// hide inside the pairing total: 30 ms measured on the same run.
+const KEYS_200: Duration = Duration::from_millis(250);
 
 /// Records the best of five runs of `f` under `name`.
 fn time<T>(timings: &mut Vec<(String, Duration)>, name: &str, mut f: impl FnMut() -> T) {
@@ -139,6 +145,33 @@ fn synthetic_200_pages_open_within_budget() {
     assert_eq!(doc.page_count(), SYNTH_PAGES as usize);
     assert!(doc.info().diagnostics.is_empty(), "{:#?}", doc.info().diagnostics);
     assert!(took < SYNTH_OPEN, "open took {took:?}, budget {SYNTH_OPEN:?}");
+}
+
+#[test]
+#[ignore = "timing budget; run with --release -- --ignored"]
+fn synthetic_200_pages_key_pass_within_budget() {
+    let doc = Document::from_bytes("synthetic.pdf", common::synthetic_pdf(SYNTH_PAGES)).unwrap();
+    let (took, keys) = best_of(5, || pdfxray_core::diff::DocKeys::build(&doc));
+    eprintln!("key pass, {} elements: {took:?}", keys.len());
+    assert_eq!(keys.len(), (SYNTH_PAGES * common::ELEMS_PER_PAGE + 1) as usize);
+    assert!(took < KEYS_200, "key pass took {took:?}, budget {KEYS_200:?}");
+}
+
+#[test]
+#[ignore = "timing budget; run with --release -- --ignored"]
+fn synthetic_200_pages_pair_within_budget() {
+    // Two independent opens of the same document: every element pairs, the worst case for the
+    // payload comparison (every pair compares its rows).
+    let open = || Document::from_bytes("synthetic.pdf", common::synthetic_pdf(SYNTH_PAGES)).unwrap();
+    let (a, b) = (open(), open());
+    let (took, pairing) = best_of(3, || pdfxray_core::diff::pair(&a, &b));
+    eprintln!("pairing, {} pairs: {took:?}", pairing.pairs.len());
+    assert!(pairing.summary().is_unchanged());
+    assert_eq!(
+        pairing.pairs.len(),
+        (SYNTH_PAGES * common::ELEMS_PER_PAGE + 1) as usize
+    );
+    assert!(took < PAIR_200, "pairing took {took:?}, budget {PAIR_200:?}");
 }
 
 /// Memory is measured in a child process running [`memory_probe`]: the allocator keeps what the

@@ -314,7 +314,7 @@ impl TagTree {
         (Self::label(e), NodeId::StructElem(e.obj))
     }
 
-    fn element_group(&self, ei: usize) -> PropGroup {
+    pub(super) fn element_group(&self, ei: usize) -> PropGroup {
         let e = &self.elems[ei];
         let opt = |g: PropGroup, key: &str, v: &Option<String>| match v {
             Some(v) => g.row(key, v),
@@ -377,7 +377,7 @@ impl TagTree {
         g
     }
 
-    fn attributes_group(e: &Elem) -> Option<PropGroup> {
+    pub(super) fn attributes_group(e: &Elem) -> Option<PropGroup> {
         if e.attrs.is_empty() && e.classes.is_empty() {
             return None;
         }

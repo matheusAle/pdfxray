@@ -10,6 +10,7 @@
 pub mod capture;
 mod content;
 mod crypto;
+pub mod diff;
 mod document;
 mod encryption;
 mod error;

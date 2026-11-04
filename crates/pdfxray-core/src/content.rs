@@ -38,6 +38,7 @@ mod glyph;
 mod paint;
 mod props;
 mod runs;
+mod scan;
 mod tree;
 
 pub use self::coverage::Coverage;
@@ -45,6 +46,7 @@ pub(crate) use self::glyph::char_code_of;
 pub use self::glyph::{ActualText, CharCode, GlyphInfo, UnicodeSource};
 pub use self::paint::{MAX_PAINT_STACK, OpPosition, PaintStep};
 pub(crate) use self::runs::RunKind;
+pub(crate) use self::scan::{FontCache, GlyphFact};
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::atomic::Ordering;
