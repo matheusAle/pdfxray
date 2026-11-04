@@ -72,14 +72,19 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
     for note in notes {
         ui.label(RichText::new(note).color(tokens::WARN));
     }
-    // The row of the selected pair, else the selected row itself.
-    let selected_row = diff
-        .selected_index()
-        .and_then(|i| diff.row_id(ChangeRow::Pair(i)))
+    // The most specific row holding the selection: the selected row itself, else its pair's
+    // row, else its page pair's (content in no pair — all of an untagged page — or a pair the
+    // list hides).
+    let selected_row = state
+        .selection
+        .primary()
+        .filter(|primary| diff.row(primary).is_some())
+        .cloned()
         .or_else(|| {
-            let primary = state.selection.primary()?;
-            diff.row(primary).is_some().then(|| primary.clone())
-        });
+            diff.selected_index()
+                .and_then(|i| diff.row_id(ChangeRow::Pair(i)))
+        })
+        .or_else(|| diff.holding_page().and_then(|p| diff.row_id(ChangeRow::Page(p))));
     let Some(model) = diff.tree() else {
         return;
     };

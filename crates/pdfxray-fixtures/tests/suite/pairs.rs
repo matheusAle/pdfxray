@@ -76,7 +76,17 @@ impl<'a> Doc<'a> {
             Some(pages.len() as i64)
         );
 
-        let tree_root = catalog.get("StructTreeRoot").and_then(Obj::reference).unwrap();
+        let Some(tree_root) = catalog.get("StructTreeRoot").and_then(Obj::reference) else {
+            // Untagged: no tree, no ParentTree.
+            return Self {
+                pdf,
+                pages,
+                elements: BTreeMap::new(),
+                top: Vec::new(),
+                parent_tree: BTreeMap::new(),
+                parent_tree_obj: 0,
+            };
+        };
         let root_dict = parse_object(pdf, tree_root);
         let mut elements = BTreeMap::new();
         let mut queue = vec![(root_dict.get("K").and_then(Obj::reference).unwrap(), tree_root)];
@@ -375,7 +385,8 @@ fn ink(doc: &Doc<'_>) -> Vec<(Owner, Ink)> {
     let mut out = Vec::new();
     for page in 0..doc.pages.len() {
         let dict = doc.page_dict(page);
-        let key = dict.get("StructParents").and_then(Obj::int).unwrap();
+        // An untagged page has no key; it is never looked up there (nothing has an MCID).
+        let key = dict.get("StructParents").and_then(Obj::int).unwrap_or(-1);
         let xobjects = dict
             .get("Resources")
             .and_then(|r| r.get("XObject"))
@@ -491,10 +502,19 @@ fn assert_strictly_valid(pdf: &[u8], what: &str) {
         "{what}: every MCID owner is in the ParentTree"
     );
     let owners: BTreeSet<Owner> = ink(&doc).into_iter().map(|(o, _)| o).collect();
-    assert!(
-        !owners.iter().any(|o| matches!(o, Owner::Untagged(_))),
-        "{what}: no untagged ink"
-    );
+    if doc.elements.is_empty() {
+        assert!(
+            owners.iter().all(|o| matches!(o, Owner::Untagged(_))),
+            "{what}: an untagged file marks nothing"
+        );
+        let catalog = parse_object(pdf, trailer_root(pdf));
+        assert!(catalog.get("MarkInfo").is_none(), "{what}: not claimed as tagged");
+    } else {
+        assert!(
+            !owners.iter().any(|o| matches!(o, Owner::Untagged(_))),
+            "{what}: no untagged ink"
+        );
+    }
 
     let parsed = Pdf::new(pdf.to_vec()).unwrap_or_else(|e| panic!("{what}: {e:?}"));
     assert_eq!(parsed.pages().len(), doc.pages.len(), "{what}: hayro page count");
@@ -604,7 +624,7 @@ fn assert_same_tagging(a: &Doc<'_>, b: &Doc<'_>, what: &str) {
 // Catalog and committed files
 
 #[test]
-fn pairs_are_the_agreed_eleven_in_order() {
+fn pairs_are_the_agreed_twelve_in_order() {
     assert_eq!(
         PAIRS,
         [
@@ -619,6 +639,7 @@ fn pairs_are_the_agreed_eleven_in_order() {
             "insert-page",
             "artifact-page-number",
             "identical-rows",
+            "untagged-edits",
         ]
     );
     for name in PAIRS {
@@ -678,7 +699,7 @@ fn pairs_dir_holds_exactly_the_pair_files() {
         .collect();
 
     assert_eq!(actual, expected);
-    assert_eq!(actual.len(), 33);
+    assert_eq!(actual.len(), 36);
 }
 
 #[test]
@@ -724,11 +745,29 @@ fn every_side_of_every_pair_is_strictly_valid() {
     }
 }
 
+/// The pairs whose base is the tagged report; the rest strip its tagging.
+const UNTAGGED: [&str; 1] = ["untagged-edits"];
+
 #[test]
 fn every_base_is_the_same_document() {
     let base = built(PAIRS[0]).a;
-    for name in PAIRS {
+    for name in PAIRS.iter().filter(|n| !UNTAGGED.contains(n)) {
         assert_eq!(latin1(&built(name).a), latin1(&base), "{name} base differs");
+    }
+    // The untagged base paints the same ink, page for page, owned by nothing.
+    let (tagged, ink_of_base) = (Doc::read(&base), ink(&Doc::read(&base)));
+    for name in UNTAGGED {
+        let untagged = built(name).a;
+        let untagged_ink = ink(&Doc::read(&untagged));
+        let page_of = |o: &Owner| match o {
+            Owner::Untagged(p) | Owner::Artifact(p) => *p,
+            Owner::Elem(e) => tagged.page_index(tagged.elements[e].page.unwrap()).unwrap(),
+        };
+        let by_page = |v: &[(Owner, Ink)]| -> BTreeSet<(usize, Ink)> {
+            v.iter().map(|(o, i)| (page_of(o), i.clone())).collect()
+        };
+        assert_eq!(by_page(&untagged_ink), by_page(&ink_of_base), "{name}");
+        assert_eq!(Doc::read(&untagged).elements.len(), 0, "{name}");
     }
     // Smoke: the base is the three-page report.
     let doc = Doc::read(&base);
@@ -1428,4 +1467,68 @@ fn identical_rows_has_no_distinguishing_row_and_loses_one() {
     // Smoke: the only objects that differ are gone, apart from the parent and the page content.
     assert!(removed.is_subset(&only));
     assert_eq!(b.elements.len(), a.elements.len() - 3);
+}
+
+// ---------------------------------------------------------------------------------------------
+// untagged-edits
+
+/// Ink of page `p`, owner dropped (an untagged file owns nothing).
+fn page_ink(ink: &[(Owner, Ink)], p: usize) -> Vec<Ink> {
+    let mut out: Vec<Ink> = ink
+        .iter()
+        .filter(|(o, _)| *o == Owner::Untagged(p))
+        .map(|(_, i)| i.clone())
+        .collect();
+    out.sort();
+    out
+}
+
+#[test]
+fn untagged_edits_inserts_a_page_and_changes_only_the_declared_texts() {
+    let built = built("untagged-edits");
+    let Mutation::PageInserted {
+        index,
+        page_object,
+        elements,
+    } = mutation(&built.mutation, "page-inserted")
+    else {
+        unreachable!()
+    };
+    let Mutation::UntaggedTextChanged { changes } = mutation(&built.mutation, "untagged-text-changed") else {
+        unreachable!()
+    };
+    let (a, b) = (Doc::read(&built.a), Doc::read(&built.b));
+    let (ia, ib) = (ink(&a), ink(&b));
+
+    assert!(a.elements.is_empty() && b.elements.is_empty() && elements.is_empty());
+    let mut want_pages = a.pages.clone();
+    want_pages.insert(*index, *page_object);
+    assert_eq!(b.pages, want_pages, "old page objects kept, new one at {index}");
+    for page_a in 0..a.pages.len() {
+        let page_b = if page_a < *index { page_a } else { page_a + 1 };
+        let declared: Vec<_> = changes.iter().filter(|c| c.page_a == page_a).collect();
+        assert!(declared.iter().all(|c| c.page_b == page_b), "{declared:?}");
+        // Replace each declared text of A's page by B's, at the same origin and size: that is
+        // exactly B's page.
+        let mut want = page_ink(&ia, page_a);
+        for c in &declared {
+            let line = want
+                .iter_mut()
+                .find(|i| matches!(i, Ink::Glyphs { text, .. } if *text == c.a_text))
+                .unwrap_or_else(|| panic!("{c:?} not on A's page"));
+            if let Ink::Glyphs { text, .. } = line {
+                text.clone_from(&c.b_text);
+            }
+        }
+        want.sort();
+        assert_eq!(page_ink(&ib, page_b), want, "page {page_a} of A, {page_b} of B");
+    }
+    assert_eq!(
+        changes.iter().map(|c| (c.page_a, c.page_b)).collect::<Vec<_>>(),
+        [(1, 2), (1, 2), (2, 3)],
+        "the Method page's paragraph and footer, then the last footer"
+    );
+    // Smoke: the first page is untouched, and the inserted page renders with ink.
+    assert_eq!(page_ink(&ia, 0), page_ink(&ib, 0));
+    assert!(painted_pixels(&render_all(&built.b)[*index].2) > 100);
 }

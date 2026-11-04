@@ -377,7 +377,9 @@ pub struct PageMatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub b: Option<PageIx>,
     /// Pairs of elements between the two pages: the evidence the correspondence rests on. A
-    /// correspondence with none rests on identical residue (see [`Residue`]).
+    /// correspondence with none rests on the residue (see [`Residue`]): identical, or — for two
+    /// untagged pages — at least half of it shared; [`Residue::only_a`] and
+    /// [`Residue::only_b`] say how much is not.
     pub pairs: usize,
     /// The painted content outside every structure element.
     pub residue: Residue,

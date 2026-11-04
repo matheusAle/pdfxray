@@ -207,7 +207,8 @@ fn segment_ui<T>(ui: &mut Ui, segment: &Segment<'_, T>, selected: bool, metrics:
     }
     let (rect, response) = ui.allocate_exact_size(vec2(width, metrics.height), Sense::click());
     let label = segment.label;
-    response.widget_info(|| WidgetInfo::selected(Role::Button, true, selected, label));
+    let enabled = ui.is_enabled();
+    response.widget_info(|| WidgetInfo::selected(Role::Button, enabled, selected, label));
     if ui.is_rect_visible(rect) {
         let (fill, ink) = if selected {
             // Selected is neutral (white on a white 8 % fill), not the accent.

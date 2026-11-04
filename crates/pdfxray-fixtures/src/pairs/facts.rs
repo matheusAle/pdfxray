@@ -99,6 +99,19 @@ pub struct ArtifactText {
     pub b_text: String,
 }
 
+/// Untagged text that reads differently on corresponding pages.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UntaggedText {
+    /// Page index in A.
+    pub page_a: usize,
+    /// Page index in B.
+    pub page_b: usize,
+    /// Text shown in A.
+    pub a_text: String,
+    /// Text shown in B, at the same origin and size.
+    pub b_text: String,
+}
+
 /// One declared change.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -169,6 +182,11 @@ pub enum Mutation {
     ArtifactTextChanged {
         /// One entry per changed artifact.
         changes: Vec<ArtifactText>,
+    },
+    /// Text outside any structure (the file is untagged) changed, at the same origin and size.
+    UntaggedTextChanged {
+        /// One entry per changed line of text.
+        changes: Vec<UntaggedText>,
     },
     /// An element and its subtree removed from B; nothing moved into its place.
     ElementRemoved {

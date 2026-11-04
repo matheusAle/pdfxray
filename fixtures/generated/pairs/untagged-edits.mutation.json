@@ -1,0 +1,54 @@
+{
+  "name": "untagged-edits",
+  "description": "Both sides untagged (no structure tree, no marked content); B inserts an untagged note page as page 2, one word of the Method page's first paragraph changes, the page numbers after the new page follow, and the first page is unchanged.",
+  "a": {
+    "page_count": 3,
+    "page_objects": [
+      5,
+      7,
+      9
+    ],
+    "element_count": 0
+  },
+  "b": {
+    "page_count": 4,
+    "page_objects": [
+      5,
+      11,
+      7,
+      9
+    ],
+    "element_count": 0
+  },
+  "mutations": [
+    {
+      "kind": "page-inserted",
+      "index": 1,
+      "page_object": 11,
+      "elements": []
+    },
+    {
+      "kind": "untagged-text-changed",
+      "changes": [
+        {
+          "page_a": 1,
+          "page_b": 2,
+          "a_text": "We compared invoices against the ledger.",
+          "b_text": "We compared receipts against the ledger."
+        },
+        {
+          "page_a": 1,
+          "page_b": 2,
+          "a_text": "Page 2",
+          "b_text": "Page 3"
+        },
+        {
+          "page_a": 2,
+          "page_b": 3,
+          "a_text": "Page 3",
+          "b_text": "Page 4"
+        }
+      ]
+    }
+  ]
+}

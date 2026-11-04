@@ -241,6 +241,12 @@ fn expected(facts: &MutationFacts) -> Expected {
                     e.residue.insert((Some(page(c.page_a)), Some(page(c.page_b))));
                 }
             }
+            // Untagged text is residue: its pages still correspond, with differences.
+            Mutation::UntaggedTextChanged { changes } => {
+                for c in changes {
+                    e.residue.insert((Some(page(c.page_a)), Some(page(c.page_b))));
+                }
+            }
             Mutation::ElementRemoved {
                 element, descendants, ..
             } => {
@@ -478,6 +484,44 @@ fn a_removed_identical_row_is_removed_and_its_look_alikes_pair_on_their_boxes() 
 }
 
 #[test]
+fn edited_untagged_pages_correspond_with_differences_and_an_inserted_one_stands_alone() {
+    let p = check("untagged-edits");
+    let facts = pairs::pair_mutation("untagged-edits");
+    let Some(Mutation::UntaggedTextChanged { changes }) = facts.mutations.get(1) else {
+        panic!("untagged-edits changes untagged text");
+    };
+    // Untagged: no element pairs, so every correspondence rests on residue alone.
+    assert_eq!(p.pairs, vec![]);
+    assert!(p.pages.iter().all(|m| m.pairs == 0));
+    // Each page whose text changed is one page pair with ink only A has *and* ink only B has
+    // — not a page only in A beside a page only in B.
+    for c in changes {
+        let m = p
+            .pages
+            .iter()
+            .find(|m| m.a == Some(page(c.page_a)))
+            .unwrap_or_else(|| panic!("{c:?}"));
+        assert_eq!(m.b, Some(page(c.page_b)), "{c:?}");
+        assert!(m.residue.only_a > 0 && m.residue.only_b > 0, "{m:?}");
+        assert!(
+            m.residue.only_a < m.residue.a / 2,
+            "most of the page is shared: {m:?}"
+        );
+    }
+    // Smoke: four page rows; the one B inserted is alone and every page of A has a partner.
+    assert_eq!(p.pages.len(), 4);
+    assert_eq!(
+        p.pages
+            .iter()
+            .filter(|m| m.a.is_none())
+            .map(|m| m.b)
+            .collect::<Vec<_>>(),
+        vec![Some(page(1))]
+    );
+    assert!(p.pages.iter().all(|m| m.b.is_some()));
+}
+
+#[test]
 fn every_pair_is_checked() {
     // The per-pair tests above, by name: a pair added to the catalog must get one.
     let tested = [
@@ -492,6 +536,7 @@ fn every_pair_is_checked() {
         "insert-page",
         "artifact-page-number",
         "identical-rows",
+        "untagged-edits",
     ];
     assert_eq!(tested, PAIRS);
 }
@@ -560,7 +605,21 @@ fn every_pair_mirrors_when_the_sides_swap() {
                 .collect()
         };
         assert_eq!(statuses(&ba, true), statuses(&ab, false), "{name}");
+        let pages = |p: &Pairing, flip: bool| -> BTreeSet<(Option<PageIx>, Option<PageIx>)> {
+            p.pages
+                .iter()
+                .map(|m| if flip { (m.b, m.a) } else { (m.a, m.b) })
+                .collect()
+        };
+        assert_eq!(pages(&ba, true), pages(&ab, false), "{name}: page correspondence");
     }
-    // Smoke: the pairs include some that differ, so mirroring is exercised.
+    // Smoke: the pairs include some that differ, so mirroring is exercised — in the elements
+    // and, on the untagged pair, in pages paired by similarity alone.
     assert!(!pairing("insert-page").summary().is_unchanged());
+    assert!(
+        pairing("untagged-edits")
+            .pages
+            .iter()
+            .any(|m| m.a.is_some() && m.b.is_some() && m.residue.only_a > 0)
+    );
 }

@@ -90,6 +90,10 @@ pub struct DiffSession {
     pub page: usize,
     /// The selected pair, an index into [`Pairing::pairs`].
     selected: Option<usize>,
+    /// The page pair holding the selection, an index into [`Pairing::pages`]: the row the
+    /// Changes list rings when no row of a pair does (content outside every pair, an untagged
+    /// page, an unchanged pair's element).
+    holding: Option<usize>,
     /// The selection [`DiffSession::selected`] was read from.
     synced: Option<(Side, NodeId)>,
     /// What the canvas outlines: changed elements, and with ⇧T the unchanged ones too; `L`
@@ -133,6 +137,7 @@ impl DiffSession {
             show_unchanged: false,
             page: 0,
             selected: None,
+            holding: None,
             synced: None,
             show: ChangeShow {
                 unchanged: false,
@@ -152,6 +157,7 @@ impl DiffSession {
     fn restart(&mut self, a: &Arc<Document>) {
         self.pairing = start_pairing(a, &self.b.doc);
         self.selected = None;
+        self.holding = None;
         self.synced = None;
         self.rows.clear();
         self.tree = None;
@@ -252,6 +258,11 @@ impl DiffSession {
         self.selected
     }
 
+    /// Index in [`Pairing::pages`] of the page pair holding the selection.
+    pub fn holding_page(&self) -> Option<usize> {
+        self.holding
+    }
+
     /// The pages of A and B on the canvas: either may be missing (a page only one side has).
     pub fn pages(&self) -> Option<(Option<PageIx>, Option<PageIx>)> {
         let m = self.pairing()?.pages.get(self.page)?;
@@ -315,14 +326,17 @@ impl DiffSession {
             return;
         };
         self.selected = Some(index);
-        if let Some(page) = Self::page_of(&pairing, pair) {
+        self.holding = Self::page_of(&pairing, pair);
+        if let Some(page) = self.holding {
             self.page = page;
         }
     }
 
     /// Reads the selected pair off the selection `(side, id)`, when it changed: the canvas
     /// follows the selection wherever it was made (the Changes list, a tree of A, the canvas).
-    fn sync(&mut self, side: Side, id: Option<&NodeId>) {
+    /// A node in no pair still sits on a page of its side (`a` is A's document; B's is the
+    /// session's): the page pair holding that page is what the Changes list rings.
+    fn sync(&mut self, side: Side, id: Option<&NodeId>, a: Option<&Document>) {
         // Read once the pairing is there: a selection made while it runs is read then.
         if self.pairing().is_none() {
             return;
@@ -340,15 +354,31 @@ impl DiffSession {
                 ChangeRow::Pair(index) => self.select_pair(index),
                 ChangeRow::Page(page) | ChangeRow::Residue(page) => {
                     self.selected = None;
+                    self.holding = Some(page);
                     self.page = page;
                 }
-                ChangeRow::Unplaced => self.selected = None,
+                ChangeRow::Unplaced => (self.selected, self.holding) = (None, None),
             }
             return;
         }
-        match self.pair_of(side, &id) {
-            Some(index) => self.select_pair(index),
-            None => self.selected = None,
+        if let Some(index) = self.pair_of(side, &id) {
+            self.select_pair(index);
+            return;
+        }
+        self.selected = None;
+        let doc = match side {
+            Side::A => a,
+            Side::B => Some(&*self.b.doc),
+        };
+        let on = doc.and_then(|d| d.bbox(&id)).map(|(page, _)| page);
+        self.holding = on.and_then(|on| {
+            self.pairing()?.pages.iter().position(|m| match side {
+                Side::A => m.a == Some(on),
+                Side::B => m.b == Some(on),
+            })
+        });
+        if let Some(page) = self.holding {
+            self.page = page;
         }
     }
 }
@@ -681,6 +711,7 @@ impl AppState {
     pub(crate) fn poll_diff(&mut self, ctx: &egui::Context) {
         let side = self.selection.side();
         let primary = self.selection.primary().cloned();
+        let a = self.document.as_ref().map(|l| Arc::clone(&l.doc));
         let Some(diff) = &mut self.diff else {
             return;
         };
@@ -700,7 +731,7 @@ impl AppState {
                 }
             }
         }
-        diff.sync(side, primary.as_ref());
+        diff.sync(side, primary.as_ref(), a.as_deref());
     }
 
     /// Selects `id` of `side` alone: a click on that side of the canvas, or its hit stack.

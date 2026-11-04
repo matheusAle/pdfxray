@@ -2,7 +2,8 @@
 //! mutation.
 //!
 //! Every pair starts from the same three-page tagged report (see [`report`]) and applies one
-//! mutation. [`MutationFacts`] declares what changed in this crate's own terms; they never mention
+//! mutation, except `untagged-edits`, whose base is that report with its tagging stripped: the
+//! same ink, no structure tree. [`MutationFacts`] declares what changed in this crate's own terms; they never mention
 //! diff statuses, so a diff test that derives its expectation from them is not circular.
 //!
 //! The committed files live in `fixtures/generated/pairs/` as `<name>.a.pdf`, `<name>.b.pdf` and
@@ -23,14 +24,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-pub use facts::{ArtifactText, ContentRewrite, ElementRef, Mutation, MutationFacts, Renumbering, SideFacts};
+pub use facts::{
+    ArtifactText, ContentRewrite, ElementRef, Mutation, MutationFacts, Renumbering, SideFacts, UntaggedText,
+};
 use report::{Edit, Footer, Numbers, Side};
 
 use crate::GenerateError;
 use crate::writer::WriterError;
 
 /// Names of every pair, in catalog order.
-pub const PAIRS: [&str; 11] = [
+pub const PAIRS: [&str; 12] = [
     "renumber-objects",
     "rewrite-content-same-ink",
     "global-shift-2pt",
@@ -42,6 +45,7 @@ pub const PAIRS: [&str; 11] = [
     "insert-page",
     "artifact-page-number",
     "identical-rows",
+    "untagged-edits",
 ];
 
 /// A built pair: both files and the declared mutation.
@@ -221,6 +225,10 @@ fn definition(name: &str) -> Option<(&'static str, Builder)> {
         "identical-rows" => (
             "The third of four identical table rows is removed without reflow; no row has a unique text, role or neighbour.",
             identical_rows,
+        ),
+        "untagged-edits" => (
+            "Both sides untagged (no structure tree, no marked content); B inserts an untagged note page as page 2, one word of the Method page's first paragraph changes, the page numbers after the new page follow, and the first page is unchanged.",
+            untagged_edits,
         ),
         _ => return None,
     };
@@ -514,4 +522,58 @@ fn identical_rows() -> Result<Built, WriterError> {
         descendants,
     };
     Ok((a, b, vec![mutation]))
+}
+
+/// Untagged text that reads differently between a page of A and the page of B it corresponds to,
+/// pairing the pages' texts in paint order (footer last).
+fn untagged_text_changes(a: &Side, b: &Side, b_index_of: impl Fn(usize) -> usize) -> Vec<UntaggedText> {
+    let mut out = Vec::new();
+    for (page_a, pa) in a.pages.iter().enumerate() {
+        let page_b = b_index_of(page_a);
+        let Some(pb) = b.pages.get(page_b) else {
+            continue;
+        };
+        let texts = |p: &report::PageInfo| p.texts.iter().chain([&p.footer]).cloned().collect::<Vec<_>>();
+        for (a_text, b_text) in texts(pa).into_iter().zip(texts(pb)) {
+            if a_text != b_text {
+                out.push(UntaggedText {
+                    page_a,
+                    page_b,
+                    a_text,
+                    b_text,
+                });
+            }
+        }
+    }
+    out
+}
+
+fn untagged_edits() -> Result<Built, WriterError> {
+    let at = 1;
+    let a = report::build(&Edit {
+        untagged: true,
+        ..Edit::default()
+    })?;
+    let b = variant(
+        &a,
+        Edit {
+            untagged: true,
+            insert_page_at: Some(at),
+            retext: Some(("el.compare", "We compared receipts against the ledger.")),
+            ..Edit::default()
+        },
+    )?;
+    let page_inserted = Mutation::PageInserted {
+        index: at,
+        page_object: b
+            .pages
+            .get(at)
+            .and_then(|p| b.number(&p.label))
+            .unwrap_or_default(),
+        elements: Vec::new(),
+    };
+    let texts = Mutation::UntaggedTextChanged {
+        changes: untagged_text_changes(&a, &b, |i| if i < at { i } else { i + 1 }),
+    };
+    Ok((a, b, vec![page_inserted, texts]))
 }

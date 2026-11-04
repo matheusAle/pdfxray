@@ -1,6 +1,6 @@
 //! Putting a pairing together: keys, alignment, page correspondence, offset, payloads.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rayon::prelude::*;
 
@@ -190,7 +190,9 @@ fn correspond(
             *votes.entry((pa, pb)).or_default() += 1;
         }
     }
-    let correspondence = pages::correspond(&votes, residue_a, residue_b);
+    let tagged =
+        |k: &[ElemKey]| -> BTreeSet<PageIx> { k.iter().filter_map(|e| e.placed.map(|(p, _)| p)).collect() };
+    let correspondence = pages::correspond(&votes, residue_a, residue_b, [&tagged(ka), &tagged(kb)]);
     let mut a_to_b: Vec<Option<PageIx>> = vec![None; a_pages];
     for &(pa, pb, _) in &correspondence {
         if let (Some(pa), Some(pb)) = (pa, pb)

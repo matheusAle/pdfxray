@@ -152,19 +152,43 @@ fn bar(ui: &mut Ui, state: &mut AppState) {
     });
 }
 
-/// The mode, the active side while overlaid, and the page pair with its arrows.
+/// Why the modes cannot compare the page pair `(a, b)`: a page only one side has. `None` when
+/// both sides have a page.
+pub fn nothing_to_compare(a: Option<PageIx>, b: Option<PageIx>) -> Option<String> {
+    let (page, side, other) = match (a, b) {
+        (Some(_), Some(_)) | (None, None) => return None,
+        (Some(page), None) => (page, "A", "B"),
+        (None, Some(page)) => (page, "B", "A"),
+    };
+    Some(format!(
+        "Page {} of {side} has no page in {other} it corresponds to, so there is nothing to \
+         compare it with: it is shown alone.",
+        page + 1
+    ))
+}
+
+/// The mode, the active side while overlaid, and the page pair with its arrows. On a page only
+/// one side has, the modes are disabled and say why: side by side, overlaid and masked, one
+/// page shows the same, and enabled buttons that change nothing would pretend otherwise.
 fn mode_controls(ui: &mut Ui, diff: &mut crate::state::DiffSession) {
-    let segments = MODES.map(|(mode, label)| Segment::new(mode, label));
-    segmented(ui, &mut diff.mode, &segments);
-    if diff.mode.shares_grid() {
-        let sides = [Segment::new(Side::A, "A"), Segment::new(Side::B, "B")];
-        let toggle = ui
-            .scope(|ui| segmented_mini(ui, &mut diff.active, &sides))
-            .response;
-        tooltip::text(
-            toggle,
-            "The side whose reading order is drawn and whose content a click picks",
-        );
+    let alone = diff.pages().and_then(|(a, b)| nothing_to_compare(a, b));
+    let modes = ui.add_enabled_ui(alone.is_none(), |ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        let segments = MODES.map(|(mode, label)| Segment::new(mode, label));
+        segmented(ui, &mut diff.mode, &segments);
+        if diff.mode.shares_grid() {
+            let sides = [Segment::new(Side::A, "A"), Segment::new(Side::B, "B")];
+            let toggle = ui
+                .scope(|ui| segmented_mini(ui, &mut diff.active, &sides))
+                .response;
+            tooltip::text(
+                toggle,
+                "The side whose reading order is drawn and whose content a click picks",
+            );
+        }
+    });
+    if let Some(why) = alone {
+        tooltip::text(modes.response, why);
     }
     let count = diff.pairing().map_or(0, |p| p.pages.len());
     let previous = ToolButton::new(PREVIOUS_PAGE_LABEL)

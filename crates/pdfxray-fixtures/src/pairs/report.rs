@@ -264,6 +264,10 @@ pub(super) struct Edit<'a> {
     pub(super) rewrite_content: bool,
     /// Numbering and byte order.
     pub(super) numbers: Numbers<'a>,
+    /// No structure tree, no `/MarkInfo`, no marked content: the same ink, untagged.
+    pub(super) untagged: bool,
+    /// One leaf's text replaced (same position, same size).
+    pub(super) retext: Option<(&'a str, &'static str)>,
 }
 
 /// What the generator knows about one element of a built side.
@@ -289,6 +293,8 @@ pub(super) struct PageInfo {
     pub(super) forms: Vec<String>,
     /// `(element label, MCID)` in paint order.
     pub(super) mcids: Vec<(String, i32)>,
+    /// The text of every text leaf, in paint order (the footer is [`PageInfo::footer`]).
+    pub(super) texts: Vec<String>,
 }
 
 /// A built document plus the generator's view of it.
@@ -349,12 +355,21 @@ pub(super) fn build(edit: &Edit<'_>) -> Result<Side, WriterError> {
             _ => (0, 0),
         };
         leaf.ink = translate(&leaf.ink, (edit.offset.0 + mx, edit.offset.1 + my));
+        if let (Some((label, to)), Ink::Text { text, .. }) = (edit.retext, &mut leaf.ink)
+            && label == leaf.label
+        {
+            *text = to;
+        }
     }
 
     let mut g = ObjectGraph::new();
     g.object(
         "catalog",
-        "<< /Type /Catalog /Pages @pages /StructTreeRoot @struct.root /MarkInfo << /Marked true >> /Lang (en-US) >>",
+        if edit.untagged {
+            "<< /Type /Catalog /Pages @pages /Lang (en-US) >>"
+        } else {
+            "<< /Type /Catalog /Pages @pages /StructTreeRoot @struct.root /MarkInfo << /Marked true >> /Lang (en-US) >>"
+        },
     );
     let kids: Vec<String> = order.iter().map(|k| format!("@page.{k}")).collect();
     g.object(
@@ -388,10 +403,18 @@ pub(super) fn build(edit: &Edit<'_>) -> Result<Side, WriterError> {
         }
         let footer = edit.footer.text(index);
         let at = (FOOTER_AT.0 + edit.offset.0, FOOTER_AT.1 + edit.offset.1);
+        let texts = page_leaves
+            .iter()
+            .filter_map(|leaf| match leaf.ink {
+                Ink::Text { text, .. } => Some(text.to_owned()),
+                Ink::Figure(_) => None,
+            })
+            .collect();
         let (streams, forms) = if edit.rewrite_content {
             rewritten_content(&mut g, key, &page_leaves, &mcids, &footer, at)
         } else {
-            let data = plain_content(&page_leaves, &mcids, &footer, at);
+            let marks = (!edit.untagged).then_some(mcids.as_slice());
+            let data = plain_content(&page_leaves, marks, &footer, at);
             let label = format!("content.{key}");
             g.stream(label.clone(), "", data.into_bytes());
             (vec![label], Vec::new())
@@ -414,10 +437,15 @@ pub(super) fn build(edit: &Edit<'_>) -> Result<Side, WriterError> {
             format!(" /XObject << {} >>", entries.join(" "))
         };
         let label = format!("page.{key}");
+        let tagging = if edit.untagged {
+            String::new()
+        } else {
+            format!(" /StructParents {key} /Tabs /S")
+        };
         g.object(
             label.clone(),
             format!(
-                "<< /Type /Page /Parent @pages /MediaBox [0 0 {} {}] /StructParents {key} /Tabs /S /Resources << /Font << /F1 @font.helv >>{xobjects} >> /Contents {contents} >>",
+                "<< /Type /Page /Parent @pages /MediaBox [0 0 {} {}]{tagging} /Resources << /Font << /F1 @font.helv >>{xobjects} >> /Contents {contents} >>",
                 PAGE.0, PAGE.1
             ),
         );
@@ -427,8 +455,12 @@ pub(super) fn build(edit: &Edit<'_>) -> Result<Side, WriterError> {
             footer,
             streams,
             forms,
-            mcids,
+            mcids: if edit.untagged { Vec::new() } else { mcids },
+            texts,
         });
+    }
+    if edit.untagged {
+        return finish(&g, edit.numbers, BTreeMap::new(), pages);
     }
 
     // Structure tree.
@@ -485,9 +517,18 @@ pub(super) fn build(edit: &Edit<'_>) -> Result<Side, WriterError> {
         nums.push(format!("{} [{}]", page.key, arr.join(" ")));
     }
     g.object("parent-tree", format!("<< /Nums [{}] >>", nums.join(" ")));
+    finish(&g, edit.numbers, elements, pages)
+}
 
+/// Numbers and writes `g`.
+fn finish(
+    g: &ObjectGraph,
+    numbers: Numbers<'_>,
+    elements: BTreeMap<String, ElemInfo>,
+    pages: Vec<PageInfo>,
+) -> Result<Side, WriterError> {
     let labels: Vec<String> = g.labels().map(str::to_owned).collect();
-    let (numbers, write_order) = numbering(&labels, edit.numbers);
+    let (numbers, write_order) = numbering(&labels, numbers);
     let order_refs: Vec<&str> = write_order.iter().map(String::as_str).collect();
     let out = g.write(PdfVersion::V1_7, &numbers, &order_refs, "catalog")?;
     Ok(Side {
@@ -652,29 +693,38 @@ fn emit_element(
 
 const FOOTER_BDC: &str = "/Artifact << /Type /Pagination /Subtype /Footer >> BDC";
 
-/// One stream, one `BT`/`ET` or `q`/`Q` per element, absolute `Td`, `re f` fills.
-fn plain_content(leaves: &[Leaf<'_>], mcids: &[(String, i32)], footer: &str, (fx, fy): (i32, i32)) -> String {
+/// One stream, one `BT`/`ET` or `q`/`Q` per element, absolute `Td`, `re f` fills. With `mcids`
+/// each element is marked with its MCID and the footer as an artifact; without, nothing is
+/// marked.
+fn plain_content(
+    leaves: &[Leaf<'_>],
+    mcids: Option<&[(String, i32)]>,
+    footer: &str,
+    (fx, fy): (i32, i32),
+) -> String {
+    let mark = |open: String, body: String| match mcids {
+        Some(_) => format!("{open} {body} EMC"),
+        None => body,
+    };
     let mut lines = Vec::new();
-    for (leaf, (_, mcid)) in leaves.iter().zip(mcids) {
+    for (i, leaf) in leaves.iter().enumerate() {
         let tag = leaf.tag;
-        lines.push(match &leaf.ink {
-            Ink::Text { size, x, y, text } => {
-                format!("/{tag} << /MCID {mcid} >> BDC BT /F1 {size} Tf {x} {y} Td ({text}) Tj ET EMC")
-            }
+        let mcid = mcids.and_then(|m| m.get(i)).map_or(-1, |(_, m)| *m);
+        let body = match &leaf.ink {
+            Ink::Text { size, x, y, text } => format!("BT /F1 {size} Tf {x} {y} Td ({text}) Tj ET"),
             Ink::Figure(fills) => {
                 let rects: Vec<String> = fills
                     .iter()
                     .map(|f| format!("{} {} {} {} re f", f.x, f.y, f.w, f.h))
                     .collect();
-                format!(
-                    "/{tag} << /MCID {mcid} >> BDC q {FIGURE_GRAY} g {} Q EMC",
-                    rects.join(" ")
-                )
+                format!("q {FIGURE_GRAY} g {} Q", rects.join(" "))
             }
-        });
+        };
+        lines.push(mark(format!("/{tag} << /MCID {mcid} >> BDC"), body));
     }
-    lines.push(format!(
-        "{FOOTER_BDC} BT /F1 9 Tf {fx} {fy} Td ({footer}) Tj ET EMC"
+    lines.push(mark(
+        FOOTER_BDC.to_owned(),
+        format!("BT /F1 9 Tf {fx} {fy} Td ({footer}) Tj ET"),
     ));
     lines.join("\n")
 }

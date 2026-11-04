@@ -15,8 +15,10 @@ use std::time::Duration;
 use common::{Region, builder, buttons_in, drop_file, is_selected, the, wait_until};
 use egui::accesskit::Role;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
-use pdfxray_app::center::canvas::diff::{SCALE_B_LABEL, UNSCALE_LABEL, canvas_label};
+use egui_kittest::kittest::{NodeT, Queryable};
+use pdfxray_app::center::canvas::diff::{
+    MODES, SCALE_B_LABEL, UNSCALE_LABEL, canvas_label, nothing_to_compare,
+};
 use pdfxray_app::navigator::changes::UNCHANGED_LABEL;
 use pdfxray_app::state::ChangeRow;
 use pdfxray_app::{AppState, Launch, MenuCommand, PdfxrayApp, RailItem};
@@ -419,4 +421,105 @@ fn snapshot_diff_overlay_with_reading_order() {
     }
     settle(&mut harness);
     harness.snapshot("app_diff_overlay");
+}
+
+/// The rows of the Changes list that carry the selection ring.
+fn ringed(harness: &Harness<'_, PdfxrayApp>) -> Vec<String> {
+    common::nodes_in(harness, Region::Navigator, Role::Button)
+        .into_iter()
+        .filter(is_selected)
+        .filter_map(|node| node.accesskit_node().label())
+        .collect()
+}
+
+/// Puts the canvas on the page pair `(a, b)` of the pairing.
+fn show_page_pair(harness: &mut Harness<'_, PdfxrayApp>, a: Option<u32>, b: Option<u32>) {
+    let diff = harness.state_mut().state.diff.as_mut().unwrap();
+    diff.page = diff
+        .pairing()
+        .unwrap()
+        .pages
+        .iter()
+        .position(|m| (m.a, m.b) == (a, b))
+        .unwrap_or_else(|| panic!("no page pair {a:?} {b:?}"));
+    settle(harness);
+}
+
+#[test]
+fn a_click_on_untagged_ink_rings_the_row_of_its_page_pair() {
+    // Untagged: nothing on either side is in an element pair, so the page pair is the most
+    // specific row holding what is clicked.
+    let (a, b) = pair("untagged-edits");
+    let mut harness = launched(&a, &b);
+    harness.state_mut().state.canvas.zoom = 0.5;
+    // A's page 2, edited in B and found again as B's page 3.
+    show_page_pair(&mut harness, Some(1), Some(2));
+    assert_eq!(ringed(&harness), Vec::<String>::new(), "nothing selected yet");
+    let canvas = harness.get_by_label(&canvas_label(Some(1), Some(2))).rect();
+
+    // The flow diagram on A's page: x 30..180, y 200..240 of a 300 x 400 page, A on the left.
+    let on_figure = egui::pos2(
+        canvas.min.x + canvas.width() * 0.5 * (100.0 / 300.0),
+        canvas.min.y + canvas.height() * (180.0 / 400.0),
+    );
+    common::click_at(&mut harness, on_figure);
+    harness.run();
+
+    let s = state(&harness);
+    let picked = s
+        .selection
+        .primary()
+        .cloned()
+        .expect("the click selected something");
+    assert_eq!(s.selection.side(), Side::A);
+    assert!(
+        matches!(picked, NodeId::Op { page: 1, .. } | NodeId::Glyph { page: 1, .. }),
+        "content of A's page 2 was picked, not the page: {picked}"
+    );
+    let diff = s.diff.as_ref().unwrap();
+    assert_eq!(diff.selected_index(), None, "untagged ink is in no pair");
+    assert_eq!(diff.pages(), Some((Some(1), Some(2))), "the canvas stayed");
+    let ring = ringed(&harness);
+    assert_eq!(ring.len(), 1, "{ring:?}");
+    assert!(ring[0].starts_with("Page 2 → 3"), "{ring:?}");
+    // Smoke: the same click on B's half rings the same row.
+    let on_b = egui::pos2(on_figure.x + canvas.width() * 0.5, on_figure.y);
+    common::click_at(&mut harness, on_b);
+    harness.run();
+    assert_eq!(state(&harness).selection.side(), Side::B);
+    assert_eq!(ringed(&harness), ring);
+}
+
+#[test]
+fn the_modes_are_disabled_with_the_reason_on_a_page_only_one_side_has() {
+    let (a, b) = pair("untagged-edits");
+    let mut harness = launched(&a, &b);
+    let mode_enabled = |harness: &Harness<'_, PdfxrayApp>| -> Vec<bool> {
+        MODES
+            .iter()
+            .map(|(_, label)| {
+                !the(harness, Region::Center, Role::Button, label)
+                    .accesskit_node()
+                    .is_disabled()
+            })
+            .collect()
+    };
+
+    // The page B inserted: nothing in A to compare it with.
+    show_page_pair(&mut harness, None, Some(1));
+    assert_eq!(mode_enabled(&harness), [false, false, false]);
+    let why = nothing_to_compare(None, Some(1)).unwrap();
+    assert!(why.starts_with("Page 2 of B has no page in A"), "{why}");
+    harness.get_by_label("Overlay").hover();
+    harness.run_steps(30);
+    assert!(common::has_label(&harness, &why), "the disabled modes say why");
+    // A click does not switch the mode.
+    harness.get_by_label("Overlay").click();
+    harness.run();
+    assert_eq!(state(&harness).diff.as_ref().unwrap().mode, Mode::SideBySide);
+
+    // Smoke: on a page pair both sides have, the modes are there again.
+    show_page_pair(&mut harness, Some(1), Some(2));
+    assert_eq!(mode_enabled(&harness), [true, true, true]);
+    assert_eq!(nothing_to_compare(Some(1), Some(2)), None);
 }
