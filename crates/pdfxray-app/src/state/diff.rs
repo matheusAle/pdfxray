@@ -59,7 +59,7 @@ enum PairingState {
 }
 
 /// What a row of the Changes list stands for. Rows are `group:N` nodes, `N` an index into
-/// [`DiffSession::rows`]: a row is not a node of either document.
+/// the session's rows (`DiffSession::rows`, private): a row is not a node of either document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangeRow {
     /// A page pair, by its index in [`Pairing::pages`].

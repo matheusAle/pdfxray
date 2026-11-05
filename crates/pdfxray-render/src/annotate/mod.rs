@@ -5,7 +5,7 @@
 //! shape list: every rect, label position and nudge already decided, with the [`NodeId`] each
 //! shape stands for. The app draws that list with its own painter and binds its buttons to the
 //! rects it was given; [`crate::render_page`] rasterises the same list. Text is measured here
-//! only ([`text`]), so a chip is nudged to the same place in both.
+//! only (the private `text` module), so a chip is nudged to the same place in both.
 //!
 //! A [`Scene`] is generic: a box per element in any colour, with an optional chip saying anything,
 //! and an optional numbered path. [`tag_scene`] builds the one the canvas shows (role colours,

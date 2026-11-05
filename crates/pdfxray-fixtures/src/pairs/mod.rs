@@ -1,10 +1,11 @@
 //! Fixture *pairs* for the PDF diff: a base document A and a variant B produced by a declared
 //! mutation.
 //!
-//! Every pair starts from the same three-page tagged report (see [`report`]) and applies one
-//! mutation, except `untagged-edits`, whose base is that report with its tagging stripped: the
-//! same ink, no structure tree. [`MutationFacts`] declares what changed in this crate's own terms; they never mention
-//! diff statuses, so a diff test that derives its expectation from them is not circular.
+//! Every pair starts from the same three-page tagged report (the private `report` module) and
+//! applies one mutation, except `untagged-edits`, whose base is that report with its tagging
+//! stripped: the same ink, no structure tree. [`MutationFacts`] declares what changed in this
+//! crate's own terms; they never mention diff statuses, so a diff test that derives its
+//! expectation from them is not circular.
 //!
 //! The committed files live in `fixtures/generated/pairs/` as `<name>.a.pdf`, `<name>.b.pdf` and
 //! `<name>.mutation.json`; [`generate`] writes them and [`pair`] names them.

@@ -39,7 +39,7 @@
 //!   is the one Vitest's and pixelmatch's documentation give.
 //! * The anti-aliasing test is the one of V. Vyšniauskas, *Anti-aliased pixel and intensity
 //!   slope detector* (Mokslas – Lietuvos ateitis, 2009), as pixelmatch's documentation
-//!   describes it: see [`anti_aliased`].
+//!   describes it: see the private `anti_aliased`.
 
 use std::num::NonZeroUsize;
 use std::thread;
