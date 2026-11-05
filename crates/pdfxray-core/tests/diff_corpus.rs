@@ -10,6 +10,10 @@
     clippy::panic,
     reason = "test helpers fail loudly on unexpected input"
 )]
+#![allow(
+    clippy::print_stderr,
+    reason = "says how small the corpus was, as the veraPDF and PDFium tests do when they skip"
+)]
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -35,7 +39,26 @@ fn corpus() -> Vec<PathBuf> {
     let root = root.parent().unwrap_or(&root).to_path_buf();
     let mut files = Vec::new();
     pdfs_below(&root.join("third_party").join("verapdf"), &mut files);
+    let vendored = files.len();
     pdfs_below(&root.join("cache"), &mut files);
+    // The fetched tier is not committed (`cargo xtask corpus fetch`). Without it these tests
+    // still pass on the vendored sample alone, which is how a mirror failure on a fetched file
+    // reached a release candidate unnoticed. `PDFXRAY_CORPUS=required` makes its absence loud,
+    // as `PDFXRAY_VERAPDF` and `PDFXRAY_PDFIUM` do for their tools.
+    let fetched = files.len() - vendored;
+    if std::env::var("PDFXRAY_CORPUS").as_deref() == Ok("required") {
+        assert!(
+            fetched > 0,
+            "PDFXRAY_CORPUS=required, but the fetched corpus tier is missing: \
+             run `cargo xtask corpus fetch`"
+        );
+    } else if fetched == 0 {
+        eprintln!(
+            "NOTE: the fetched corpus tier is absent, so only the {vendored} vendored files are \
+             compared. Run `cargo xtask corpus fetch`, and set PDFXRAY_CORPUS=required to make \
+             its absence fail instead of warn."
+        );
+    }
     files.sort();
     files
 }

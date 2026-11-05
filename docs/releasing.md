@@ -19,6 +19,20 @@ by hand once, is `docs/spec/distribution-plan.md`.
 
 ## Cut a release
 
+0. Run the gate with every tier demanded, not just the ones this machine happens to have:
+
+   ```sh
+   cargo xtask corpus fetch
+   PDFXRAY_CORPUS=required PDFXRAY_PDFIUM=required PDFXRAY_VERAPDF=required \
+     cargo test --workspace --no-fail-fast
+   cargo test --release -p pdfxray-core --test perf -- --ignored
+   cargo test --release -p pdfxray-app --test perf -- --ignored
+   ```
+
+   Each `required` makes a missing tool or corpus fail rather than skip. Without them a release
+   candidate can go green on a machine that simply has less to test with — which is how a
+   pairing bug on a fetched corpus file once survived a full local run.
+
 1. Set `[workspace.package].version` in `Cargo.toml`, and the same version on the internal
    crates in `[workspace.dependencies]` (`pdfxray-raw = { path = …, version = "…" }` and the
    others), then commit `Cargo.lock`. The binaries report this version; `cargo xtask bundle`

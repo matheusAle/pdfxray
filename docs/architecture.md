@@ -173,7 +173,7 @@ Every inspectable thing has a `NodeId` with a stable string form, used by the CL
 | Unit + property tests | each crate's `src` (`proptest` on the lexer and parser) |
 | Fixture facts | `pdfxray-fixtures` generates PDFs whose facts are re-derived by an independent byte scanner |
 | Integration | `crates/*/tests`, checked against fixture facts |
-| Corpus | 38 vendored veraPDF files (CC BY 4.0) always; 33 fetched files (`cargo xtask corpus fetch`) when present |
+| Corpus | 38 vendored veraPDF files (CC BY 4.0) always; 33 fetched files (`cargo xtask corpus fetch`) when present. The fetched tier is not committed, so a run without it is a smaller run: `PDFXRAY_CORPUS=required` turns its absence into a failure instead of a note |
 | Visual | PNG baselines in `crates/pdfxray-render/tests/snapshots` |
 | UI / e2e | `egui_kittest` snapshots and flows in `crates/pdfxray-app/tests` |
 | External tools | veraPDF (`PDFXRAY_VERAPDF=required`), PDFium (`PDFXRAY_PDFIUM=required`) |

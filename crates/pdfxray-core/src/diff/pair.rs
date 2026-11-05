@@ -371,7 +371,12 @@ fn matched(
                 });
             }
             delta = Some(d);
-        } else if expected.is_some() {
+        } else {
+            // The two pages do not correspond. That holds whether A's page has a counterpart
+            // elsewhere or none at all, and it has to: `a_to_b[pa] == Some(pb)` is mutual, so
+            // asking `expected.is_some()` instead made the answer depend on which side was
+            // called A — an element whose A page was dropped read as unmoved one way round and
+            // moved the other.
             page_changed = true;
             changed.push(FieldChange {
                 field: Field::Page,
