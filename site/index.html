@@ -30,7 +30,7 @@
   <link rel="apple-touch-icon" href="img/brand/apple-touch-icon.png?v=11">
   <link rel="preload" href="fonts/Inter-Regular.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="preload" href="fonts/Inter-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
   <a class="skip" href="#top">Skip to content</a>
@@ -43,6 +43,7 @@
       <a href="#features">Features</a>
       <a href="#details">Details</a>
       <a href="#cli">CLI</a>
+      <a href="#agents">Agents</a>
       <a href="#download">Install</a>
     </nav>
     <div class="nav-actions">
@@ -167,7 +168,11 @@
               <a class="btn btn-primary" href="https://dl.pdfxray.app/latest/pdfxray-macos.dmg"><svg class="ico" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5v8.2m0 0L4.6 6.3M8 9.7l3.4-3.4M2.5 11.5v1.2c0 .7.6 1.3 1.3 1.3h8.4c.7 0 1.3-.6 1.3-1.3v-1.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Download for macOS</a>
               <a class="btn btn-ghost" href="#features">Take the tour <span aria-hidden="true">↓</span></a>
             </div>
-            <p class="dl-meta">v0.3.0 · macOS 11+ · Apple Silicon · 18 MB · notarized</p>
+            <p class="dl-meta">v0.4.0 · macOS 11+ · Apple Silicon · 19 MB · notarized</p>
+            <div class="skill">
+              <p id="skill-l">Or teach your coding agent to use it:</p>
+              <div class="cmd"><code aria-labelledby="skill-l"><span class="p" aria-hidden="true">$</span> npx skills add matheusAle/pdfxray</code><button class="copy-btn" type="button" data-copy="npx skills add matheusAle/pdfxray" aria-label="Copy the install command"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.4c0-.9-.7-1.6-1.6-1.6H4.1c-.9 0-1.6.7-1.6 1.6v4.8c0 .9.7 1.6 1.6 1.6h.4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button></div>
+            </div>
           </div>
           <div class="hcopy c-a m">
             <p class="kicker">X-ray</p>
@@ -415,6 +420,36 @@
           </div>
         </div></div>
       </article>
+
+      <article class="chapter">
+        <div class="pin"><div class="ch-inner m">
+          <header class="ch-head">
+            <div>
+              <p class="ch-num">08 &middot; Compare</p>
+              <h3>See what changed between two versions.</h3>
+            </div>
+            <ol class="ticks" aria-hidden="true"><li><i class="m k1"></i></li><li><i class="m k2"></i></li><li><i class="m k3"></i></li></ol>
+          </header>
+          <div class="stage">
+          <div class="window">
+            <div class="track m">
+              <img src="img/hd/compare.webp?v=11" alt="" width="4320" height="2700" loading="lazy" decoding="async">
+              <span class="spot m k1" style="--l:4%;--t:14%;--w:20.8%;--h:27%"></span>
+              <span class="spot m k2" style="--l:27%;--t:32%;--w:47%;--h:20.5%"></span>
+              <span class="spot m k3" style="--l:77%;--t:31.5%;--w:22.4%;--h:23%"></span>
+
+            </div>
+          </div>
+          <div class="caps">
+            <p class="cap m k0">Open a second file and pdfxray pairs every element by what it says and where it is, never by object number.</p>
+            <p class="cap m k1"><span class="cap-step">1 / 3</span><b>Every change, page by page.</b> Added, moved, modified or removed, each in its colour, with the share of the page&rsquo;s pixels that differ beside the count.</p>
+            <p class="cap m k2"><span class="cap-step">2 / 3</span><b>Both pages, three ways.</b> Side by side, overlaid in two inks, or as a mask of the pixels that differ. Only what changed is outlined.</p>
+            <p class="cap m k3"><span class="cap-step">3 / 3</span><b>What changed, and what it broke.</b> Each field in A and in B, and the problems the change introduced or fixed. Here the figure lost its /Alt.</p>
+            <span class="ptr m" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l15 10.5-6.6 1.2 3.9 7.3-2.7 1.4-3.9-7.3L4 19z"/></svg><i class="ring m"></i></span>
+          </div>
+          </div>
+        </div></div>
+      </article>
     </section>
 
     <!-- DETAILS -->
@@ -522,11 +557,16 @@
       <div class="section-head reveal">
         <p class="eyebrow">For scripts, CI and agents</p>
         <h2>The same answers, as JSON.</h2>
-        <p class="sub">The command-line tool ships inside the app and exposes the same queries. Below: real values from a test fixture, trimmed to the key fields.</p>
+        <p class="sub">The command-line tool ships inside the app and exposes the same queries. Now it compares too: which elements correspond across two files and what changed, with an exit code CI can fail on. Below: real output from test fixtures, trimmed to the key fields.</p>
       </div>
-      <div class="term reveal" role="img" aria-label="Terminal running pdfxray reading-order on reading-order.pdf, showing one backtrack at step 4">
-        <div class="term-bar"><i></i><i></i><i></i><span>zsh</span></div>
-<pre class="term-body"><span class="l"><span class="p">$</span> pdfxray reading-order reading-order.pdf 0</span>
+      <div class="term reveal">
+        <div class="term-bar"><i></i><i></i><i></i>
+          <div class="tabs" role="tablist" aria-label="Example command">
+            <button type="button" role="tab" id="tab-ro" aria-controls="pane-ro" aria-selected="false" tabindex="-1">reading-order</button>
+            <button type="button" role="tab" id="tab-diff" aria-controls="pane-diff" aria-selected="true">diff <span class="new">new</span></button>
+          </div>
+        </div>
+<pre class="term-body" role="tabpanel" id="pane-ro" aria-labelledby="tab-ro" tabindex="0" hidden><span class="l"><span class="p">$</span> pdfxray reading-order reading-order.pdf 0</span>
 <span class="l">{</span>
 <span class="l">  <span class="key">"from"</span>: <span class="str">"structure"</span>,</span>
 <span class="l">  <span class="key">"backtracks"</span>: <span class="num">1</span>,</span>
@@ -538,15 +578,58 @@
 <span class="l">    { <span class="key">"index"</span>: <span class="num">5</span>, <span class="key">"role"</span>: <span class="str">"P"</span>,        <span class="key">"kind"</span>: <span class="str">"forward"</span>,   <span class="key">"preview"</span>: <span class="str">"Closing remarks follow."</span> }</span>
 <span class="l">  ]</span>
 <span class="l">}</span></pre>
+<pre class="term-body" role="tabpanel" id="pane-diff" aria-labelledby="tab-diff" tabindex="0"><span class="l"><span class="p">$</span> pdfxray diff drop-alt.b.pdf drop-alt.a.pdf --pretty</span>
+<span class="l">{</span>
+<span class="l">  <span class="key">"identical"</span>: <span class="num">false</span>,</span>
+<span class="l">  <span class="key">"summary"</span>: { <span class="key">"same"</span>: <span class="num">24</span>, <span class="key">"modified"</span>: <span class="num">1</span>, <span class="key">"moved"</span>: <span class="num">0</span>, <span class="key">"added"</span>: <span class="num">0</span>, <span class="key">"removed"</span>: <span class="num">0</span> },</span>
+<span class="l">  <span class="key">"pairs"</span>: [ { <span class="key">"status"</span>: <span class="warn">"modified"</span>, <span class="key">"role"</span>: <span class="str">"Figure"</span>, <span class="key">"a"</span>: <span class="str">"struct:16:0"</span>,</span>
+<span class="l hot">      <span class="key">"changed"</span>: [ { <span class="key">"field"</span>: <span class="str">"alt"</span>, <span class="key">"a"</span>: <span class="num">null</span>, <span class="key">"b"</span>: <span class="str">"Bar chart of revenue by region"</span> } ] } ],</span>
+<span class="l">  <span class="key">"diagnostics"</span>: { <span class="key">"core"</span>: { <span class="key">"fixed"</span>: [ { <span class="key">"code"</span>: <span class="ok">"figure-alt-missing"</span> } ] } }</span>
+<span class="l">}</span>
+<span class="l"><span class="p">$</span> echo $?</span>
+<span class="l"><span class="num">1</span>   <span class="cm"># 0 nothing changed · 1 something did · 2 error</span></span></pre>
       </div>
       <ul class="cmds reveal">
-        <li>info</li><li>tree</li><li>node</li><li>breadcrumb</li><li>hit</li><li>reading-order</li><li>speech</li><li>table</li><li>tag-boxes</li><li>render</li><li>compare</li><li>validate</li>
+        <li>info</li><li>tree</li><li>node</li><li>breadcrumb</li><li>hit</li><li>reading-order</li><li>speech</li><li>table</li><li>tag-boxes</li><li>render</li><li class="on">diff</li><li>validate</li>
       </ul>
       <div class="path-note reveal">
         <p>Put it on your PATH:</p>
 <pre class="snippet"><code><span class="p">$</span> ln -s /Applications/pdfxray.app/Contents/MacOS/pdfxray /usr/local/bin/pdfxray
 <span class="p">$</span> pdfxray info file.pdf --pretty</code></pre>
         <p class="fine">Only need the CLI? A zip with the bare binary is on <a href="https://github.com/matheusAle/pdfxray/releases">GitHub releases</a>.</p>
+      </div>
+    </section>
+
+    <!-- AGENTS -->
+    <section id="agents" class="agents">
+      <div class="section-head reveal">
+        <p class="eyebrow">For agents</p>
+        <h2>Give your agent X-ray vision.</h2>
+        <p class="sub">A PDF is a black box to a language model. pdfxray turns it into answers an agent can reason over: the tags, what a screen reader hears, the object behind any pixel, a picture of the page, and a diff that proves a fix. Every answer is JSON, and nothing ever writes to the file.</p>
+      </div>
+      <div class="ag-grid">
+        <figure class="session reveal">
+          <figcaption class="ses-bar"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 8V4H8M4 12h16v8H4zM2 14h2M20 14h2M9 13v2M15 13v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>&ldquo;Why does a screen reader skip the chart in report.pdf? Fix it.&rdquo;</span></figcaption>
+          <ol class="steps">
+            <li><code class="c"><span class="p" aria-hidden="true">$</span> pdfxray info report.pdf</code><samp>figure-alt-missing · error · Figure 16 0 R has no /Alt or /ActualText, so a screen reader says only &ldquo;graphic&rdquo;</samp></li>
+            <li><code class="c"><span class="p" aria-hidden="true">$</span> pdfxray node report.pdf struct:16:0</code><samp>Figure · Page 1 · BBox [30 148 150 230] · MCID 4</samp></li>
+            <li><code class="c"><span class="p" aria-hidden="true">$</span> pdfxray render report.pdf 0 -o p1.png --highlight struct:16:0</code><samp>{"width":600,"height":800,"output":"p1.png"}, then the agent looks at it</samp><img class="thumb" src="img/agents/render-p1.webp?v=1" alt="The page pdfxray rendered, with the chart outlined" width="600" height="800" loading="lazy" decoding="async"></li>
+            <li><code class="c"><span class="p" aria-hidden="true">$</span> pdfxray diff report.pdf fixed.pdf</code><samp>Figure struct:16:0 · alt: null &rarr; &ldquo;Bar chart of revenue by region&rdquo;<br>fixed: figure-alt-missing · exit 1</samp></li>
+          </ol>
+        </figure>
+        <div class="ag-side">
+          <ul class="tiles">
+            <li class="reveal"><span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>JSON on stdout</b><p>Twelve commands, one shape: facts, trees, nodes, hits, reading order, speech, tables and diffs. No screen-scraping a viewer.</p></div></li>
+            <li class="reveal"><span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Ids it can pass back</b><p>Every answer names its nodes (<code>struct:16:0</code>, <code>mc:0:4</code>, <code>page:0</code>). Feed one to <code>node</code>, <code>breadcrumb</code> or <code>render --highlight</code> for the next question.</p></div></li>
+            <li class="reveal"><span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Exit codes to branch on</b><p><code>diff</code> exits 0 when nothing in scope changed, 1 when something did, 2 on error. Proof a fix landed, and that nothing else moved.</p></div></li>
+            <li class="reveal"><span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><b>Read-only</b><p>pdfxray never repairs or rewrites the file, so an agent can explore any PDF safely.</p></div></li>
+          </ul>
+          <div class="skill-card reveal">
+            <p class="sk-h" id="skill-card-l">The pdfxray skill</p>
+            <div class="cmd"><code aria-labelledby="skill-card-l"><span class="p" aria-hidden="true">$</span> npx skills add matheusAle/pdfxray</code><button class="copy-btn" type="button" data-copy="npx skills add matheusAle/pdfxray" aria-label="Copy the install command"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.4c0-.9-.7-1.6-1.6-1.6H4.1c-.9 0-1.6.7-1.6 1.6v4.8c0 .9.7 1.6 1.6 1.6h.4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button></div>
+            <p>Teaches your agent every command, its flags and node ids, and the recipes: why a screen reader skips something, look at a page, prove a fix with a diff. If pdfxray isn&rsquo;t installed, it says how to get it.</p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -561,7 +644,7 @@
           <a class="btn btn-primary btn-lg" href="https://dl.pdfxray.app/latest/pdfxray-macos.dmg"><svg class="ico" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5v8.2m0 0L4.6 6.3M8 9.7l3.4-3.4M2.5 11.5v1.2c0 .7.6 1.3 1.3 1.3h8.4c.7 0 1.3-.6 1.3-1.3v-1.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Download for macOS</a>
           <a class="btn btn-ghost btn-lg" href="https://github.com/matheusAle/pdfxray"><svg class="ico" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>View on GitHub</a>
         </div>
-        <p class="dl-meta">v0.3.0 · macOS 11+ · Apple Silicon · 18 MB · notarized</p>
+        <p class="dl-meta">v0.4.0 · macOS 11+ · Apple Silicon · 19 MB · notarized</p>
         <ol class="install">
           <li><b>1</b>Open the DMG</li>
           <li><b>2</b>Drag pdfxray to Applications</li>
@@ -579,6 +662,7 @@
     <span class="foot-links"><a href="https://dl.pdfxray.app/latest/pdfxray-macos.dmg">Download for macOS</a><a href="https://github.com/matheusAle/pdfxray">GitHub</a></span>
   </footer>
 
-  <script src="main.js?v=12" defer></script>
+  <p class="sr-only" id="live" aria-live="polite"></p>
+  <script src="main.js?v=13" defer></script>
 </body>
 </html>

@@ -251,7 +251,7 @@ p { margin: 0; }
 .cap em { font-style: normal; color: var(--text); }
 
 /* Details */
-.details, .cli { max-width: var(--max); margin: 0 auto; padding: 140px 24px 40px; }
+.details, .cli, .agents { max-width: var(--max); margin: 0 auto; padding: 140px 24px 40px; }
 .section-head { display: grid; gap: 18px; margin-bottom: 48px; }
 .section-head .sub { color: var(--text-2); font-size: 18px; max-width: 620px; }
 .bento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -764,7 +764,60 @@ kbd {
   .cap b { font-size: 15px; }
 }
 
+/* ---------- Agent skill command (hero + agents) ---------- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skill { display: grid; gap: 8px; justify-items: start; }
+.skill > p { margin: 0; font-size: 13px; color: var(--text-2); }
+.cmd { position: relative; display: flex; align-items: center; gap: 10px; max-width: 100%; padding: 6px 6px 6px 14px; border-radius: 9px; background: #07090B; border: 1px solid var(--hair-2); }
+.cmd code { flex: 0 1 auto; min-width: 0; font: 13px/1.4 var(--mono); color: var(--text); white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.cmd code::-webkit-scrollbar { display: none; }
+.cmd .p { color: var(--accent); margin-right: 6px; user-select: none; }
+.copy-btn { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; border: 0; background: #FFFFFF0F; color: var(--text); cursor: pointer; transition: background .15s; }
+.copy-btn:hover { background: #FFFFFF1F; }
+.copy-btn.copied { color: var(--ok); }
+.cmd.over code { -webkit-mask-image: linear-gradient(90deg, #000 80%, transparent); mask-image: linear-gradient(90deg, #000 80%, transparent); }
+
+/* ---------- CLI tabs ---------- */
+.term-bar .tabs { display: flex; gap: 4px; margin-left: 14px; }
+.tabs [role="tab"] { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: none; font: 500 11.5px var(--mono); color: var(--text-2); cursor: pointer; }
+.tabs [role="tab"]:hover { color: var(--text); }
+.tabs [role="tab"][aria-selected="true"] { background: #FFFFFF12; color: var(--text); }
+.tabs .new { padding: 1px 5px; border-radius: 4px; background: var(--accent-dim); color: var(--accent); font: 700 9px/1.4 var(--mono); letter-spacing: .04em; }
+.term-body .ok { color: var(--ok); }
+.term-body .cm { color: var(--text-3); }
+.cmds li.on { color: var(--accent); background: var(--accent-dim); border-color: #3DD6F566; }
+
+/* ---------- Agents ---------- */
+.ag-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 32px; align-items: start; }
+.session { margin: 0; border-radius: 14px; overflow: hidden; background: #07090B; border: 1px solid var(--hair-2); box-shadow: 0 1px 0 #FFFFFF0D inset, 0 40px 100px #000000C0; }
+.ses-bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #0E1115; border-bottom: 1px solid var(--hair); font-size: 13.5px; font-weight: 500; color: var(--text); }
+.ses-bar svg { flex: none; color: var(--accent); }
+.steps { list-style: none; counter-reset: st; margin: 0; padding: 22px 22px 24px; display: grid; gap: 20px; }
+.steps li { counter-increment: st; position: relative; display: grid; gap: 6px; padding-left: 38px; min-width: 0; }
+.steps li::before { content: counter(st); position: absolute; left: 0; top: -2px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-dim); color: var(--accent); font: 700 11px var(--mono); }
+.steps .c { font: 12.5px/1.5 var(--mono); color: var(--text); overflow-wrap: anywhere; }
+.steps .c .p { color: var(--accent); margin-right: 6px; }
+.steps samp { font: 12px/1.6 var(--mono); color: var(--text-2); overflow-wrap: anywhere; }
+.steps .thumb { width: 150px; height: auto; margin-top: 6px; border-radius: 6px; border: 1px solid var(--hair-2); background: #fff; }
+.ag-side { display: grid; gap: 14px; min-width: 0; }
+.tiles li > div, .skill-card { min-width: 0; }
+.skill-card, .tiles { grid-template-columns: minmax(0, 1fr); }
+.skill { max-width: 100%; }
+.tiles { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.tiles li { display: flex; gap: 14px; padding: 16px; border-radius: 12px; background: #0E1115; border: 1px solid var(--hair); }
+.tiles .ic { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: #3DD6F514; color: var(--accent); }
+.tiles b { font-size: 15px; }
+.tiles p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--text-2); }
+.tiles code, .skill-card code { font-size: 12px; }
+.tiles p code { color: var(--text); }
+.skill-card { display: grid; gap: 12px; padding: 16px; border-radius: 12px; background: #0E1115; border: 1px solid var(--hair-2); }
+.skill-card .sk-h { margin: 0; font: 500 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.skill-card > p:last-child { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-2); }
+.skill-card .cmd code { font-size: 13px; }
+
 /* ---------- Responsive ---------- */
+/* Short phones (and phone landscape) keep the hero to download; the agents section carries the skill. */
+@media (max-width: 960px) and (max-height: 620px) { .hcopy .skill { display: none; } }
 @media (max-width: 960px) {
   .nav nav { display: none; }
   .nav .brand { padding: 6px 0; }
@@ -776,4 +829,8 @@ kbd {
   .truth { grid-template-columns: 1fr; }
   .source-card { padding: 36px 22px; }
   .foot { flex-direction: column; }
+  .ag-grid { grid-template-columns: minmax(0, 1fr); }
+  .hcopy .skill > p { display: none; }
+  .hcopy .cmd code { font-size: 12px; }
+  .term-bar .tabs { margin-left: 8px; }
 }

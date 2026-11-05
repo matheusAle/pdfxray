@@ -22,7 +22,7 @@
   }
 
   // Terminal lines type in one after another.
-  document.querySelectorAll('.term-body .l').forEach((l, i) => l.style.setProperty('--i', i));
+  document.querySelectorAll('.term-body').forEach((pane) => pane.querySelectorAll('.l').forEach((l, i) => l.style.setProperty('--i', i)));
 
   // Showcase camera: each spot's centre becomes a stop the screenshot pans to at ZOOM,
   // clamped so the screenshot's edges never show.
@@ -149,24 +149,73 @@
         requestAnimationFrame(step);
       });
     }
-    const cmd = document.querySelector('.term-body .l');
-    const text = cmd?.lastChild;
-    if (text?.nodeType === Node.TEXT_NODE) {
+    // Each pane types its command once it is shown; a tab switch replays the new pane's command.
+    const typers = new Map();
+    for (const pane of document.querySelectorAll('.term-body')) {
+      const cmd = pane.querySelector('.l');
+      const text = cmd?.lastChild;
+      if (text?.nodeType !== Node.TEXT_NODE) continue;
       const full = text.textContent;
       const caret = document.createElement('span');
       caret.className = 'caret';
       caret.setAttribute('aria-hidden', 'true');
-      text.textContent = '';
       cmd.append(caret);
-      once(cmd, () => {
+      let timer;
+      typers.set(pane, () => {
+        clearInterval(timer);
         let i = 0;
-        const timer = setInterval(() => {
+        text.textContent = '';
+        timer = setInterval(() => {
           text.textContent = full.slice(0, ++i);
           if (i >= full.length) clearInterval(timer);
         }, 28);
-      }, '0px 0px -30% 0px');
+      });
+      text.textContent = '';
     }
+    const term = document.querySelector('.term');
+    if (term) once(term, () => { term.dataset.seen = '1'; typers.get(term.querySelector('.term-body:not([hidden])'))?.(); }, '0px 0px -30% 0px');
+    window.__typeTerm = (pane) => { if (term) term.dataset.seen = '1'; typers.get(pane)?.(); };
   }
+
+  // CLI tabs: a real tablist (arrow keys move between tabs).
+  const tabs = [...document.querySelectorAll('.tabs [role="tab"]')];
+  const pick = (tab) => {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute('aria-selected', on);
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    }
+    window.__typeTerm?.(document.getElementById(tab.getAttribute('aria-controls')));
+  };
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => pick(t));
+    t.addEventListener('keydown', (e) => {
+      const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      const next = tabs[(i + d + tabs.length) % tabs.length];
+      next.focus();
+      pick(next);
+    });
+  });
+
+  // Copy buttons: copy, show a check for a moment, and announce it.
+  const announcer = document.getElementById('live');
+  for (const btn of document.querySelectorAll('.copy-btn')) {
+    const label = btn.getAttribute('aria-label');
+    btn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(btn.dataset.copy); } catch { return; }
+      btn.classList.add('copied');
+      btn.setAttribute('aria-label', 'Copied');
+      if (announcer) announcer.textContent = 'Copied: ' + btn.dataset.copy;
+      setTimeout(() => { btn.classList.remove('copied'); btn.setAttribute('aria-label', label); }, 1600);
+    });
+  }
+  // A command too long for its box fades at the right edge, the cue that it scrolls.
+  const fit = () => document.querySelectorAll('.cmd').forEach((c) => { const k = c.querySelector('code'); c.classList.toggle('over', k.scrollWidth > k.clientWidth + 1); });
+  fit();
+  addEventListener('resize', fit);
 
   // Inertial wheel scrolling: wheel notches glide instead of jumping, so every scroll-linked
   // animation moves continuously too. Touch, keyboard, scrollbar and anchor jumps stay native.
