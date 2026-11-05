@@ -37,6 +37,12 @@ by hand once, is `docs/spec/distribution-plan.md`.
    crates in `[workspace.dependencies]` (`pdfxray-raw = { path = …, version = "…" }` and the
    others), then commit `Cargo.lock`. The binaries report this version; `cargo xtask bundle`
    refuses a `--version` whose `MAJOR.MINOR.PATCH` differs.
+   In the same commit, rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`
+   and start a new, empty `## [Unreleased]` above it. That section is the release's notes: the
+   app's update dialog shows it, and it opens the GitHub release. Write it for the people who
+   use pdfxray. A test fails while the workspace version has no section, and the release
+   workflow refuses one; `cargo xtask release-notes --version X.Y.Z` prints what will be
+   published. A release candidate uses the section of the version it leads to.
 2. Merge to `main` and wait for CI to pass.
 3. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`. A tag with a suffix (`v0.2.0-rc.1`)
    becomes a GitHub *pre-release*.
@@ -255,7 +261,11 @@ SPARKLE_ED_PRIVATE_KEY=… cargo xtask sparkle appcast --version 0.2.0 \
 ```
 
 It signs the DMG, refuses a key that does not match `PUBLIC_ED_KEY`, and writes a feed with that
-one release. Release candidates are not published to this feed.
+one release. Release candidates are not published to this feed. The release's `CHANGELOG.md`
+section goes into the item's `<description>` as HTML, which Sparkle's update dialog shows as the
+release notes. `<sparkle:fullReleaseNotesLink>` points to the whole changelog on GitHub, so the
+dialog's *Version History* button covers releases that someone skipped. Without a section for
+the version, nothing is written.
 
 **Testing updates locally.** With library validation on, an ad-hoc signed app cannot load an
 ad-hoc signed framework ("different Team IDs"), which is why ad-hoc bundles leave Sparkle out.

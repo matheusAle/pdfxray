@@ -28,6 +28,7 @@ use self::keys::{ENV_PRIVATE_KEY, KeyPair};
 use self::manifest::{FRAMEWORK, FRAMEWORK_BINARY, KEPT, Pin};
 use crate::bundle::cmd;
 use crate::bundle::version::Version;
+use crate::changelog;
 use crate::corpus::fetch::{Downloader, require_ok};
 use crate::hash::{FileStatus, check_bytes, check_file};
 use crate::paths;
@@ -191,10 +192,13 @@ pub struct AppcastRequest<'a> {
     pub url: &'a str,
     /// Where the feed is written.
     pub out: &'a Path,
+    /// The text of `CHANGELOG.md`: the release's section becomes the update dialog's notes.
+    pub changelog: &'a str,
 }
 
 /// `sparkle appcast`: signs the archive with the private key from [`ENV_PRIVATE_KEY`] (read
-/// through `env`) and writes a feed with that one release.
+/// through `env`) and writes a feed with that one release and its notes from the changelog.
+/// A release without notes is refused before the key is read.
 ///
 /// The key must belong to `public_key`, the public key the app ships with ([`keys::PUBLIC_ED_KEY`]);
 /// otherwise installed copies would reject the update, so nothing is written.
@@ -210,6 +214,7 @@ pub fn appcast_cmd(
     if !request.url.starts_with("https://") && !request.url.starts_with("http://") {
         bail!("--url must be an http(s) URL");
     }
+    let notes = changelog::html(changelog::section(request.changelog, &version)?);
     let Some(secret) = env(ENV_PRIVATE_KEY).filter(|v| !v.trim().is_empty()) else {
         bail!("set {ENV_PRIVATE_KEY} to the private key from `cargo xtask sparkle keygen`");
     };
@@ -235,6 +240,8 @@ pub fn appcast_cmd(
         length,
         ed_signature: &signature,
         published: now,
+        notes: &notes,
+        history: changelog::URL,
     });
     fs::write(request.out, xml).with_context(|| format!("cannot write {}", request.out.display()))?;
     writeln!(
@@ -252,6 +259,9 @@ mod tests {
     use super::*;
     use crate::hash::sha256_hex;
     use crate::test_util::TempDir;
+
+    /// A changelog with notes for the versions the appcast tests publish.
+    const CHANGELOG: &str = "# Changelog\n\n## [0.2.0] - 2026-11-01\n\n- The rc's notes.\n";
 
     const BINARY: &[u8] = b"pretend this is the Sparkle framework binary";
 
@@ -479,6 +489,7 @@ mod tests {
             archive: &archive,
             url: "https://dl.pdfxray.app/releases/0.2.0/a.dmg",
             out: &feed,
+            changelog: CHANGELOG,
         };
         let mut out = Vec::new();
 
@@ -530,6 +541,7 @@ mod tests {
             archive: &archive,
             url: "https://dl.pdfxray.app/releases/0.2.0-rc.1/pdfxray-0.2.0-rc.1-macos-universal.dmg",
             out: &feed,
+            changelog: CHANGELOG,
         };
         let mut out = Vec::new();
 
@@ -552,6 +564,8 @@ mod tests {
                 length: body.len() as u64,
                 ed_signature: &signature,
                 published: 1_793_448_000,
+                notes: &changelog::html("- The rc's notes."),
+                history: changelog::URL,
             })
         );
         let printed = String::from_utf8(out).expect("utf8");
@@ -583,6 +597,7 @@ mod tests {
             archive: &archive,
             url: "https://x.test/a.dmg",
             out: &feed,
+            changelog: CHANGELOG,
         };
         let err = appcast_cmd(&request, keys::PUBLIC_ED_KEY, env(&[]), 0, &mut Vec::new())
             .expect_err("bad pre-release");
@@ -592,6 +607,17 @@ mod tests {
         let err =
             appcast_cmd(&request, keys::PUBLIC_ED_KEY, env(&[]), 0, &mut Vec::new()).expect_err("bad url");
         assert_eq!(err.to_string(), "--url must be an http(s) URL");
+        // A release without notes is refused before the key is asked for.
+        request.url = "https://x.test/a.dmg";
+        request.version = "0.9.0";
+        let err =
+            appcast_cmd(&request, keys::PUBLIC_ED_KEY, env(&[]), 0, &mut Vec::new()).expect_err("no notes");
+        assert!(
+            err.to_string()
+                .starts_with("CHANGELOG.md has no `## [0.9.0]` section"),
+            "{err}"
+        );
+        assert!(!feed.exists());
     }
 
     #[test]

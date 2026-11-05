@@ -1,8 +1,9 @@
-//! Developer tasks for the pdfxray workspace: test-corpus fetching and verification, the optional `PDFium` reference renderer, and the macOS release (`bundle`, `icon`, `sparkle`).
+//! Developer tasks for the pdfxray workspace: test-corpus fetching and verification, the optional `PDFium` reference renderer, and the macOS release (`bundle`, `icon`, `sparkle`, `release-notes`).
 //!
 //! The binary in `main.rs` only forwards to [`run`]; everything else is testable library code.
 
 pub mod bundle;
+pub mod changelog;
 pub mod cli;
 pub mod corpus;
 pub mod hash;
@@ -67,12 +68,16 @@ where
                 archive: &archive,
                 url: &url,
                 out: &feed,
+                changelog: &changelog::read(&root)?,
             },
             sparkle::keys::PUBLIC_ED_KEY,
             |name| std::env::var(name).ok(),
             sparkle::unix_now(),
             out,
         ),
+        Command::ReleaseNotes { version } => {
+            changelog::release_notes_cmd(&changelog::read(&root)?, &version, out)
+        }
         Command::Icon { out: icns } => {
             let icns = icns.unwrap_or_else(|| icon::default_icns(&root));
             icon::icon_cmd(&paths::iconset_dir(&root), &icns, out)

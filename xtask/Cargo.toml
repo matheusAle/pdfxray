@@ -30,6 +30,8 @@ tar.workspace = true
 # Ed25519 signing of Sparkle updates (`sparkle keygen | appcast`); xtask only.
 ring.workspace = true
 base64.workspace = true
+# MIT. CHANGELOG.md sections as HTML for the update dialog; xtask only.
+pulldown-cmark.workspace = true
 
 [dev-dependencies]
 

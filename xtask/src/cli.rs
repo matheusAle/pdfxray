@@ -32,6 +32,13 @@ pub enum Command {
     /// Sparkle, the macOS auto-updater: the pinned framework, the update signing keys, the feed.
     #[command(subcommand)]
     Sparkle(SparkleCommand),
+    /// Print a release's notes from `CHANGELOG.md` (markdown), for its GitHub release; fails when
+    /// the changelog has no section for it.
+    ReleaseNotes {
+        /// Release version (a leading `v` is accepted).
+        #[arg(long, value_name = "X.Y.Z[-PRE]")]
+        version: String,
+    },
     /// Build `assets/pdfxray.icns` from `assets/icon/pdfxray.iconset`, after checking every
     /// member is there at its pixel size (needs macOS `iconutil`).
     Icon {
@@ -150,8 +157,28 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            ["corpus", "vendored", "pdfium", "bundle", "sparkle", "icon"]
+            [
+                "corpus",
+                "vendored",
+                "pdfium",
+                "bundle",
+                "sparkle",
+                "release-notes",
+                "icon"
+            ]
         );
+    }
+
+    #[test]
+    fn parses_release_notes() {
+        let cli = Cli::parse_from(["xtask", "release-notes", "--version", "v0.4.0"]);
+        assert!(
+            matches!(&cli.command, Command::ReleaseNotes { version } if version == "v0.4.0"),
+            "{:?}",
+            cli.command
+        );
+        // Smoke: the version is required.
+        assert!(Cli::try_parse_from(["xtask", "release-notes"]).is_err());
     }
 
     #[test]

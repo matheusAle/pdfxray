@@ -45,6 +45,11 @@ jobs:
       - run: rustup target add aarch64-apple-darwin
       - uses: Swatinem/rust-cache@v2
 
+      # Before the long build: a release without its CHANGELOG.md section stops here. The same
+      # section is the update dialog's notes (`sparkle appcast` in `publish`).
+      - name: Release notes from CHANGELOG.md
+        run: cargo xtask release-notes --version "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+
       - name: Which credentials are configured?
         id: creds
         env:
@@ -174,6 +179,10 @@ jobs:
           cd target/bundle
           shasum -a 256 pdfxray-*-macos-aarch64.dmg pdfxray-*-macos-aarch64.zip | tee SHA256SUMS
           {
+            cat "$RUNNER_TEMP/notes.md"
+            echo
+            echo "---"
+            echo
             if [ "$SIGNED" = "true" ]; then
               echo "macOS build for Apple Silicon (macOS 11+), signed with a Developer ID and notarized by Apple."
             else
@@ -272,6 +281,7 @@ jobs:
           version="${TAG#v}"
           dmg="pdfxray-$version-macos-aarch64.dmg"
           # The DMG was uploaded by the previous step, so the feed never points at a missing file.
+          # The feed carries the release's CHANGELOG.md section, which the update dialog shows.
           cargo xtask sparkle appcast --version "$version" \
             --archive "target/bundle/$dmg" \
             --url "https://dl.pdfxray.app/releases/$version/$dmg" \

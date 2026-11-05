@@ -1,4 +1,5 @@
-//! The Sparkle feed (`appcast.xml`): one item for the release being published.
+//! The Sparkle feed (`appcast.xml`): one item for the release being published, with its notes
+//! from `CHANGELOG.md`, which the update dialog shows, and a link to the whole history.
 
 use std::fmt::Write as _;
 
@@ -19,6 +20,10 @@ pub struct Item<'a> {
     pub ed_signature: &'a str,
     /// Publication time, seconds since 1970 (UTC).
     pub published: u64,
+    /// The release's notes as HTML: the update dialog shows them.
+    pub notes: &'a str,
+    /// Where the notes of every release are: the dialog's *Version History* button opens it.
+    pub history: &'a str,
 }
 
 /// The feed text for `item`.
@@ -44,6 +49,16 @@ pub fn render(item: &Item<'_>) -> String {
     let _ = writeln!(xml, "      <pubDate>{}</pubDate>", rfc822(item.published));
     let _ = writeln!(
         xml,
+        "      <description><![CDATA[{}]]></description>",
+        cdata(item.notes)
+    );
+    let _ = writeln!(
+        xml,
+        "      <sparkle:fullReleaseNotesLink>{}</sparkle:fullReleaseNotesLink>",
+        escape(item.history)
+    );
+    let _ = writeln!(
+        xml,
         "      <sparkle:version>{}</sparkle:version>",
         escape(item.bundle_version)
     );
@@ -65,6 +80,12 @@ pub fn render(item: &Item<'_>) -> String {
     );
     xml.push_str("    </item>\n  </channel>\n</rss>\n");
     xml
+}
+
+/// `text` safe inside a CDATA section: a `]]>` in it would end the section early, so it is
+/// split across two.
+fn cdata(text: &str) -> String {
+    text.replace("]]>", "]]]]><![CDATA[>")
 }
 
 /// `secs` since 1970 as an RFC 822 date in UTC, as RSS wants it: `Sat, 31 Oct 2026 12:00:00 +0000`.
@@ -114,6 +135,8 @@ mod tests {
             length: 52_428_800,
             ed_signature: "c2ln+/==",
             published: 1_793_448_000,
+            notes: "<ul>\n<li>A &amp; B</li>\n</ul>\n",
+            history: "https://github.com/matheusAle/pdfxray/blob/main/CHANGELOG.md",
         };
         assert_eq!(
             render(&item),
@@ -126,6 +149,11 @@ mod tests {
     <item>
       <title>pdfxray 0.2.0</title>
       <pubDate>Sat, 31 Oct 2026 12:00:00 +0000</pubDate>
+      <description><![CDATA[<ul>
+<li>A &amp; B</li>
+</ul>
+]]></description>
+      <sparkle:fullReleaseNotesLink>https://github.com/matheusAle/pdfxray/blob/main/CHANGELOG.md</sparkle:fullReleaseNotesLink>
       <sparkle:version>0.2.999</sparkle:version>
       <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
@@ -135,6 +163,13 @@ mod tests {
 </rss>
 "
         );
+    }
+
+    #[test]
+    fn notes_that_contain_the_end_of_a_cdata_section_stay_inside_it() {
+        assert_eq!(cdata("<code>a]]>b</code>"), "<code>a]]]]><![CDATA[>b</code>");
+        // Smoke: ordinary notes pass unchanged.
+        assert_eq!(cdata("<p>A &amp; B</p>"), "<p>A &amp; B</p>");
     }
 
     #[test]
