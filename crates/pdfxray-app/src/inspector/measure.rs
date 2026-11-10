@@ -1,18 +1,23 @@
 //! The inspector while two nodes are selected (the primary and one more: a Shift-click, or a
 //! marquee that caught two): the space between them, measured from the primary, how their edges
 //! line up and the print boxes of their page.
+//!
+//! *Between A and B* gives the gap, or how deep the boxes overlap, then the gap or overlap along
+//! each axis and the size of what they share. A length under one unit keeps four decimals, so a
+//! hairline gap or overlap a fraction of a point wide is not rounded to nothing, and *On screen*
+//! says how many pixels it is at the canvas's zoom, flagging one under a pixel.
 
-use egui::{Frame, Margin, RichText, ScrollArea, Stroke, Ui, vec2};
+use egui::{Frame, Margin, RichText, ScrollArea, Ui, vec2};
 use pdfxray_core::NodeId;
 
 use super::{Action, header, print};
-use crate::center::canvas::measure::{Comparison, Gap, Horizontal, is_aligned};
+use crate::center::canvas::measure::{Comparison, Horizontal, is_aligned};
 use crate::components::crumb::{SEPARATOR_WIDTH, separator};
 use crate::components::{Crumb, Icon, PropRow, section};
 use crate::state::AppState;
 use crate::state::path::crumb_label;
 use crate::theme::{fonts, tokens};
-use crate::units::{Lengths, Unit};
+use crate::units::Lengths;
 
 /// Title of the inspector with two nodes selected and a gap between them.
 pub const TITLE: &str = "2 selected · gap";
@@ -52,18 +57,55 @@ pub fn horizontal_text(horizontal: Horizontal, lengths: &Lengths) -> String {
     }
 }
 
-/// The gap in each unit but the one of the status bar: the number and the unit name.
-pub fn other_units(gap: &Gap, lengths: &Lengths) -> Vec<(String, &'static str)> {
-    Unit::ALL
-        .into_iter()
-        .filter(|unit| *unit != lengths.unit)
-        .map(|unit| {
-            (
-                Lengths::new(unit, lengths.user_unit).number(gap.distance),
-                unit.label(),
-            )
-        })
-        .collect()
+/// Below this many points two edges along an axis count as touching.
+const TOUCH: f64 = 1e-4;
+
+/// The rows of the axes of *Between A and B*.
+pub const ALONG_X: &str = "Along x";
+/// See [`ALONG_X`].
+pub const ALONG_Y: &str = "Along y";
+/// The row of the area both boxes cover.
+pub const OVERLAP_AREA: &str = "Overlap area";
+/// The row of the measured length in screen pixels.
+pub const ON_SCREEN: &str = "On screen";
+
+/// How the boxes relate along one axis, from their `overlap` there (negative: apart):
+/// `gap 0.0042 pt`, `overlap 3.25 pt` or `touching`.
+pub fn axis_text(overlap: f64, lengths: &Lengths) -> String {
+    if overlap > TOUCH {
+        format!("overlap {}", lengths.precise(overlap))
+    } else if overlap < -TOUCH {
+        format!("gap {}", lengths.precise(-overlap))
+    } else {
+        "touching".to_owned()
+    }
+}
+
+/// What the big number of *Between A and B* is: the gap, or the depth of the overlap, in user
+/// units; and the word for it.
+pub fn headline(comparison: &Comparison) -> (f64, &'static str) {
+    let gap = comparison.gap();
+    match comparison.overlap_depth() {
+        Some(depth) => (depth, "overlap"),
+        None => (gap.distance, "gap"),
+    }
+}
+
+/// `length` points on the canvas at `zoom` (screen points per point): `0.42 px @136% · under a
+/// pixel`, the last part only for a length that is there but under a pixel.
+pub fn on_screen_text(points: f64, zoom: f64) -> String {
+    let px = points * zoom;
+    let mut text = format!("{} px @{:.0}%", trim_px(px), zoom * 100.0);
+    if px > 0.0 && px < 1.0 {
+        text.push_str(" · under a pixel");
+    }
+    text
+}
+
+/// Pixels with two decimals, trailing zeros dropped.
+fn trim_px(px: f64) -> String {
+    let text = format!("{px:.2}");
+    text.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
 pub(super) fn ui(ui: &mut Ui, state: &AppState, action: &mut Action) {
@@ -85,7 +127,7 @@ pub(super) fn ui(ui: &mut Ui, state: &AppState, action: &mut Action) {
                 super::note(ui, RichText::new(NOT_COMPARABLE).color(tokens::TEXT_3));
                 return;
             };
-            between(ui, &comparison, &lengths);
+            between(ui, &comparison, &lengths, f64::from(state.canvas.zoom));
             alignment(ui, &comparison, &lengths);
             if let Some(info) = state
                 .document
@@ -143,53 +185,45 @@ fn title(ui: &mut Ui, comparable: bool) {
     );
 }
 
-fn between(ui: &mut Ui, comparison: &Comparison, lengths: &Lengths) {
+fn between(ui: &mut Ui, comparison: &Comparison, lengths: &Lengths, zoom: f64) {
     let gap = comparison.gap();
+    let (length, word) = headline(comparison);
     section::show(ui, BETWEEN, BETWEEN, |ui| {
         Frame::new().inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
-            ui.label(
-                RichText::new(lengths.format(gap.distance))
-                    .font(fonts::mono_medium(22.0))
-                    .color(tokens::TEXT),
-            );
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(lengths.precise(length))
+                        .font(fonts::mono_medium(22.0))
+                        .color(tokens::TEXT),
+                );
+                ui.label(
+                    RichText::new(word)
+                        .font(fonts::ui(tokens::text::BODY))
+                        .color(tokens::TEXT_3),
+                );
+            });
             ui.label(
                 RichText::new(gap.describe())
                     .font(fonts::ui(tokens::text::BODY))
                     .color(tokens::TEXT_3),
             );
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
-                let tiles = other_units(&gap, lengths);
-                let width = (ui.available_width() - 6.0 * 2.0) / 3.0;
-                for (number, unit) in tiles {
-                    tile(ui, width, &number, unit);
-                }
-            });
         });
+        PropRow::new(ALONG_X, &axis_text(comparison.overlap_x(), lengths)).show(ui);
+        PropRow::new(ALONG_Y, &axis_text(comparison.overlap_y(), lengths)).show(ui);
+        if let Some(shared) = comparison.intersection() {
+            let area = format!(
+                "{} × {}",
+                lengths.precise_number(shared.width()),
+                lengths.precise(shared.height())
+            );
+            PropRow::new(OVERLAP_AREA, &area).show(ui);
+        }
+        let points = lengths.points(length);
+        let px = points * zoom;
+        PropRow::new(ON_SCREEN, &on_screen_text(points, zoom))
+            .warn(px > 0.0 && px < 1.0)
+            .show(ui);
     });
-}
-
-fn tile(ui: &mut Ui, width: f32, number: &str, unit: &str) {
-    Frame::new()
-        .fill(tokens::SURFACE_2)
-        .stroke(Stroke::new(1.0, tokens::BORDER))
-        .corner_radius(tokens::RADIUS_MD)
-        .inner_margin(Margin::symmetric(8, 5))
-        .show(ui, |ui| {
-            ui.set_width(width - 16.0 - 2.0);
-            ui.spacing_mut().item_spacing.y = 0.0;
-            ui.label(
-                RichText::new(number)
-                    .font(fonts::mono(tokens::mono::LARGE))
-                    .color(tokens::TEXT),
-            );
-            ui.label(
-                RichText::new(unit)
-                    .font(fonts::mono(tokens::mono::SMALL))
-                    .color(tokens::TEXT_3),
-            );
-        });
 }
 
 fn alignment(ui: &mut Ui, comparison: &Comparison, lengths: &Lengths) {
@@ -211,6 +245,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::units::Unit;
 
     fn pt() -> Lengths {
         Lengths::new(Unit::Pt, 1.0)
@@ -237,29 +272,33 @@ mod tests {
     }
 
     #[test]
-    fn the_gap_is_shown_in_the_three_other_units() {
-        let comparison = Comparison {
-            first: Rect::new(0.0, 100.0, 50.0, 120.0),
-            second: Rect::new(0.0, 0.0, 50.0, 60.0),
-        };
-        let gap = comparison.gap();
+    fn each_axis_says_gap_overlap_or_touching_to_a_fraction_of_a_point() {
+        assert_eq!(axis_text(-0.0042, &pt()), "gap 0.0042 pt");
+        assert_eq!(axis_text(3.25, &pt()), "overlap 3.25 pt");
+        assert_eq!(axis_text(0.00004, &pt()), "touching");
+        assert_eq!(axis_text(-12.5, &pt()), "gap 12.5 pt");
+        // Smoke: other units keep their decimals for a length of a unit or more.
+        assert_eq!(axis_text(-28.3465, &Lengths::new(Unit::Mm, 1.0)), "gap 10 mm");
+    }
 
-        assert!((gap.distance - 40.0).abs() < 1e-9);
-        assert_eq!(
-            other_units(&gap, &pt()),
-            [
-                ("14.11".to_owned(), "mm"),
-                ("0.556".to_owned(), "in"),
-                ("53.33".to_owned(), "px")
-            ]
-        );
-        assert_eq!(
-            other_units(&gap, &Lengths::new(Unit::In, 1.0)),
-            [
-                ("40".to_owned(), "pt"),
-                ("14.11".to_owned(), "mm"),
-                ("53.33".to_owned(), "px")
-            ]
-        );
+    #[test]
+    fn the_big_number_is_the_gap_or_how_deep_the_boxes_overlap() {
+        let apart = Comparison {
+            first: Rect::new(0.0, 100.0, 50.0, 120.0),
+            second: Rect::new(0.0, 0.0, 50.0, 99.6),
+        };
+        // 40 wide by 10 tall shared, the smaller of the two: 10 deep.
+        let overlapping = Comparison {
+            first: Rect::new(0.0, 0.0, 50.0, 20.0),
+            second: Rect::new(10.0, 10.0, 60.0, 40.0),
+        };
+
+        let (gap, word) = headline(&apart);
+        assert!((gap - 0.4).abs() < 1e-9 && word == "gap", "{gap} {word}");
+        assert_eq!(headline(&overlapping), (10.0, "overlap"));
+        assert_eq!(on_screen_text(0.4, 1.36), "0.54 px @136% · under a pixel");
+        assert_eq!(on_screen_text(10.0, 1.0), "10 px @100%");
+        // Smoke: nothing at all is not under a pixel, it is nothing.
+        assert_eq!(on_screen_text(0.0, 2.0), "0 px @200%");
     }
 }

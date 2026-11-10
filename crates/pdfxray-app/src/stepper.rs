@@ -1,5 +1,9 @@
 //! The paint-order stepper: which operator the page is painted up to, how to move it (one
-//! operator, to the next visible change, playing) and the keys that do so.
+//! operator, to the next visible change, to the start or end of a page, playing) and the keys
+//! that do so.
+//!
+//! In a comparison the stepper walks one side, the comparison's active side
+//! ([`AppState::stepped_side`]): that side's page is cut and the other drawn whole.
 //!
 //! The position is [`crate::ViewMode::step`], the last operator that paints, anywhere in the
 //! document: the stepper walks the paint order of the whole document, page after page, and the
@@ -10,8 +14,11 @@
 use std::time::Duration;
 
 use egui::{Context, Key, Modifiers};
-use pdfxray_core::{NodeId, OpPosition, PageIx};
+use pdfxray_core::diff::Side;
+use pdfxray_core::{Document, NodeId, OpPosition, PageIx};
+use pdfxray_render::ops_for;
 
+use crate::selection::node_page;
 use crate::state::canvas::Reveal;
 use crate::state::{AppState, DrawerTab};
 
@@ -28,29 +35,47 @@ const LONGEST_FRAME: Duration = Duration::from_millis(250);
 const PLAY_REPAINT: Duration = Duration::from_millis(16);
 
 impl AppState {
+    /// The side the stepper walks: the comparison's active side, A outside a comparison.
+    pub fn stepped_side(&self) -> Side {
+        self.diff.as_ref().map_or(Side::A, |diff| diff.active)
+    }
+
+    /// The document the stepper walks: [`Self::stepped_side`]'s.
+    pub fn stepped_doc(&self) -> Option<&Document> {
+        self.doc_of(self.stepped_side()).map(AsRef::as_ref)
+    }
+
+    /// Makes `side` the comparison's active side; a stepper that is on starts over on that
+    /// side, at its page on the canvas. Nothing happens outside a comparison.
+    pub fn set_stepped_side(&mut self, side: Side) {
+        let Some(diff) = self.diff.as_mut() else {
+            return;
+        };
+        if diff.active == side {
+            return;
+        }
+        diff.active = side;
+        if self.canvas.view.stepper
+            && let Some(start) = self.stepper_start()
+        {
+            self.step_to(start);
+        }
+    }
+
     /// Highest operator index of `page`, `None` when it has no captured operators.
     pub fn last_op(&self, page: PageIx) -> Option<u32> {
-        self.document
-            .as_ref()?
-            .doc
-            .captured(page)?
-            .ops
-            .last()
-            .map(|op| op.ix)
+        self.stepped_doc()?.captured(page)?.ops.last().map(|op| op.ix)
     }
 
     /// Number of operators the stepper walks: every page's, in paint order.
     pub fn op_total(&self) -> u32 {
-        self.document.as_ref().map_or(0, |loaded| loaded.doc.op_total())
+        self.stepped_doc().map_or(0, Document::op_total)
     }
 
     /// The stepper's position in the paint order of the whole document (0 is the first
     /// operator), `None` without a document.
     pub fn step_index(&self) -> Option<u32> {
-        self.document
-            .as_ref()?
-            .doc
-            .paint_order_index(self.canvas.view.step)
+        self.stepped_doc()?.paint_order_index(self.canvas.view.step)
     }
 
     /// The last paint-order position, `None` when no page has operators.
@@ -84,16 +109,28 @@ impl AppState {
         self.step_to(start);
     }
 
-    /// Where turning the stepper on starts: see [`Self::set_stepper`].
+    /// Where turning the stepper on starts: see [`Self::set_stepper`]. In a comparison, the
+    /// selected operator counts when it is of the stepped side, and the page is that side's
+    /// page on the canvas.
     fn stepper_start(&self) -> Option<OpPosition> {
-        let doc = &self.document.as_ref()?.doc;
-        if let Some(NodeId::Op { page, ix }) = self.selection.primary() {
+        let doc = self.stepped_doc()?;
+        let side = self.stepped_side();
+        if let Some(NodeId::Op { page, ix }) = self.selection.primary()
+            && self.selection.side() == side
+        {
             let selected = OpPosition::new(*page, *ix);
             if doc.paint_order_index(selected).is_some() {
                 return Some(selected);
             }
         }
-        let page = self.canvas.page;
+        let page = match self.diff.as_ref().and_then(crate::state::DiffSession::pages) {
+            Some((a, b)) => match side {
+                Side::A => a,
+                Side::B => b,
+            }
+            .unwrap_or(0),
+            None => self.canvas.page,
+        };
         self.last_op(page)
             .map(|ix| OpPosition::new(page, ix))
             .or_else(|| doc.op_at(self.last_step_index()?))
@@ -105,10 +142,18 @@ impl AppState {
     /// stays. Nothing happens for an operator that does not exist.
     pub fn step_to(&mut self, at: OpPosition) {
         let exists = self
-            .document
-            .as_ref()
-            .is_some_and(|loaded| loaded.doc.paint_order_index(at).is_some());
+            .stepped_doc()
+            .is_some_and(|doc| doc.paint_order_index(at).is_some());
         if !exists {
+            return;
+        }
+        // A comparison shows the page pair that holds the step, and selects the operator on its
+        // side.
+        if let Some(diff) = self.diff.as_mut() {
+            let side = diff.active;
+            diff.show_page_of(side, at.page);
+            self.canvas.view.step = at;
+            self.select_in(side, at.into());
             return;
         }
         // The stepper keeps its own page: the canvas may scroll onto another one meanwhile.
@@ -124,13 +169,104 @@ impl AppState {
         let Some(last) = self.last_step_index() else {
             return;
         };
-        let at = self
-            .document
-            .as_ref()
-            .and_then(|loaded| loaded.doc.op_at(index.min(last)));
+        let at = self.stepped_doc().and_then(|doc| doc.op_at(index.min(last)));
         if let Some(at) = at {
             self.step_to(at);
         }
+    }
+
+    /// Where *Go to paint order* takes the stepper for `id`, a node of A: the operator itself,
+    /// or the first operator of the node's content that paints. `None` for a node that paints
+    /// nothing, and while a comparison's stepper walks B.
+    pub fn paint_order_start(&self, id: &NodeId) -> Option<OpPosition> {
+        if self.stepped_side() != Side::A {
+            return None;
+        }
+        let doc = &self.document.as_ref()?.doc;
+        let target = self.target_of(id)?;
+        if let NodeId::Op { page, ix } = target {
+            let at = OpPosition::new(page, ix);
+            return doc.paint_order_index(at).map(|_| at);
+        }
+        let page = node_page(&target).or_else(|| doc.bbox(&target).map(|(page, _)| page))?;
+        // The selection's operators are known already: the action bar asks every frame.
+        let cached = self
+            .canvas
+            .selected_ops
+            .as_ref()
+            .filter(|s| s.nodes.as_slice() == std::slice::from_ref(&target));
+        let first = match cached {
+            Some(selected) => selected
+                .ops
+                .iter()
+                .copied()
+                .find(|ix| !doc.is_state_only(page, *ix)),
+            None => ops_for(doc, &target)
+                .into_iter()
+                .find(|ix| !doc.is_state_only(page, *ix)),
+        };
+        first.map(|ix| OpPosition::new(page, ix))
+    }
+
+    /// Turns the stepper on, if it is off, at the first painting operator of `id`
+    /// ([`Self::paint_order_start`]). False when `id` paints nothing.
+    pub fn go_to_paint_order(&mut self, id: &NodeId) -> bool {
+        let Some(at) = self.paint_order_start(id) else {
+            return false;
+        };
+        if !self.canvas.view.stepper {
+            self.set_stepper(true);
+        }
+        self.step_to(at);
+        true
+    }
+
+    /// Where *Page start* goes: the first operator of the stepper's page, or, already there,
+    /// the first of the page before. `None` at the document's first operator.
+    pub fn page_start_target(&self) -> Option<OpPosition> {
+        let doc = self.stepped_doc()?;
+        let at = self.canvas.view.step;
+        let index = doc.paint_order_index(at)?;
+        let start = doc.paint_order_index(OpPosition::new(at.page, 0))?;
+        if index > start {
+            return doc.op_at(start);
+        }
+        let before = doc.op_at(index.checked_sub(1)?)?;
+        Some(OpPosition::new(before.page, 0))
+    }
+
+    /// Where *Page end* goes: the last operator of the stepper's page, or, already there, the
+    /// last of the page after. `None` at the document's last operator.
+    pub fn page_end_target(&self) -> Option<OpPosition> {
+        let doc = self.stepped_doc()?;
+        let at = self.canvas.view.step;
+        let last = self.last_op(at.page)?;
+        if at.ix < last {
+            return Some(OpPosition::new(at.page, last));
+        }
+        let after = doc.op_at(doc.paint_order_index(at)?.checked_add(1)?)?;
+        Some(OpPosition::new(after.page, self.last_op(after.page)?))
+    }
+
+    /// True when *Page start* (`forward` false) or *Page end* would leave the stepper's page.
+    pub fn page_edge_crosses(&self, forward: bool) -> bool {
+        let target = if forward {
+            self.page_end_target()
+        } else {
+            self.page_start_target()
+        };
+        target.is_some_and(|at| at.page != self.canvas.view.step.page)
+    }
+
+    /// Moves to the start (`forward` false) or the end of the page, as the buttons and Home and
+    /// End do. False when there is nowhere to go.
+    pub fn step_to_page_edge(&mut self, forward: bool) -> bool {
+        let target = if forward {
+            self.page_end_target()
+        } else {
+            self.page_start_target()
+        };
+        target.map(|at| self.step_to(at)).is_some()
     }
 
     /// Moves the stepper by `delta` operators of the paint order, across pages, stopping at the
@@ -156,16 +292,14 @@ impl AppState {
         } else {
             index.checked_sub(1)?
         };
-        self.document.as_ref()?.doc.op_at(target)
+        self.stepped_doc()?.op_at(target)
     }
 
     /// The next operator after (`forward`) or before the current one that paints something,
     /// on this page or the next (previous) ones, whatever "Skip state-only ops" says: where
     /// shift and an arrow key goes.
     pub fn next_visible_change(&self, forward: bool) -> Option<OpPosition> {
-        self.document
-            .as_ref()?
-            .doc
+        self.stepped_doc()?
             .next_visible_change_in_document(self.canvas.view.step, forward)
     }
 
@@ -228,8 +362,9 @@ pub(crate) fn tick(ctx: &Context, state: &mut AppState) {
     }
 }
 
-/// ← and → step, shift with either jumps to the next visible change, space plays and pauses,
-/// while the stepper is on. The navigator tree keeps the arrows while the pointer is over it.
+/// ← and → step, shift with either jumps to the next visible change, Home and End go to the
+/// start and end of the page, space plays and pauses, while the stepper is on. The navigator
+/// tree keeps the arrows while the pointer is over it.
 pub(crate) fn keys(ctx: &Context, state: &mut AppState) {
     if !state.canvas.view.stepper || over_navigator(ctx) {
         return;
@@ -244,6 +379,11 @@ pub(crate) fn keys(ctx: &Context, state: &mut AppState) {
         state.step_next(false);
     } else if pressed(Modifiers::NONE, Key::ArrowRight) {
         state.step_next(true);
+    }
+    if pressed(Modifiers::NONE, Key::Home) {
+        state.step_to_page_edge(false);
+    } else if pressed(Modifiers::NONE, Key::End) {
+        state.step_to_page_edge(true);
     }
     if pressed(Modifiers::NONE, Key::Space) {
         state.toggle_play();
@@ -444,6 +584,64 @@ mod tests {
         );
         // smoke: the step's page is current again, so the canvas follows what is painted
         assert_eq!(state.canvas.page, 1);
+    }
+
+    #[test]
+    fn go_to_paint_order_steps_to_the_first_operator_of_an_element_that_paints() {
+        // reading-order: the Figure (struct 11) is MCID 2, a grey square filled by op 17 after
+        // the `g` at 15 and the `re` at 16, which paint nothing.
+        let mut state = AppState::default();
+        install_fixture(&mut state, "reading-order");
+        let figure = NodeId::StructElem(pdfxray_core::ObjRef::new(11, 0));
+
+        assert!(state.go_to_paint_order(&figure));
+
+        assert!(state.canvas.view.stepper);
+        assert_eq!(state.canvas.view.step, OpPosition::new(0, 17));
+        assert_eq!(state.selection.primary(), Some(&NodeId::Op { page: 0, ix: 17 }));
+        assert_eq!(state.drawer.tab, DrawerTab::PaintOrder);
+        // An operator goes to itself, even one that paints nothing.
+        assert_eq!(
+            state.paint_order_start(&NodeId::Op { page: 0, ix: 15 }),
+            Some(OpPosition::new(0, 15))
+        );
+        // Smoke: the document, which has no content of its own, paints nothing.
+        assert_eq!(state.paint_order_start(&NodeId::Document), None);
+        assert!(!state.go_to_paint_order(&NodeId::Document));
+    }
+
+    #[test]
+    fn page_start_and_end_go_to_the_edges_of_the_page_then_to_the_next_page() {
+        // long-doc: 40 pages of 28 operators.
+        let mut state = stepping("long-doc");
+        state.step_to(OpPosition::new(5, 11));
+
+        let mut visited = Vec::new();
+        for forward in [false, false, true, true, true] {
+            let crosses = state.page_edge_crosses(forward);
+            assert!(state.step_to_page_edge(forward));
+            visited.push((state.canvas.view.step, crosses));
+        }
+
+        assert_eq!(
+            visited,
+            [
+                (OpPosition::new(5, 0), false),
+                (OpPosition::new(4, 0), true),
+                (OpPosition::new(4, 27), false),
+                (OpPosition::new(5, 27), true),
+                (OpPosition::new(6, 27), true),
+            ]
+        );
+        // The ends of the document have nowhere further to go.
+        state.step_to(OpPosition::new(0, 0));
+        assert_eq!(state.page_start_target(), None);
+        assert!(!state.step_to_page_edge(false));
+        state.step_to(OpPosition::new(39, 27));
+        assert_eq!(state.page_end_target(), None);
+        // Smoke: from the middle of the last page, Page end still goes to its end.
+        state.step_to(OpPosition::new(39, 3));
+        assert_eq!(state.page_end_target(), Some(OpPosition::new(39, 27)));
     }
 
     #[test]

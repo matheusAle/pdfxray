@@ -184,6 +184,9 @@ pub enum PreviewError {
     /// The image data cannot be decoded.
     #[error("the image data cannot be decoded")]
     ImageDecode,
+    /// [`render_image`] was given an object that is not an image.
+    #[error("the object is not an image")]
+    NotAnImage,
     /// A mesh shading (or a pattern of one) without `/BBox`: its extent is only known by
     /// decoding the mesh.
     #[error("a mesh shading without /BBox covers an area that is only known by decoding the mesh")]
@@ -222,6 +225,24 @@ pub fn render_preview(doc: &Document, visual: &Visual) -> Result<Preview, Previe
         VisualKind::Pattern(pattern) => pattern_scene(pattern, &reference)?,
     };
     Ok(Preview::Picture(single(draw(doc, &raw, &[scene], kind)?)?))
+}
+
+/// An image at its own size, one pixel per sample and nothing capped, on a transparent
+/// background: what *Save image* writes. Fails for a visual that is not an image.
+pub fn render_image(doc: &Document, visual: &Visual) -> Result<RenderedPage, PreviewError> {
+    let VisualKind::Image(image) = &visual.kind else {
+        return Err(PreviewError::NotAnImage);
+    };
+    let raw = RawDocument::parse(Arc::new(doc.bytes().to_vec()))
+        .map_err(|_| RewriteError::Unreadable("the file has no PDF header"))?;
+    if raw.encryption().is_some() {
+        return Err(RewriteError::Unreadable("the file is encrypted").into());
+    }
+    let scene = Scene {
+        fit: Fit::Longest(image.width.max(image.height)),
+        ..image_scene(image, &reference(visual.obj))
+    };
+    single(draw(doc, &raw, &[scene], &visual.kind)?)
 }
 
 /// The one page of a one-page preview.

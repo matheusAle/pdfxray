@@ -12,6 +12,10 @@
 //!
 //! Pages that differ in size or `/Rotate` are never scaled silently: overlaid, a banner gives the
 //! reason and the way to opt into scaling B to A.
+//!
+//! The paint-order stepper (*Paint order* on the toolbar, `P`) walks the active side: that side's
+//! page is cut at the step and the other drawn whole, a line over the picture says which is which,
+//! and the operators still to come are outlined on the stepped side as on the ordinary canvas.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -30,11 +34,12 @@ use pdfxray_render::score::VisualScore;
 use pdfxray_render::{Overlay, PixelPoint, Transform, page_dimensions};
 
 use super::tag_overlay::{paint, px_rect, ui_rect};
-use super::{RENDERING_TEXT, message};
+use super::{RENDERING_TEXT, message, paint_order};
 use crate::center::toolbar;
 use crate::components::segmented::{Segment, segmented, segmented_mini};
 use crate::components::{Icon, ToolButton, focus, tooltip};
 use crate::diff_frames::{PictureKey, Placed, Refusal, Shown};
+use crate::modes::ViewTool;
 use crate::state::diff::{low_confidence, page_pair_label, pair_summary, status_word};
 use crate::state::selection::hit_entries;
 use crate::state::{AppState, HitStack};
@@ -61,6 +66,22 @@ pub const END_LABEL: &str = "End comparison";
 pub const PREVIOUS_PAGE_LABEL: &str = "Previous page pair";
 /// See [`PREVIOUS_PAGE_LABEL`].
 pub const NEXT_PAGE_LABEL: &str = "Next page pair";
+
+/// Name of the toolbar toggle of the paint-order stepper.
+pub const PAINT_ORDER_LABEL: &str = "Paint order";
+
+/// Height of the line over the picture that names the stepped side.
+const SIDES_LINE_H: f32 = 18.0;
+
+/// The line over the stepped side: `A · stepped · 211 / 377`, the step counted on its page.
+pub fn stepped_label(side: Side, step: u32, page_ops: u32) -> String {
+    format!("{} · stepped · {} / {page_ops}", side_letter(side), step + 1)
+}
+
+/// The line over the side drawn whole: `B · drawn whole`.
+pub fn whole_label(side: Side) -> String {
+    format!("{} · drawn whole", side_letter(side))
+}
 
 /// Title of the banner of pages that differ in geometry.
 pub const GEOMETRY_TITLE: &str = "The pages differ in size or rotation";
@@ -122,8 +143,20 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
 fn bar(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
+        let stepper = state.canvas.view.stepper;
+        let can_step = ViewTool::PaintOrder.available(state);
         if let Some(diff) = state.diff.as_mut() {
-            mode_controls(ui, diff);
+            // The overlay's side is the stepper's too: changing it moves the stepper over.
+            let before = diff.active;
+            let toggle = mode_controls(ui, diff, stepper, can_step);
+            let after = diff.active;
+            if after != before {
+                diff.active = before;
+                state.set_stepped_side(after);
+            }
+            if toggle {
+                ViewTool::PaintOrder.toggle(state);
+            }
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if ToolButton::new(END_LABEL).compact(true).show(ui).clicked() {
@@ -171,7 +204,7 @@ pub fn nothing_to_compare(a: Option<PageIx>, b: Option<PageIx>) -> Option<String
 /// The mode, the active side while overlaid, and the page pair with its arrows. On a page only
 /// one side has, the modes are disabled and say why: side by side, overlaid and masked, one
 /// page shows the same, and enabled buttons that change nothing would pretend otherwise.
-fn mode_controls(ui: &mut Ui, diff: &mut crate::state::DiffSession) {
+fn mode_controls(ui: &mut Ui, diff: &mut crate::state::DiffSession, stepper: bool, can_step: bool) -> bool {
     let alone = diff.pages().and_then(|(a, b)| nothing_to_compare(a, b));
     let modes = ui.add_enabled_ui(alone.is_none(), |ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
@@ -191,6 +224,18 @@ fn mode_controls(ui: &mut Ui, diff: &mut crate::state::DiffSession) {
     if let Some(why) = alone {
         tooltip::text(modes.response, why);
     }
+    // Neutral when on, like every view tool: the accent is for the step itself.
+    let paint_order = ui
+        .add_enabled_ui(can_step || stepper, |ui| {
+            ToolButton::new(PAINT_ORDER_LABEL)
+                .icon(Icon::PaintOrder)
+                .active(stepper)
+                .compact(true)
+                .show(ui)
+        })
+        .inner;
+    let toggled = paint_order.clicked();
+    tooltip::with_shortcut(paint_order, ViewTool::PaintOrder.hint(), "P");
     let count = diff.pairing().map_or(0, |p| p.pages.len());
     let previous = ToolButton::new(PREVIOUS_PAGE_LABEL)
         .icon(Icon::ChevronLeft)
@@ -209,6 +254,7 @@ fn mode_controls(ui: &mut Ui, diff: &mut crate::state::DiffSession) {
     if next.clicked() && diff.page + 1 < count {
         diff.page += 1;
     }
+    toggled
 }
 
 /// The card while the two documents are being paired.
@@ -289,12 +335,14 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
     }
     .map_or(Vec2::splat(612.0), |(w, h)| vec2(w, h));
     let wide = if diff.mode == Mode::SideBySide { 2.0 } else { 1.0 };
+    let step = stepped_page(&state.canvas.view, diff.active, (a, b));
     let key = PictureKey {
         a,
         b,
         mode: diff.mode,
         scale: render_scale(state.canvas.zoom, ppp, vec2(dims.x * wide, dims.y), MAX_SIDE),
         fit: diff.fit,
+        step,
     };
     let shown = diff.frames.get(&ctx, &doc_a, &doc_b, key);
     if diff.frames.is_pending() {
@@ -348,8 +396,17 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
         })
     };
     let band = grid_at(Pos2::ZERO).map_or(0.0, |g| annotate::legend_extent(&g, &legend).1);
+    let sides_line = if step.is_some() { SIDES_LINE_H } else { 0.0 };
     #[allow(clippy::cast_possible_truncation)]
-    let total = vec2(size.x, size.y + band as f32);
+    let total = vec2(size.x, sides_line + size.y + band as f32);
+    let ghost = step
+        .filter(|_| state.canvas.view.unpainted)
+        .and_then(|(side, ix)| {
+            let page = state.canvas.view.step.page;
+            let captured = state.doc_of(side)?.captured(page)?;
+            Some((side, paint_order::ghosts(captured, ix)))
+        });
+    let lines = step.map(|(side, ix)| side_lines(state, picture.placed.as_ref(), mode, side, ix));
 
     let mut clicked: Option<(Side, NodeId)> = None;
     let mut picked: Option<Pos2> = None;
@@ -358,7 +415,10 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
         .auto_shrink(false)
         .show(ui, |ui| {
             let (rect, _) = ui.allocate_exact_size(total, Sense::hover());
-            let image_rect = UiRect::from_min_size(rect.min, size);
+            let image_rect = UiRect::from_min_size(rect.min + vec2(0.0, sides_line), size);
+            if let Some(lines) = &lines {
+                draw_side_lines(ui, image_rect, ppp, lines);
+            }
             let image = Image::from_texture(SizedTexture::new(picture.texture.id(), size))
                 .sense(Sense::click())
                 .alt_text(canvas_label(a, b));
@@ -371,6 +431,20 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
             };
             let (shapes, _) = composite::layout(&grid, &Palette::DESIGN, &scenes, &legend);
             let painter = ui.painter().with_clip_rect(ui.clip_rect());
+            if let Some((side, ghost)) = &ghost {
+                let placed = picture.placed.as_ref();
+                paint_order::draw_with(
+                    &painter,
+                    |rect| {
+                        let rect = match (placed, side) {
+                            (Placed::Both(c), Side::B) => c.b_in_a(rect),
+                            _ => rect,
+                        };
+                        ui_rect(grid.to_out.rect_to_pixel(rect))
+                    },
+                    ghost,
+                );
+            }
             outline_selection(&painter, state, picture.placed.as_ref(), &grid, (a, b));
             for shape in &shapes {
                 paint(&painter, &shape.shape);
@@ -391,6 +465,92 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
         });
     if let Some((side, id)) = clicked {
         state.select_in(side, id);
+    }
+}
+
+/// The stepper's cut on this page pair: the active side and the operator, when the stepper is
+/// on and the step is on that side's page here.
+fn stepped_page(
+    view: &crate::modes::ViewMode,
+    side: Side,
+    (a, b): (Option<PageIx>, Option<PageIx>),
+) -> Option<(Side, u32)> {
+    let page = match side {
+        Side::A => a,
+        Side::B => b,
+    };
+    (view.stepper && page == Some(view.step.page)).then_some((side, view.step.ix))
+}
+
+/// One line over the picture: its text, where it starts (pixels of the composite) and whether
+/// it names the stepped side.
+struct SideLine {
+    text: String,
+    x: f64,
+    stepped: bool,
+}
+
+/// The lines over the picture: over each page side by side, one after the other overlaid, and
+/// only the stepped side's for a page the other side does not have.
+fn side_lines(state: &AppState, placed: &Placed, mode: Mode, stepped: Side, ix: u32) -> Vec<SideLine> {
+    let page = state.canvas.view.step.page;
+    let page_ops = state
+        .doc_of(stepped)
+        .and_then(|doc| doc.captured(page)?.ops.last().map(|op| op.ix + 1))
+        .unwrap_or(0);
+    let other = match stepped {
+        Side::A => Side::B,
+        Side::B => Side::A,
+    };
+    let line = |side: Side, x: f64| SideLine {
+        text: if side == stepped {
+            stepped_label(side, ix, page_ops)
+        } else {
+            whole_label(side)
+        },
+        x,
+        stepped: side == stepped,
+    };
+    match placed {
+        Placed::One(..) => vec![line(stepped, 0.0)],
+        Placed::Both(c) if mode == Mode::SideBySide => {
+            let x_of = |side| match side {
+                Side::A => c.a.bounds.x0,
+                Side::B => c.b.bounds.x0,
+            };
+            vec![line(Side::A, x_of(Side::A)), line(Side::B, x_of(Side::B))]
+        }
+        // Overlaid, the stepped side first.
+        Placed::Both(_) => vec![line(stepped, 0.0), line(other, f64::NAN)],
+    }
+}
+
+/// Draws the lines over `image` (screen); a line whose `x` is not a number follows the one
+/// before it.
+fn draw_side_lines(ui: &Ui, image: UiRect, ppp: f32, lines: &[SideLine]) {
+    let painter = ui.painter();
+    let y = image.min.y - SIDES_LINE_H / 2.0;
+    let mut next_x = image.min.x;
+    for line in lines {
+        #[allow(clippy::cast_possible_truncation)]
+        let x = if line.x.is_nan() {
+            next_x + 16.0
+        } else {
+            image.min.x + line.x as f32 / ppp
+        };
+        let ink = if line.stepped {
+            tokens::TEXT
+        } else {
+            tokens::TRACK_PAGE_TEXT
+        };
+        let drawn = painter.text(
+            Pos2::new(x, y),
+            egui::Align2::LEFT_CENTER,
+            &line.text,
+            fonts::mono(tokens::mono::SMALL),
+            ink,
+        );
+        next_x = drawn.max.x;
     }
 }
 

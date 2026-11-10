@@ -6,6 +6,33 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 
 ## [Unreleased]
 
+### Added
+
+- **Paint order while comparing.** The comparison's toolbar has Paint order (`P`): it steps one
+  side at a time, painting that side's page up to the step and the other whole, side by side,
+  overlaid or as a mask. An A | B switch in the Paint order tab picks the side.
+- The paint-order track marks where each page starts. **Page start** and **Page end** (`Home`
+  and `End`) replace the first and last operator buttons: at the edge of a page they go on to
+  the page before or after.
+- **Go to paint order** on the selection bar and in right-click menus: the stepper starts at the
+  first operator that paints the element.
+- An **Unpainted boxes** switch in the Paint order tab hides the outlines of what is not painted
+  yet.
+- In the Inspector's *Stack at this point*, *+N more* rows list twenty more operators each, and
+  *Show fewer* folds them again.
+- **Save image…** writes an image of the document to a PNG at its own size, with its
+  transparency: from the image's preview card, the Inspector, or the right-click menu of the
+  image or of the `Do` that paints it.
+
+### Changed
+
+- The Inspector's page bbox is a row per coordinate, each named for its edge (`x0 · left` …),
+  instead of one `[x0 y0 x1 y1]` array.
+- With two elements selected, *Between A and B* shows how deep they overlap as well as how far
+  apart they are, the gap or overlap along each axis, the shared area, and the size in screen
+  pixels, flagging one under a pixel. Small lengths keep four decimals. The tiles that repeated
+  the gap in other units are gone; the status bar's unit switch does that.
+
 ## [0.4.0] - 2026-11-05
 
 ### Added

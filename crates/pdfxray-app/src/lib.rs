@@ -29,6 +29,7 @@ pub mod components;
 mod diff_frames;
 pub mod drawer;
 pub mod findings;
+pub mod image_save;
 pub mod inspector;
 pub mod instances;
 pub mod modes;
@@ -66,7 +67,9 @@ pub use modes::{
     COLOR_MODES, IsolateMode, Isolation, LegendEntry, OrderSource, RenderRequest, TagShow, ViewMode,
     ViewTool, XRAY_ALPHA, color_title, heatmap_legend, legend_entries,
 };
-pub use open::{FilePicker, OpenProgress, Opener, Source, StageState, native_picker};
+pub use open::{
+    FilePicker, OpenProgress, Opener, SavePicker, Source, StageState, native_picker, native_save_picker,
+};
 pub use page_cache::pixel_digest;
 pub use platform::Inbox;
 pub use previews::preview_digest;

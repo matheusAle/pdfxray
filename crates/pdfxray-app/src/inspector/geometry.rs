@@ -1,5 +1,9 @@
 //! The GEOMETRY section: where a node is on the page, the matrix that put it there and the way
 //! from its own space to the screen. Lengths follow the units switch of the status bar.
+//!
+//! The page bbox is laid out a coordinate a row, each named for the edge it is (`x0 · left`),
+//! so the four numbers of `[x0 y0 x1 y1]` read without knowing the order; each row copies its
+//! number.
 
 use egui::{RichText, Ui};
 use pdfxray_core::capture::PaintKind;
@@ -11,6 +15,17 @@ use crate::theme::{fonts, tokens};
 
 /// Title of the section.
 pub const TITLE: &str = "Geometry";
+
+/// The label over the bbox's rows.
+pub const BBOX_LABEL: &str = "Page bbox";
+
+/// The keys of the bbox's rows, in the order of `[x0 y0 x1 y1]`.
+pub const BBOX_KEYS: [&str; 4] = ["x0 · left", "y0 · bottom", "x1 · right", "y1 · top"];
+
+/// What the bbox's label says after it: the order and the unit, `[x0 y0 x1 y1] · pt`.
+pub fn bbox_note(unit: &str) -> String {
+    format!("[x0 y0 x1 y1] · {unit}")
+}
 
 /// Value of the CTM row: the six numbers as the operator wrote them.
 pub fn matrix_text(matrix: &Matrix) -> String {
@@ -42,14 +57,10 @@ pub(super) fn show(ui: &mut Ui, cx: &Cx<'_>) {
     };
     let lengths = &cx.lengths;
     cx.section(ui, TITLE, |ui| {
-        let corners = format!(
-            "[{} {} {} {}]",
-            lengths.number(rect.x0),
-            lengths.number(rect.y0),
-            lengths.number(rect.x1),
-            lengths.number(rect.y1)
-        );
-        PropRow::new("Page bbox", &corners).show(ui);
+        sub_label(ui, BBOX_LABEL, &bbox_note(lengths.unit.label()));
+        for (key, value) in BBOX_KEYS.iter().zip([rect.x0, rect.y0, rect.x1, rect.y1]) {
+            PropRow::new(key, &lengths.number(value)).show(ui);
+        }
         PropRow::new("Size", &lengths.size(rect)).show(ui);
         if let Some((_, _, op)) = cx.op() {
             let matrix = Matrix::from(op.gstate.ctm);
@@ -70,6 +81,24 @@ fn device(cx: &Cx<'_>, rect: Rect) -> String {
     let width = cx.lengths.points(rect.width()) * zoom;
     let height = cx.lengths.points(rect.height()) * zoom;
     format!("{width:.0} × {height:.0} px @{:.0}%", zoom * 100.0)
+}
+
+/// A small label over rows that belong together, with a dimmer note after it.
+fn sub_label(ui: &mut Ui, text: &str, note: &str) {
+    ui.add_space(2.0);
+    ui.horizontal(|ui| {
+        ui.add_space(8.0);
+        ui.label(
+            RichText::new(text)
+                .font(fonts::ui(tokens::text::SMALL))
+                .color(tokens::TEXT_3),
+        );
+        ui.label(
+            RichText::new(note)
+                .font(fonts::mono(tokens::mono::SMALL))
+                .color(tokens::TEXT_3),
+        );
+    });
 }
 
 /// `image → form → user → page → device`, the page chip highlighted.

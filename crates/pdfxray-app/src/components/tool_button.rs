@@ -35,11 +35,13 @@ pub enum Look {
 
 /// A toolbar button. Active buttons get the neutral fill and white ink.
 ///
-/// The label is always the accessible name, also when only the icon is drawn.
+/// The label is the accessible name, also when only the icon is drawn, unless [`Self::name`]
+/// gives a longer one for a label shortened to fit.
 #[derive(Debug, Clone)]
 #[must_use = "call `show`"]
 pub struct ToolButton<'a> {
     label: &'a str,
+    name: Option<&'a str>,
     icon: Option<Icon>,
     active: bool,
     icon_only: bool,
@@ -55,6 +57,7 @@ impl<'a> ToolButton<'a> {
     pub const fn new(label: &'a str) -> Self {
         Self {
             label,
+            name: None,
             icon: None,
             active: false,
             icon_only: false,
@@ -64,6 +67,13 @@ impl<'a> ToolButton<'a> {
             min_width: 0.0,
             opens_popup: false,
         }
+    }
+
+    /// The accessible name, when the label is a shortened one: `Go to paint order` for a button
+    /// that reads `Paint order` beside another of that name.
+    pub const fn name(mut self, name: &'a str) -> Self {
+        self.name = Some(name);
+        self
     }
 
     /// Puts `icon` in front of the label.
@@ -187,7 +197,7 @@ impl<'a> ToolButton<'a> {
         };
         let width = self.width(ui);
         let (rect, response) = ui.allocate_exact_size(vec2(width, tokens::CONTROL_H), Sense::click());
-        let label = self.label;
+        let label = self.name.unwrap_or(self.label);
         let active = self.active;
         response.widget_info(|| WidgetInfo::selected(Role::Button, enabled, active, label));
 

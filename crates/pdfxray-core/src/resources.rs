@@ -48,6 +48,18 @@ const FIRST_CATEGORY_GROUP: u32 = 201;
 type Names = BTreeMap<ObjRef, String>;
 
 impl Document {
+    /// The object a `Do` operator paints: the `XObject` its name selects in the resources its
+    /// stream reads (the innermost form with resources of its own, else the page). `None` for
+    /// another operator, or a name that is missing or not a reference.
+    pub fn xobject_of_op(&self, page: crate::PageIx, ix: u32) -> Option<ObjRef> {
+        let captured = self.captured(page)?;
+        let op = captured.ops.get(usize_from_u32(ix)).filter(|op| op.ix == ix)?;
+        let (kind, name) = usage::used_resource(op).filter(|(kind, _)| *kind == ResKind::XObject)?;
+        let page_obj = self.page(page)?.obj?;
+        let owner = usage::scope_owner(&op.stream, page_obj, &self.forms_with_resources());
+        self.scope_of_owner(owner)?.entry(kind, &name)?.target
+    }
+
     /// Resources grouped by owner (page / form / pattern / Type 3 font) and category.
     pub(crate) fn resources_tree(&self) -> Vec<TreeNode> {
         let scopes = self.all_scopes();

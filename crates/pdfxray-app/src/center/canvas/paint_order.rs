@@ -2,13 +2,14 @@
 //!
 //! The bitmap is the page painted up to the current operator ([`pdfxray_render::ContentFilter::UpTo`]).
 //! What is still to come is drawn as ghosts over it: one faint box per later operator that
-//! paints, outlined in grey, with a label on the first one ("not painted yet · ops 212–377").
+//! paints, outlined in grey, with a label on the first one ("not painted yet · ops 212–377"),
+//! unless the drawer's *Unpainted boxes* switch is off.
 //! The renderer has no ghosting pass, so the later operators are marked by their boxes instead of
 //! being drawn dimmed. The operator painting now gets the selection's accent box and its label
 //! ("▶ op #211 · Do /Im1 · painting now"); the legend card names the three looks.
 
-use egui::{Align2, Painter, Stroke, StrokeKind, Ui};
-use pdfxray_core::capture::PaintKind;
+use egui::{Align2, Painter, Rect as UiRect, Stroke, StrokeKind, Ui};
+use pdfxray_core::capture::{CapturedPage, PaintKind};
 use pdfxray_core::numeric::usize_from_u32;
 use pdfxray_core::{NodeId, Rect};
 
@@ -39,21 +40,23 @@ pub(super) struct Ghost {
     label: Option<(Rect, String)>,
 }
 
-/// The ghosts for the stepper's position, on the page it is on; none while the stepper is off.
+/// The ghosts for the stepper's position, on the page it is on; none while the stepper or the
+/// *Unpainted boxes* switch is off.
 pub(super) fn collect(state: &AppState) -> Ghost {
     let view = &state.canvas.view;
-    if !view.stepper {
+    if !view.stepper || !view.unpainted {
         return Ghost::default();
     }
-    let Some(captured) = state
-        .document
-        .as_ref()
-        .and_then(|loaded| loaded.doc.captured(view.step.page))
-    else {
-        return Ghost::default();
-    };
+    state
+        .stepped_doc()
+        .and_then(|doc| doc.captured(view.step.page))
+        .map_or_else(Ghost::default, |captured| ghosts(captured, view.step.ix))
+}
+
+/// The ghosts of the operators of `captured` after `step`.
+pub(super) fn ghosts(captured: &CapturedPage, step: u32) -> Ghost {
     let mut ghost = Ghost::default();
-    for op in captured.ops.iter().filter(|op| op.ix > view.step.ix) {
+    for op in captured.ops.iter().filter(|op| op.ix > step) {
         let Some(first) = op.first_item.and_then(|f| usize::try_from(f).ok()) else {
             continue;
         };
@@ -75,7 +78,7 @@ pub(super) fn collect(state: &AppState) -> Ghost {
         };
         if ghost.label.is_none() {
             let last = captured.ops.last().map_or(op.ix, |last| last.ix);
-            ghost.label = Some((union, not_painted_yet(view.step.ix + 1, last)));
+            ghost.label = Some((union, not_painted_yet(step + 1, last)));
         }
         if ghost.boxes.len() < MAX_GHOSTS {
             ghost.boxes.push(union);
@@ -112,10 +115,15 @@ pub fn painting_now(state: &AppState) -> Option<String> {
     Some(format!("▶ op #{ix} · {} · painting now", what.trim_end()))
 }
 
-/// Draws the ghosts and the label of the first one.
+/// Draws the ghosts and the label of the first one on the page at `geo`.
 pub(super) fn draw(painter: &Painter, geo: &PageGeometry, ghost: &Ghost) {
+    draw_with(painter, |rect| geo.rect_to_screen(rect), ghost);
+}
+
+/// Draws the ghosts and the label of the first one, page space mapped to the screen by `to_screen`.
+pub(super) fn draw_with(painter: &Painter, to_screen: impl Fn(Rect) -> UiRect, ghost: &Ghost) {
     for rect in &ghost.boxes {
-        let screen = geo.rect_to_screen(*rect);
+        let screen = to_screen(*rect);
         if screen.width() < 0.5 && screen.height() < 0.5 {
             continue;
         }
@@ -128,7 +136,7 @@ pub(super) fn draw(painter: &Painter, geo: &PageGeometry, ghost: &Ghost) {
         );
     }
     if let Some((rect, text)) = &ghost.label {
-        let screen = geo.rect_to_screen(*rect);
+        let screen = to_screen(*rect);
         pill(
             painter,
             screen.left_bottom() + egui::vec2(0.0, 4.0),
@@ -140,15 +148,16 @@ pub(super) fn draw(painter: &Painter, geo: &PageGeometry, ghost: &Ghost) {
     }
 }
 
-/// The legend card's content: painted, current op, not yet.
-pub(super) fn legend(ui: &mut Ui) {
+/// The legend card's content: painted, current op, and not yet while the unpainted boxes show.
+pub(super) fn legend(ui: &mut Ui, unpainted: bool) {
     super::cards::title(ui, LEGEND_TITLE);
     let looks = [
         (LEGEND_ENTRIES[0], tokens::TEXT_2.gamma_multiply(0.8), None),
         (LEGEND_ENTRIES[1], tokens::ACCENT, None),
         (LEGEND_ENTRIES[2], GHOST.gamma_multiply(0.14), Some(GHOST)),
     ];
-    for (name, fill, outline) in looks {
+    let shown = if unpainted { looks.len() } else { 2 };
+    for (name, fill, outline) in looks.into_iter().take(shown) {
         ui.horizontal(|ui| {
             let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
             ui.painter().rect_filled(rect.shrink(1.0), 2.0, fill);
@@ -201,6 +210,22 @@ mod tests {
         state.step_to(OpPosition::new(0, 10));
         state.set_stepper(false);
         assert_eq!(collect(&state).boxes.len(), 0);
+    }
+
+    #[test]
+    fn the_unpainted_boxes_switch_takes_the_ghosts_and_their_label_away() {
+        let mut state = stepping("graphics-state", 49);
+        let painting_later = collect(&state).boxes.len();
+        assert!(painting_later > 0, "{painting_later}");
+
+        state.canvas.view.unpainted = false;
+
+        let ghost = collect(&state);
+        assert_eq!(ghost.boxes.len(), 0);
+        assert_eq!(ghost.label, None);
+        // Smoke: on again, they are back.
+        state.canvas.view.unpainted = true;
+        assert!(collect(&state).label.is_some());
     }
 
     #[test]

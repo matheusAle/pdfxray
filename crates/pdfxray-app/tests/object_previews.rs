@@ -718,3 +718,37 @@ fn snapshot_shading_preview() {
 fn snapshot_palette_preview() {
     snapshot_of(Source::Gallery, GALLERY_INDEXED, "app_objects_palette_preview");
 }
+
+#[test]
+fn an_image_can_be_saved_from_its_card_and_the_inspector_but_a_font_cannot() {
+    use pdfxray_app::components::object_preview::SAVE_IMAGE_LABEL;
+
+    let mut harness = app();
+    let dir = std::env::temp_dir().join("pdfxray-save-image-ui");
+    std::fs::create_dir_all(&dir).unwrap();
+    let target = dir.join("from-the-card.png");
+    let _ = std::fs::remove_file(&target);
+    let given = target.clone();
+    harness.state_mut().state.save_picker = Box::new(move |_| Some(given.clone()));
+
+    objects_at(&mut harness, Source::Fixture("images"), 5);
+    // One button on the centre card, one under the inspector's preview.
+    let buttons: Vec<Region> = [Region::Center, Region::Inspector]
+        .into_iter()
+        .filter(|region| !named(&harness, *region, Role::Button, SAVE_IMAGE_LABEL).is_empty())
+        .collect();
+    assert_eq!(buttons, [Region::Center, Region::Inspector]);
+
+    the(&harness, Region::Center, Role::Button, SAVE_IMAGE_LABEL).click();
+    harness.run_steps(3);
+
+    let png = image::open(&target).unwrap().to_rgba8();
+    assert_eq!(png.dimensions(), (2, 2));
+    assert_eq!(
+        harness.state().state.status,
+        "Saved image 5 0 R to from-the-card.png · 2 × 2 px"
+    );
+    // Smoke: a font's card offers no Save image.
+    objects_at(&mut harness, Source::Gallery, GALLERY_EMBEDDED_FONT);
+    assert!(named(&harness, Region::Center, Role::Button, SAVE_IMAGE_LABEL).is_empty());
+}

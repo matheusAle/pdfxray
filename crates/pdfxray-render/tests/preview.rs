@@ -274,3 +274,39 @@ fn a_page_preview_is_the_page_rendered_to_fit() {
     assert_eq!((page.width, page.height), (PREVIEW_SIDE, PREVIEW_SIDE));
     assert!(page.rgba == direct.rgba, "the preview differs from the page");
 }
+
+#[test]
+fn a_saved_image_is_drawn_at_its_own_size_however_large() {
+    // A 2100 × 300 grey ramp: wider than the preview's cap, which shrinks it.
+    let (width, height) = (2100_u32, 300_u32);
+    let samples: Vec<u8> = (0..width * height).map(|i| (i % 256) as u8).collect();
+    let mut w = PdfWriter::new(PdfVersion::V1_7);
+    w.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    w.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    w.object(
+        3,
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /Im1 4 0 R >> >> >>",
+    );
+    w.stream(
+        4,
+        &format!(
+            "/Type /XObject /Subtype /Image /Width {width} /Height {height} /ColorSpace /DeviceGray /BitsPerComponent 8"
+        ),
+        &samples,
+    );
+    w.finish_table(&Trailer::new(1)).unwrap();
+    let doc = Document::from_bytes("wide", w.into_output().unwrap().bytes).unwrap();
+
+    let saved = pdfxray_render::render_image(&doc, &visual(&doc, 4)).unwrap();
+    let shown = picture(&doc, 4);
+
+    assert_eq!((saved.width, saved.height), (width, height));
+    assert!(shown.width < width, "the preview is capped: {}", shown.width);
+    // One pixel per sample: the ramp's first samples, opaque.
+    let firsts: Vec<[u8; 4]> = saved.rgba.as_chunks::<4>().0[..3].to_vec();
+    assert_eq!(firsts, [[0, 0, 0, 0xFF], [1, 1, 1, 0xFF], [2, 2, 2, 0xFF]]);
+    // Smoke: what is not an image is refused, with the reason.
+    let page = doc.visual(ObjRef::new(3, 0)).unwrap();
+    let refused = pdfxray_render::render_image(&doc, &page).unwrap_err();
+    assert!(refused.to_string().contains("not an image"), "{refused}");
+}

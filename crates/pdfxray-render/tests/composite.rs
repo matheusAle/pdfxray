@@ -27,6 +27,7 @@ fn request(mode: Mode) -> Request {
         fit: Fit::Refuse,
         registration: None,
         comparator: Comparator::same_engine(),
+        step: None,
     }
 }
 
@@ -226,4 +227,51 @@ fn header_scopes_come_from_core_so_an_export_draws_the_conflict_ring() {
     assert_eq!(rings, conflicts);
     // Smoke: a page without tables has no header scopes.
     assert_eq!(open("minimal-one-page").header_scopes(0), Vec::new());
+}
+
+#[test]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the pixel bounds of a small picture"
+)]
+fn a_step_cuts_the_page_of_its_side_and_leaves_the_other_whole() {
+    // graphics-state paints on page 1 from op 3 on; with A cut before anything paints, the
+    // left half of a side-by-side is a blank page and the right half is B whole.
+    let doc = open("graphics-state");
+    let whole = composite::composite((&doc, 0), (&doc, 0), &request(Mode::SideBySide)).unwrap();
+    let cut = |side| {
+        composite::composite(
+            (&doc, 0),
+            (&doc, 0),
+            &Request {
+                step: Some((side, 2)),
+                ..request(Mode::SideBySide)
+            },
+        )
+        .unwrap()
+    };
+    // The pixels of one side's page, inside the bounds the composite reports for it.
+    let half = |c: &composite::Composite, right: bool| -> Vec<u8> {
+        let bounds = if right { c.b.bounds } else { c.a.bounds };
+        let width = c.width as usize;
+        let (x0, x1) = (bounds.x0.ceil() as usize, bounds.x1.floor() as usize);
+        let (y0, y1) = (bounds.y0.ceil() as usize, bounds.y1.floor() as usize);
+        (y0..y1)
+            .flat_map(|y| c.rgba[(y * width + x0) * 4..(y * width + x1) * 4].to_vec())
+            .collect()
+    };
+    let a_cut = cut(pdfxray_core::diff::Side::A);
+    let b_cut = cut(pdfxray_core::diff::Side::B);
+
+    assert_ne!(half(&a_cut, false), half(&whole, false), "A is cut");
+    assert_eq!(half(&a_cut, true), half(&whole, true), "B stays whole");
+    assert_eq!(half(&b_cut, false), half(&whole, false), "A stays whole");
+    assert_ne!(half(&b_cut, true), half(&whole, true), "B is cut");
+    // Smoke: a blank page is one colour.
+    let blank = half(&a_cut, false);
+    assert!(
+        blank.chunks(4).all(|px| px == &blank[..4]),
+        "nothing painted on A before op 3"
+    );
 }

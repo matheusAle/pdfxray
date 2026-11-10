@@ -17,7 +17,9 @@ use egui::{
 use pdfxray_core::{CharCode, FontProgram, ObjRef, Visual, VisualKind};
 
 pub use self::facts::{ChipFact, Fact, Summary, facts, summary};
-use crate::components::{Chip, Icon, Segment, Tone, segmented_mini, segmented_mini_width};
+use crate::components::{
+    Chip, Icon, Segment, Tone, ToolButton, segmented_mini, segmented_mini_width, tooltip,
+};
 use crate::previews::{Picture, PreviewFrame};
 use crate::state::{AppState, PreviewScale, describe};
 use crate::theme::{fonts, tokens};
@@ -39,6 +41,12 @@ pub const FALLBACK_LABEL: &str = "fallback specimen · not the file’s font";
 
 /// The caption over the glyph cells of a font.
 pub const GLYPHS_LABEL: &str = "GLYPHS USED IN THIS FILE";
+
+/// The name of the button that writes an image to a PNG file.
+pub const SAVE_IMAGE_LABEL: &str = "Save image…";
+
+/// What [`SAVE_IMAGE_LABEL`] does, in its tooltip.
+pub const SAVE_IMAGE_HINT: &str = "Write the image to a PNG file at its own size";
 
 /// The title of the canvas of an object that cannot be drawn.
 pub const NO_PREVIEW: &str = "No preview";
@@ -143,8 +151,10 @@ pub fn centre(ui: &mut Ui, state: &mut AppState, visual: &Visual, max: Vec2) {
     let mut scale = state.objects.preview_scale;
     let width = max.x.min(ui.available_width());
     let canvas_h = (max.y - HEADER_H - FACTS_H - 4.0).max(MIN_CANVAS_H);
+    let image = matches!(visual.kind, VisualKind::Image(_));
+    let mut save = false;
     card(ui, width, |ui| {
-        header(ui, &words.meta, &mut scale);
+        save = header(ui, &words.meta, &mut scale, image);
         hairline(ui);
         canvas::show(
             ui,
@@ -157,6 +167,9 @@ pub fn centre(ui: &mut Ui, state: &mut AppState, visual: &Visual, max: Vec2) {
         footer(ui, &words.chips);
     });
     state.objects.preview_scale = scale;
+    if save {
+        state.save_image(visual.obj);
+    }
 }
 
 /// The inspector card of `visual`: the canvas, 160 points tall, and one chip. The rows of
@@ -179,6 +192,18 @@ pub fn inspector(ui: &mut Ui, state: &mut AppState, visual: &Visual) {
         });
         footer(ui, &[chip]);
     });
+    if matches!(visual.kind, VisualKind::Image(_)) {
+        ui.add_space(6.0);
+        let save = ToolButton::new(SAVE_IMAGE_LABEL)
+            .icon(Icon::Download)
+            .compact(true)
+            .show(ui);
+        let clicked = save.clicked();
+        tooltip::text(save, SAVE_IMAGE_HINT);
+        if clicked {
+            state.save_image(visual.obj);
+        }
+    }
 }
 
 /// The card: its surface, hairline and corners; the parts go edge to edge inside.
@@ -200,8 +225,9 @@ fn hairline(ui: &mut Ui) {
     ui.painter().rect_filled(rect, 0.0, tokens::HAIRLINE);
 }
 
-/// `Preview` on the left; the facts in one line and the Fit · 1:1 control on the right.
-fn header(ui: &mut Ui, meta: &str, scale: &mut PreviewScale) {
+/// `Preview` on the left; the facts in one line, *Save image…* for an image and the Fit · 1:1
+/// control on the right. Returns whether *Save image…* was clicked.
+fn header(ui: &mut Ui, meta: &str, scale: &mut PreviewScale, image: bool) -> bool {
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), HEADER_H), Sense::hover());
     let inner = rect.shrink2(vec2(EDGE, 0.0));
     let row = |rect: Rect, layout: Layout| UiBuilder::new().max_rect(rect).layout(layout);
@@ -223,9 +249,30 @@ fn header(ui: &mut Ui, meta: &str, scale: &mut PreviewScale) {
     ui.scope_builder(row(control, Layout::left_to_right(Align::Center)), |ui| {
         segmented_mini(ui, scale, &segments);
     });
+    // An image can be saved: an icon button before the scale control.
+    let mut save = false;
+    let mut facts_end = control.min.x;
+    if image {
+        let button = ToolButton::new(SAVE_IMAGE_LABEL)
+            .icon(Icon::Download)
+            .icon_only(true)
+            .compact(true);
+        let at = Rect::from_min_max(
+            pos2(control.min.x - GAP - button.width(ui), inner.min.y),
+            pos2(control.min.x - GAP, inner.max.y),
+        );
+        let response = ui
+            .scope_builder(row(at, Layout::left_to_right(Align::Center)), |ui| {
+                button.show(ui)
+            })
+            .inner;
+        save = response.clicked();
+        tooltip::text(response, SAVE_IMAGE_HINT);
+        facts_end = at.min.x;
+    }
     let between = Rect::from_min_max(
         pos2(title.max.x + GAP, inner.min.y),
-        pos2(control.min.x - GAP, inner.max.y),
+        pos2(facts_end - GAP, inner.max.y),
     );
     if between.width() > 0.0 {
         ui.scope_builder(row(between, Layout::right_to_left(Align::Center)), |ui| {
@@ -239,6 +286,7 @@ fn header(ui: &mut Ui, meta: &str, scale: &mut PreviewScale) {
             );
         });
     }
+    save
 }
 
 /// The chips, on one line; what does not fit is cut at the card's edge.

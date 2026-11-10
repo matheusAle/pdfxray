@@ -61,8 +61,15 @@ fn the_ctm_stays_as_written_while_lengths_follow_the_units_switch() {
     harness.run_steps(3);
 
     // Lengths follow the switch: the box is 100 pt = 35.28 mm, the matrix itself stays as written.
-    assert!(!has_label(&harness, "[50 150 150 250]"));
-    assert!(has_label(&harness, "[17.64 52.92 52.92 88.19]"));
+    // The bbox [50 150 150 250] pt is a row per coordinate, in mm, its label saying the unit.
+    assert!(!has_label(&harness, "150"));
+    for value in ["17.64", "52.92", "88.19"] {
+        assert!(has_label(&harness, value), "{value}");
+    }
+    assert!(has_label(
+        &harness,
+        &pdfxray_app::inspector::geometry::bbox_note("mm")
+    ));
     assert!(has_label(&harness, "35.28 × 35.28 mm"));
     assert!(has_label(&harness, "[100 0 0 100 50 150]"));
 }

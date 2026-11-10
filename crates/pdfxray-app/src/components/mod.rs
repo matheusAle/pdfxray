@@ -33,7 +33,7 @@ pub use prop_row::PropRow;
 pub use segmented::{
     Segment, segmented, segmented_compact, segmented_mini, segmented_mini_width, segmented_width,
 };
-pub use step_track::{StepTrack, Tick, TickKind};
-pub use switch::switch;
+pub use step_track::{PageMark, StepTrack, Tick, TickKind};
+pub use switch::{switch, switch_named, switch_width};
 pub use tool_button::ToolButton;
 pub use tree_row::{Annotation, TreeRow};

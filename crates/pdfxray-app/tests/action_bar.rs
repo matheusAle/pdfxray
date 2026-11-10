@@ -90,7 +90,7 @@ fn outline_bottom(harness: &Harness<'_, PdfxrayApp>) -> f32 {
 }
 
 #[test]
-fn the_selection_gets_a_bar_under_its_outline_with_the_five_actions() {
+fn the_selection_gets_a_bar_under_its_outline_with_the_six_actions() {
     let fixture = "tagged-simple";
     let mut harness = opened(fixture);
     // Nothing is selected: no bar. (The document node is selected until the user picks one.)
@@ -103,7 +103,14 @@ fn the_selection_gets_a_bar_under_its_outline_with_the_five_actions() {
 
     assert_eq!(
         bar(&harness),
-        ["Isolate", "Hide", "Show in tree", "Object", "Copy id"]
+        [
+            "Isolate",
+            "Hide",
+            "Go to paint order",
+            "Show in tree",
+            "Object",
+            "Copy id"
+        ]
     );
     // Under the outline, not over it.
     let under = outline_bottom(&harness);
@@ -183,7 +190,10 @@ fn the_other_bar_actions_show_the_node_in_its_tree_open_its_object_and_copy_its_
         .state
         .select(NodeId::MarkedContent { page: 0, mcid: 0 });
     settle(&mut harness);
-    assert_eq!(bar(&harness), ["Isolate", "Hide", "Show in tree", "Copy id"]);
+    assert_eq!(
+        bar(&harness),
+        ["Isolate", "Hide", "Go to paint order", "Show in tree", "Copy id"]
+    );
     the(&harness, Region::Center, Role::Button, "Show in tree").click();
     settle(&mut harness);
     assert_eq!(harness.state().state.nav.rail, RailItem::Tags);
@@ -360,6 +370,39 @@ fn a_selected_glyph_gets_its_bar_under_the_baseline_tag_not_over_it() {
         isolate.min.y
     );
     // Smoke: it is the full bar, under the glyph and not far from it.
-    assert_eq!(bar(&harness), ["Isolate", "Hide", "Show in tree", "Copy id"]);
+    assert_eq!(
+        bar(&harness),
+        ["Isolate", "Hide", "Go to paint order", "Show in tree", "Copy id"]
+    );
     assert!(isolate.min.y < under + 60.0);
+}
+
+#[test]
+fn paint_order_on_the_bar_steps_to_the_first_operator_the_selection_paints() {
+    let mut harness = opened("reading-order");
+    // The Figure: MCID 2, filled by op 17 after a `g` and an `re` that paint nothing.
+    let figure = NodeId::StructElem(ObjRef::new(11, 0));
+    harness.state_mut().state.select(figure);
+    settle(&mut harness);
+    let button = bar_button(&harness, "Go to paint order");
+    // It keeps its short name beside the icon, like Isolate.
+    assert!(button.rect().width() > 60.0, "{:?}", button.rect());
+
+    button.click();
+    settle(&mut harness);
+
+    let state = &harness.state().state;
+    assert!(state.canvas.view.stepper);
+    assert_eq!(state.canvas.view.step, pdfxray_core::OpPosition::new(0, 17));
+    assert_eq!(
+        state.selection.primary().cloned(),
+        Some(NodeId::Op { page: 0, ix: 17 })
+    );
+    // Where the stepper already is, the bar has nothing to go to.
+    assert!(!bar(&harness).contains(&"Go to paint order".to_owned()));
+    // Smoke: a page paints nothing of its own, so its bar has no Paint order.
+    harness.state_mut().state.set_stepper(false);
+    harness.state_mut().state.select(NodeId::Page(0));
+    settle(&mut harness);
+    assert!(!bar(&harness).contains(&"Go to paint order".to_owned()));
 }

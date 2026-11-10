@@ -268,6 +268,13 @@ impl Comparison {
         Gap { kind, distance }
     }
 
+    /// How deep the boxes overlap: the smaller of the two overlaps, the least either box would
+    /// have to move to clear the other. `None` when they share no area.
+    pub fn overlap_depth(&self) -> Option<f64> {
+        self.intersection()
+            .map(|_| self.overlap_x().min(self.overlap_y()))
+    }
+
     /// How the horizontal extents of the boxes relate.
     pub fn horizontal(&self) -> Horizontal {
         let (a, b) = (&self.first, &self.second);

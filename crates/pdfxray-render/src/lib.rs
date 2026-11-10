@@ -53,7 +53,7 @@ pub use filter::{ContentFilter, ops_for, ops_for_all};
 pub use overlay::{Edge, Ink, Line, Overlay};
 pub use preview::{
     FontPreview, GLYPH_EM, IMAGE_PREVIEW_SIDE, InkMask, PREVIEW_SIDE, Preview, PreviewError, SPECIMEN_EM,
-    render_preview,
+    render_image, render_preview,
 };
 pub use rewrite::filtered_pdf;
 pub use score::{page_score, page_scores};

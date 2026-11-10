@@ -158,6 +158,8 @@ pub struct ViewMode {
     pub skip_state_only: bool,
     /// The canvas scrolls to what the stepper paints when it moves (on by default).
     pub follow_step: bool,
+    /// The canvas outlines what the stepper has not painted yet (on by default).
+    pub unpainted: bool,
     /// The stepper is playing: it advances by itself.
     pub playing: bool,
     /// Time since the stepper last advanced while playing.
@@ -179,6 +181,7 @@ impl Default for ViewMode {
             heatmap: false,
             skip_state_only: false,
             follow_step: true,
+            unpainted: true,
             playing: false,
             play_carry: Duration::ZERO,
         }
@@ -479,7 +482,7 @@ impl AppState {
 
     /// The node isolate and hide act on for selected node `id`: itself, or for a validation
     /// finding the node the finding points at.
-    fn target_of(&self, id: &NodeId) -> Option<NodeId> {
+    pub(crate) fn target_of(&self, id: &NodeId) -> Option<NodeId> {
         let NodeId::Validation(index) = id else {
             return Some(id.clone());
         };

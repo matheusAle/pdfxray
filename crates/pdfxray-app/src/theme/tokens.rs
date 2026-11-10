@@ -73,6 +73,13 @@ pub const ROLE_ROW_TEXT: Color32 = Color32::from_rgb(0xC9, 0xD0, 0xD9);
 /// Text of a role row that is out of focus: `#8A93A3`, 6:1 on the card, so the row stays
 /// readable while the hollow swatch says it is out of focus.
 pub const ROLE_UNFOCUSED_TEXT: Color32 = Color32::from_rgb(0x8A, 0x93, 0xA3);
+
+/// The hairline where a page starts on the paint-order track: white at 35 %, over the track's
+/// own marks.
+pub const TRACK_PAGE_MARK: Color32 = Color32::from_rgba_unmultiplied_const(0xFF, 0xFF, 0xFF, 0x59);
+
+/// The page number by a page mark of the paint-order track: `#8A93A3`.
+pub const TRACK_PAGE_TEXT: Color32 = Color32::from_rgb(0x8A, 0x93, 0xA3);
 /// Top of the primary button's gradient: `#6FE3F9`.
 pub const PRIMARY_TOP: Color32 = Color32::from_rgb(0x6F, 0xE3, 0xF9);
 /// Bottom of the primary button's gradient: `#2CC6E8`.

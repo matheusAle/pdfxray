@@ -25,8 +25,12 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 use pdfxray_app::center::canvas::cards::mini_text;
 use pdfxray_app::center::canvas::paint_order::{LEGEND_ENTRIES, LEGEND_TITLE, painting_now};
-use pdfxray_app::components::StepTrack;
-use pdfxray_app::drawer::paint_order::{FOLLOW_LABEL, SKIP_LABEL, at_text, card_label, position_text};
+use pdfxray_app::components::step_track::page_text;
+use pdfxray_app::components::{PageMark, StepTrack};
+use pdfxray_app::drawer::paint_order::{
+    FOLLOW_LABEL, PAGE_END_LABEL, PAGE_START_LABEL, SKIP_LABEL, UNPAINTED_LABEL, at_text, card_label,
+    page_edge_hint, position_text,
+};
 use pdfxray_app::inspector::paint_order as section;
 use pdfxray_app::view::ZoomMode;
 use pdfxray_app::{DrawerTab, PdfxrayApp, RailItem};
@@ -510,19 +514,23 @@ fn the_buttons_of_the_drawer_step_and_jump() {
     the(&harness, Region::Drawer, Role::Button, "Previous operator").click();
     settle(&mut harness);
     assert_eq!(step(&harness), 49);
-    the(&harness, Region::Drawer, Role::Button, "Last operator").click();
+    // One page: Page end and Page start are its last and first operator, and stop there.
+    the(&harness, Region::Drawer, Role::Button, PAGE_END_LABEL).click();
     settle(&mut harness);
     assert_eq!(step(&harness), 79);
-    assert!(
-        the(&harness, Region::Drawer, Role::Button, "Next operator")
-            .accesskit_node()
-            .is_disabled()
-    );
-    the(&harness, Region::Drawer, Role::Button, "First operator").click();
+    for button in ["Next operator", PAGE_END_LABEL] {
+        assert!(
+            the(&harness, Region::Drawer, Role::Button, button)
+                .accesskit_node()
+                .is_disabled(),
+            "{button}"
+        );
+    }
+    the(&harness, Region::Drawer, Role::Button, PAGE_START_LABEL).click();
     settle(&mut harness);
     assert_eq!(step(&harness), 0);
     assert!(
-        the(&harness, Region::Drawer, Role::Button, "First operator")
+        the(&harness, Region::Drawer, Role::Button, PAGE_START_LABEL)
             .accesskit_node()
             .is_disabled()
     );
@@ -626,6 +634,43 @@ fn the_inspector_lists_what_covers_the_operator_and_how_much_stays_visible() {
     press(&mut harness, Key::P);
     assert!(!buttons_in(&harness, Region::Inspector).contains(&"Paint order".to_owned()));
     assert_eq!(inspector_value(&harness, "Step"), None);
+}
+
+#[test]
+fn the_more_row_of_the_stack_unfolds_in_place_and_show_fewer_folds_it() {
+    // box-matrix: op 18 paints over five operators, so the stack lists three and "+2 more under".
+    let mut harness = opened("box-matrix");
+    start_at(&mut harness, 18);
+    let stack = |harness: &Harness<'_, PdfxrayApp>| {
+        buttons_in(harness, Region::Inspector)
+            .into_iter()
+            .filter(|b| b.starts_with('#'))
+            .count()
+    };
+    let more = section::more_text(2, "under");
+    assert_eq!(stack(&harness), 4, "this op and three under it");
+
+    the(&harness, Region::Inspector, Role::Button, &more).click();
+    settle(&mut harness);
+
+    assert_eq!(stack(&harness), 6, "this op and all five under it");
+    assert!(harness.query_by_label(&more).is_none());
+    // Unfolding is not stepping.
+    assert_eq!(step(&harness), 18);
+
+    the(&harness, Region::Inspector, Role::Button, section::SHOW_FEWER).click();
+    settle(&mut harness);
+    assert_eq!(stack(&harness), 4);
+
+    // What is unfolded belongs to the operator: stepping away and back finds it as it was.
+    the(&harness, Region::Inspector, Role::Button, &more).click();
+    settle(&mut harness);
+    harness.state_mut().state.step_to(OpPosition::new(0, 17));
+    settle(&mut harness);
+    harness.state_mut().state.step_to(OpPosition::new(0, 18));
+    settle(&mut harness);
+    // Smoke: back on op 18, its part is still unfolded.
+    assert_eq!(stack(&harness), 6);
 }
 
 #[test]
@@ -946,6 +991,155 @@ fn the_track_spans_every_page_and_dragging_it_shows_the_page_it_lands_on() {
         state.canvas.view.content_filter(&doc, step.page + 1),
         ContentFilter::All
     );
+}
+
+/// Every shape painted last frame, groups flattened.
+fn painted(harness: &Harness<'_, PdfxrayApp>) -> Vec<egui::Shape> {
+    fn flatten(shape: &egui::Shape, out: &mut Vec<egui::Shape>) {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| flatten(s, out)),
+            other => out.push(other.clone()),
+        }
+    }
+    let mut shapes = Vec::new();
+    for clipped in &harness.output().shapes {
+        flatten(&clipped.shape, &mut shapes);
+    }
+    shapes
+}
+
+#[test]
+fn the_track_marks_every_page_and_home_and_end_go_to_the_edges_of_pages() {
+    let mut harness = opened("long-doc");
+    harness.state_mut().state.select(NodeId::Op { page: 5, ix: 11 });
+    settle(&mut harness);
+    press(&mut harness, Key::P);
+    settle_on_step(&mut harness);
+    let shapes = painted(&harness);
+
+    // One hairline per page, 40 in all.
+    let marks = shapes
+        .iter()
+        .filter(|s| {
+            matches!(s, egui::Shape::LineSegment { stroke, .. }
+            if stroke.color == pdfxray_app::theme::tokens::TRACK_PAGE_MARK)
+        })
+        .count();
+    assert_eq!(marks, 40);
+    // A number shows only where the next mark leaves room for it, as the track says.
+    let track = the(&harness, Region::Drawer, Role::Slider, TRACK).rect();
+    let last = harness.state().state.last_step_index().unwrap();
+    let all: Vec<PageMark> = (0..40).map(|page| PageMark { ix: page * 28, page }).collect();
+    let expected: Vec<String> = StepTrack::labelled(track, &all, last)
+        .iter()
+        .map(|m| page_text(m.page))
+        .collect();
+    let numbers: Vec<String> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t)
+                if t.galley.text().starts_with('p') && t.galley.text()[1..].parse::<u32>().is_ok() =>
+            {
+                Some(t.galley.text().to_owned())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(numbers, expected);
+    assert!(numbers.len() < 40, "{numbers:?}");
+
+    // Home: page 6's first operator, then page 5's; End: page 5's last, then page 6's.
+    let mut visited = Vec::new();
+    for key in [Key::Home, Key::Home, Key::End, Key::End] {
+        press(&mut harness, key);
+        settle(&mut harness);
+        visited.push(harness.state().state.canvas.view.step);
+    }
+    assert_eq!(
+        visited,
+        [
+            OpPosition::new(5, 0),
+            OpPosition::new(4, 0),
+            OpPosition::new(4, 27),
+            OpPosition::new(5, 27),
+        ]
+    );
+    // The buttons do the same: at the end of page 6, Page end goes to the end of page 7.
+    the(&harness, Region::Drawer, Role::Button, PAGE_END_LABEL).click();
+    settle(&mut harness);
+    assert_eq!(harness.state().state.canvas.view.step, OpPosition::new(6, 27));
+    // Smoke: the hint says when the button would leave the page.
+    assert_eq!(page_edge_hint(true, true), "Page end (next page)");
+    assert_eq!(page_edge_hint(false, false), "Page start");
+}
+
+#[test]
+fn the_track_and_the_switches_stay_put_while_the_position_text_grows() {
+    let mut harness = opened("long-doc");
+    harness.state_mut().state.select(NodeId::Op { page: 0, ix: 0 });
+    settle(&mut harness);
+    press(&mut harness, Key::P);
+    settle_on_step(&mut harness);
+    let place = |harness: &Harness<'_, PdfxrayApp>| {
+        (
+            the(harness, Region::Drawer, Role::Slider, TRACK).rect(),
+            the(harness, Region::Drawer, Role::Switch, UNPAINTED_LABEL).rect(),
+        )
+    };
+    let at_start = place(&harness);
+
+    // From `1 / 1120 ops   page 1 · op #0` to `1120 / 1120 ops   page 40 · op #27`.
+    let last = harness.state().state.last_step_index().unwrap();
+    harness.state_mut().state.step_to_index(last);
+    settle_on_step(&mut harness);
+
+    assert_eq!(place(&harness), at_start);
+    // Smoke: the position really is at the end.
+    assert!(has_label(&harness, &position_text(1120, 1120)));
+}
+
+#[test]
+fn a_document_of_few_pages_has_every_page_number_over_the_track() {
+    let mut harness = opened_two_pages();
+    harness.key_press(Key::P);
+    settle_on_step(&mut harness);
+
+    let numbers: Vec<String> = painted(&harness)
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) if ["p1", "p2"].contains(&t.galley.text()) => {
+                Some(t.galley.text().to_owned())
+            }
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(numbers, ["p1", "p2"]);
+}
+
+#[test]
+fn the_unpainted_boxes_switch_takes_the_ghosts_and_the_legend_row_away() {
+    let mut harness = opened("graphics-state");
+    start_at(&mut harness, 49);
+    let not_yet = LEGEND_ENTRIES[2];
+    let label = pdfxray_app::center::canvas::paint_order::not_painted_yet(50, 79);
+    assert!(has_label(&harness, not_yet));
+    let shown_text = |harness: &Harness<'_, PdfxrayApp>| {
+        painted(harness)
+            .iter()
+            .any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text() == label))
+    };
+    assert!(shown_text(&harness));
+
+    the(&harness, Region::Drawer, Role::Switch, UNPAINTED_LABEL).click();
+    settle(&mut harness);
+
+    assert!(!harness.state().state.canvas.view.unpainted);
+    assert!(!shown_text(&harness));
+    assert!(!has_label(&harness, not_yet));
+    // Smoke: painted and current op stay in the legend.
+    assert!(has_label(&harness, LEGEND_ENTRIES[0]));
+    assert!(has_label(&harness, LEGEND_ENTRIES[1]));
 }
 
 /// [`two_overlapping_pages`], written once to a file the app can open, opened at [`ROOMY`].

@@ -17,8 +17,13 @@
 //! The composite carries where each side's page space landed on it ([`Composite::a`],
 //! [`Composite::b`]), so the annotation layer can be laid out over both sides at once, and the
 //! app and an export draw the same picture.
+//!
+//! One side can be cut by the paint-order stepper ([`Request::step`]): its page is painted up to
+//! an operator, the other side whole, so a mask shows what that much of A (or B) leaves unlike
+//! the other file.
 
 use hayro::vello_cpu::Pixmap;
+use pdfxray_core::diff::Side;
 use pdfxray_core::numeric::{f32_from_f64, u32_from_f64_round, usize_from_u32};
 use pdfxray_core::{Document, PageIx, Point, Rect};
 
@@ -26,7 +31,9 @@ use crate::annotate::{self, Annotation, Grid, Legend, Palette, Scene};
 use crate::diff::{diff, luma};
 use crate::score::{self, Perceptual, VisualScore};
 use crate::transform::PixelRect;
-use crate::{Overlay, PixelGrid, RenderError, RenderSpec, RenderedPage, Transform, overlay, render_page};
+use crate::{
+    ContentFilter, Overlay, PixelGrid, RenderError, RenderSpec, RenderedPage, Transform, overlay, render_page,
+};
 
 /// How the two sides are shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -210,6 +217,27 @@ pub struct Request {
     pub registration: Option<Registration>,
     /// How the pixels are compared.
     pub comparator: Comparator,
+    /// The paint-order stepper's cut: that side's page painted up to and including this
+    /// operator, the other side whole. `None` paints both whole.
+    pub step: Option<(Side, u32)>,
+}
+
+impl Request {
+    /// What paints on `side`'s page: up to the step on the stepped side, everything otherwise.
+    fn content(&self, side: Side) -> ContentFilter {
+        match self.step {
+            Some((stepped, ix)) if stepped == side => ContentFilter::UpTo(ix),
+            _ => ContentFilter::All,
+        }
+    }
+
+    /// The spec of `side`'s page at `scale`.
+    fn spec(&self, side: Side, scale: f32) -> RenderSpec {
+        RenderSpec {
+            content: self.content(side),
+            ..RenderSpec::new(scale)
+        }
+    }
 }
 
 /// Draws page `a.1` of `a.0` and page `b.1` of `b.0` into one bitmap as `request` says.
@@ -220,8 +248,8 @@ pub fn composite(
 ) -> Result<Composite, CompositeError> {
     if !request.mode.shares_grid() {
         let side = |side: char| move |error| CompositeError::Render { side, error };
-        let page_a = render_page(a.0, a.1, &RenderSpec::new(request.scale)).map_err(side('A'))?;
-        let page_b = render_page(b.0, b.1, &RenderSpec::new(request.scale)).map_err(side('B'))?;
+        let page_a = render_page(a.0, a.1, &request.spec(Side::A, request.scale)).map_err(side('A'))?;
+        let page_b = render_page(b.0, b.1, &request.spec(Side::B, request.scale)).map_err(side('B'))?;
         return Ok(compose(
             request.mode,
             &page_a,
@@ -256,7 +284,7 @@ fn shared_grid(
     request: &Request,
 ) -> Result<OneGrid, CompositeError> {
     let side = |side: char| move |error| CompositeError::Render { side, error };
-    let page_a = render_page(a.0, a.1, &RenderSpec::new(request.scale)).map_err(side('A'))?;
+    let page_a = render_page(a.0, a.1, &request.spec(Side::A, request.scale)).map_err(side('A'))?;
     let b_scale = b_scale(a, b, request.fit).map_err(|e| match e {
         Refusal::Geometry(why) => CompositeError::Geometry(why),
         Refusal::Render(side_of, error) => CompositeError::Render { side: side_of, error },
@@ -278,7 +306,7 @@ fn shared_grid(
             offset,
             ..PixelGrid::of(&page_a)
         }),
-        ..RenderSpec::new(scale_b)
+        ..request.spec(Side::B, scale_b)
     };
     let page_b = render_page(b.0, b.1, &spec).map_err(side('B'))?;
     Ok(OneGrid {
@@ -304,6 +332,7 @@ pub fn score_pages(
         fit: Fit::Refuse,
         registration: None,
         comparator: Comparator::SameEngine(*how),
+        step: None,
     };
     let drawn = shared_grid(a, b, &request)?;
     Ok(score::score(&drawn.a, &drawn.b, how))

@@ -17,9 +17,10 @@ use crate::state::{AppState, RailItem};
 use crate::theme::{effects, fonts, tokens};
 
 /// The actions of the bar, in order; the rest of [`Action::ALL`] is in the menu only.
-pub const BAR_ACTIONS: [Action; 5] = [
+pub const BAR_ACTIONS: [Action; 6] = [
     Action::Isolate,
     Action::Hide,
+    Action::PaintOrder,
     Action::ShowInTree,
     Action::Object,
     Action::CopyId,
@@ -33,10 +34,12 @@ const fn detail(action: Action) -> &'static str {
     match action {
         Action::Isolate => "Paint only the selected node’s content",
         Action::Hide => "Paint everything except the selected node’s content",
+        Action::PaintOrder => "Step to its first painting operator",
         Action::ShowInTree => "Select it in the tree that lists it",
         Action::Object => "Open the object behind it",
         Action::RawBytes => "Its bytes as they are in the file",
         Action::StreamBytes => "Its stream data, marked in the raw bytes",
+        Action::SaveImage => "Write the image to a PNG file at its own size",
         Action::CopyId => "Copy the node’s id",
         Action::CopyJson => "Copy everything the inspector shows, as JSON",
     }
@@ -98,8 +101,8 @@ pub(super) fn show(ctx: &Context, state: &mut AppState, outline: Rect, label: Op
     }
 }
 
-/// One button; true when it was clicked. Isolate keeps its name beside the icon, the others show
-/// only the icon and say their name in the tooltip.
+/// One button; true when it was clicked. Isolate and Paint order keep their name beside the icon,
+/// the others show only the icon and say their name in the tooltip.
 fn button(ui: &mut Ui, state: &AppState, action: Action) -> bool {
     let tool = match action {
         Action::Isolate => Some(ViewTool::Isolate),
@@ -110,9 +113,10 @@ fn button(ui: &mut Ui, state: &AppState, action: Action) -> bool {
     let enabled = tool.is_none_or(|tool| tool.available(state));
     let response = ui
         .add_enabled_ui(enabled, |ui| {
-            ToolButton::new(action.label())
+            ToolButton::new(action.short_label())
+                .name(action.label())
                 .icon(action.icon())
-                .icon_only(action != Action::Isolate)
+                .icon_only(!matches!(action, Action::Isolate | Action::PaintOrder))
                 .active(active)
                 .compact(true)
                 .show(ui)

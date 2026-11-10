@@ -66,8 +66,12 @@ pub enum Icon {
     Check,
     /// Collapsed tree row, breadcrumb separator, next page.
     ChevronRight,
-    /// Expanded tree row, open section.
+    /// Expanded tree row, open section, a row that unfolds more.
     ChevronDown,
+    /// A row that folds what it unfolded.
+    ChevronUp,
+    /// Save a file: *Save image…*.
+    Download,
     /// Previous page.
     ChevronLeft,
     /// A document.
@@ -122,7 +126,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, for galleries and tests.
-    pub const ALL: [Self; 51] = [
+    pub const ALL: [Self; 53] = [
         Self::Tags,
         Self::Content,
         Self::Artifacts,
@@ -149,6 +153,8 @@ impl Icon {
         Self::Check,
         Self::ChevronRight,
         Self::ChevronDown,
+        Self::ChevronUp,
+        Self::Download,
         Self::ChevronLeft,
         Self::File,
         Self::Open,
@@ -204,6 +210,8 @@ impl Icon {
             Self::Check => Lucide::Check,
             Self::ChevronRight => Lucide::ChevronRight,
             Self::ChevronDown => Lucide::ChevronDown,
+            Self::ChevronUp => Lucide::ChevronUp,
+            Self::Download => Lucide::Download,
             Self::ChevronLeft => Lucide::ChevronLeft,
             Self::File => Lucide::FileText,
             Self::Open => Lucide::FolderOpen,

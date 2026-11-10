@@ -273,6 +273,7 @@ fn the_visual_diff_modes_match_their_baselines() {
             fit: Fit::Refuse,
             registration: None,
             comparator: composite::Comparator::same_engine(),
+            step: None,
         };
         let mut picture = composite::composite((&a, 1), (&b, 1), &request).unwrap();
         let [scene_a, scene_b] =

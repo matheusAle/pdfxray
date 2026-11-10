@@ -18,7 +18,7 @@ use common::{
 };
 use egui::{Key, Modifiers, Pos2, Role, vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use pdfxray_app::{PdfxrayApp, Unit};
 use pdfxray_core::{BoxKind, Document, LayerMode, NodeId, Point};
 use pdfxray_render::{PixelPoint, RenderSpec, render_page};
@@ -435,6 +435,32 @@ fn shift_click_in_the_hit_stack_compares_two_boxes() {
             "B fully overlaps A"
         ]
     );
+    // Between: the ArtBox lies inside the MediaBox, 320 wide and 220 tall shared, so the boxes
+    // overlap 220 deep, the smaller of the two. No unit tiles: the rows say it.
+    let rows: Vec<String> = harness
+        .get_all_by_role(Role::ListItem)
+        .filter_map(|n| n.accesskit_node().label())
+        .filter(|name| {
+            ["Along", "Overlap area", "On screen"]
+                .iter()
+                .any(|k| name.starts_with(k))
+        })
+        .collect();
+    let zoom = f64::from(harness.state().state.canvas.zoom);
+    assert_eq!(
+        rows,
+        [
+            "Along x: overlap 320 pt".to_owned(),
+            "Along y: overlap 220 pt".to_owned(),
+            "Overlap area: 320 × 220 pt".to_owned(),
+            format!(
+                "On screen: {}",
+                pdfxray_app::inspector::measure::on_screen_text(220.0, zoom)
+            ),
+        ]
+    );
+    assert!(has_label(&harness, "220 pt"), "the depth is the big number");
+    assert!(!has_label(&harness, "mm"), "no unit tiles");
 }
 
 /// A page at 100 % with the measure tool on.
@@ -628,13 +654,16 @@ fn shift_clicking_a_second_node_shows_the_gap_the_alignment_and_the_print_boxes(
             "2 selected · gap",
             "shift-click adds to the selection",
             "10 pt",
+            "gap",
             "horizontal gap, left of A → right of B",
-            "3.53",
-            "mm",
-            "0.139",
-            "in",
-            "13.33",
-            "px",
+            // The orange square spans y 100 to 200 and the green one 120 to 160: they overlap
+            // along y and are apart along x.
+            "Along x",
+            "gap 10 pt",
+            "Along y",
+            "overlap 40 pt",
+            "On screen",
+            "10 px @100%",
             "Left edges",
             "Δ -50 pt",
             "Right edges",
@@ -679,7 +708,10 @@ fn nodes_apart_in_both_directions_have_a_diagonal_gap_with_a_pill_on_each_side()
     // Operator 38 is (170,120)-(210,160), operator 3 (20,20)-(100,80): 70 across, 40 up.
     let inspector = texts_in(&harness, Region::Inspector, Role::Label);
     let from = inspector.iter().position(|t| t == "80.62 pt").unwrap();
-    assert_eq!(inspector[from + 1], "diagonal gap, corner of A → corner of B");
+    assert_eq!(
+        inspector[from + 1..from + 3],
+        ["gap", "diagonal gap, corner of A → corner of B"]
+    );
     assert!(centre_texts(&harness).contains(&"gap 70 pt".to_owned()));
     assert!(centre_texts(&harness).contains(&"gap 40 pt".to_owned()));
 }
@@ -699,9 +731,14 @@ fn edges_that_line_up_are_aligned_and_a_box_inside_another_has_no_gap() {
     });
     harness.run();
 
+    // The same box twice: they overlap all over, as deep as the box is, and share all of it.
     let inspector = texts_in(&harness, Region::Inspector, Role::Label);
-    let from = inspector.iter().position(|t| t == "0 pt").unwrap();
-    assert_eq!(inspector[from..from + 2], ["0 pt", "A and B overlap, no gap"]);
+    let from = inspector
+        .iter()
+        .position(|t| t == "A and B overlap, no gap")
+        .unwrap();
+    assert_eq!(inspector[from - 1], "overlap");
+    assert!(inspector.contains(&"Overlap area".to_owned()), "{inspector:?}");
     let at = inspector.iter().position(|t| t == "Left edges").unwrap();
     assert_eq!(
         inspector[at..at + 6],
@@ -734,8 +771,8 @@ fn side_by_side_nodes_have_a_horizontal_gap_and_edges_that_are_off() {
     let inspector = texts_in(&harness, Region::Inspector, Role::Label);
     let from = inspector.iter().position(|t| t == "18 pt").unwrap();
     assert_eq!(
-        inspector[from..from + 2],
-        ["18 pt", "horizontal gap, right of A → left of B"]
+        inspector[from..from + 3],
+        ["18 pt", "gap", "horizontal gap, right of A → left of B"]
     );
     let at = inspector.iter().position(|t| t == "Left edges").unwrap();
     assert_eq!(

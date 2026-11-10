@@ -276,10 +276,10 @@ pub(super) fn show(ui: &mut Ui, state: &mut AppState, canvas: Rect, info: &PageI
         });
     }
     if state.canvas.view.stepper {
-        column.card(
-            &Card::new(super::paint_order::LEGEND_TITLE),
-            super::paint_order::legend,
-        );
+        let unpainted = state.canvas.view.unpainted;
+        column.card(&Card::new(super::paint_order::LEGEND_TITLE), |ui| {
+            super::paint_order::legend(ui, unpainted);
+        });
     }
     if state.canvas.show_boxes {
         let lengths = state.lengths();

@@ -24,7 +24,7 @@ use pdfxray_core::numeric::usize_from_u32;
 use pdfxray_core::{Document, PageIx};
 use pdfxray_render::composite::{self, Comparator, Composite, CompositeError, Fit, Mode, Request};
 use pdfxray_render::score::VisualScore;
-use pdfxray_render::{RenderSpec, Transform, render_page};
+use pdfxray_render::{ContentFilter, RenderSpec, Transform, render_page};
 
 use crate::page_cache::pixel_digest;
 use crate::view::ScaleKey;
@@ -48,6 +48,8 @@ pub(crate) struct PictureKey {
     pub(crate) scale: ScaleKey,
     /// What to do about differing page geometry.
     pub(crate) fit: Fit,
+    /// The paint-order stepper's cut: that side's page painted up to this operator.
+    pub(crate) step: Option<(Side, u32)>,
 }
 
 /// Where the sides landed on a picture.
@@ -268,6 +270,7 @@ fn draw(ctx: &Context, a: &Document, b: &Document, key: PictureKey) -> Outcome {
                 fit: key.fit,
                 registration: None,
                 comparator: Comparator::same_engine(),
+                step: key.step,
             };
             let mut picture = composite::composite((a, pa), (b, pb), &request).map_err(|e| match e {
                 CompositeError::Geometry(why) => Refusal::Geometry(why),
@@ -287,7 +290,15 @@ fn draw(ctx: &Context, a: &Document, b: &Document, key: PictureKey) -> Outcome {
             } else {
                 (Side::B, b)
             };
-            let rendered = render_page(doc, page, &RenderSpec::new(scale)).map_err(|e| {
+            let content = match key.step {
+                Some((stepped, ix)) if stepped == side => ContentFilter::UpTo(ix),
+                _ => ContentFilter::All,
+            };
+            let spec = RenderSpec {
+                content,
+                ..RenderSpec::new(scale)
+            };
+            let rendered = render_page(doc, page, &spec).map_err(|e| {
                 Refusal::Render(format!(
                     "side {} cannot be drawn, so there is no visual diff: {e}",
                     if side == Side::A { 'A' } else { 'B' }

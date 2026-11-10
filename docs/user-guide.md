@@ -103,7 +103,11 @@ All. Annotations are listed but not hit-tested before v1.1.
 * **The primary** is the node the single-node views show (crumbs, overlays, stepper): the one you
   clicked, or the first in reading order after a marquee. Shift-click adds without moving it.
 * **Two nodes** are the comparison: the inspector shows "2 selected · gap", measured from the
-  primary.
+  primary. *Between A and B* gives the gap, or how deep the boxes overlap (the smaller of the two
+  axes), then the gap or overlap **along x** and **along y**, the **overlap area** when they share
+  one, and **on screen**: that length in pixels at the canvas's zoom, flagged *under a pixel*
+  when it is there but too thin to see. A length under one unit keeps four decimals, so a
+  hairline gap or overlap of `0.0042 pt` is not rounded to nothing.
 * **Three or more** show a summary in the inspector: the count, the Pick target and pages, chips
   for roles, pages and problems, BY ROLE (with **Only P** to keep one role) and ELEMENTS. Click an
   element to inspect it: the normal inspector opens under "← N elements · 2 of N ‹ ›", `[` and
@@ -150,6 +154,16 @@ they leave the toolbar; the selection's action bar and their keys still have the
   default, in the Paint order tab next to **Skip state-only ops**) scrolls the canvas to what a
   step paints when it is out of view (to its page when it paints nothing), whether you step,
   jump, scrub or play, and keeps the zoom; turn it off to keep the view where it is.
+  A hairline on the track marks where each page starts, with its number when there is room.
+  **Page start** and **Page end** (`Home` and `End`) go to the first and last operator of the
+  page; pressed again at the edge, to the start of the page before or the end of the page after.
+  **Unpainted boxes** (on by default) outlines what the page has still to paint; turn it off to
+  see the page as painted so far without them. Where the tab is narrow the switches read
+  *Unpainted*, *Follow* and *Skip state-only*.
+  **Go to paint order**, on the selection bar (*Paint order*) and in right-click menus, turns
+  the stepper on at the first operator that paints the selected element.
+  In the Inspector, *Stack at this point* lists three operators above the step and three under
+  it; *+N more later* or *+N more under* lists twenty more, and *Show fewer* folds them again.
 * **Clip** (`C`) shows the clip in effect for the selected operator.
 * **Alpha** (`A`) tints transparent, soft-masked and blended content.
 
@@ -220,6 +234,16 @@ when there are too many. **1:1** shows one preview pixel per screen pixel, and t
 The caption under an image states the factor in screen pixels per image pixel. An image preview
 has at most 2048 pixels along its longest side; a larger image is scaled down to that, and the
 factor says so. The Inspector's card is always fitted.
+
+**Save image…** (the download icon in an image's card header, the button under the Inspector's
+preview, or the right-click menu of the image or of a `Do` that paints it) writes the image to a
+PNG file: at its own size, one pixel per sample however large, with its transparency, decoded by
+the engine that draws the pages. The status bar says where it went. An inline image (`BI … EI`)
+is not an object, so it has no Save image.
+
+In the Inspector's **Geometry**, the page bbox is a row per coordinate, each named for its edge
+(`x0 · left`, `y0 · bottom`, `x1 · right`, `y1 · top`), under a label that gives the order and the
+unit; each row copies its number.
 
 A preview never fakes a font. A font with no embedded program gets an amber **Not embedded**
 frame: readers substitute their own font, so text can reflow or lose glyphs. The dimmed
@@ -309,6 +333,14 @@ changed elements are outlined; ⇧T outlines the unchanged ones too, L names the
 reading order (overlaid: of the side picked with A/B, which is also the side a click picks on).
 Pages that differ in size or rotation are never scaled silently: overlaid, a banner says why and
 offers *Scale B to A*. The picture is the one `pdfxray render a.pdf --against b.pdf` writes.
+
+**Paint order** (`P`, on the comparison's toolbar) steps through one side at a time: its page is
+painted up to the step and the other side's is drawn whole, in every mode, and a line over the
+picture says which is which (`B · stepped · 12 / 48`, `A · drawn whole`). The side is the A | B
+switch of the Paint order tab, the same one the overlay's A/B picks; switching starts the
+stepper over on that side's page. The Inspector's Paint order section is for A's operators, and
+the track's red marks of untagged content are A's checks. Ending the comparison while stepping B
+turns the stepper off.
 
 **Visual score.** Once the canvas has drawn a page pair, its row in the Changes list shows the
 share of its pixels that differ (*visual 0.40%*; the tooltip and the mask's legend give the count).

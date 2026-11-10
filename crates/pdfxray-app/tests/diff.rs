@@ -638,3 +638,90 @@ fn a_page_pair_the_canvas_drew_shows_its_visual_score_beside_its_changes() {
     );
     assert_eq!(diff.visual_score(page_of(&harness, 2)), None);
 }
+
+/// Every text painted last frame.
+fn painted_texts(harness: &Harness<'_, PdfxrayApp>) -> Vec<String> {
+    fn walk(shape: &egui::Shape, out: &mut Vec<String>) {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
+            egui::Shape::Text(text) => out.push(text.galley.text().to_owned()),
+            _ => {}
+        }
+    }
+    let mut texts = Vec::new();
+    for clipped in &harness.output().shapes {
+        walk(&clipped.shape, &mut texts);
+    }
+    texts
+}
+
+fn digest_shown(harness: &Harness<'_, PdfxrayApp>) -> u64 {
+    state(harness).diff.as_ref().unwrap().shown_picture().unwrap().3
+}
+
+#[test]
+fn paint_order_steps_the_active_side_and_draws_the_other_whole() {
+    use pdfxray_app::center::canvas::diff::{PAINT_ORDER_LABEL, stepped_label, whole_label};
+
+    let (a, b) = pair("drop-alt");
+    let mut harness = launched(&a, &b);
+    let whole = digest_shown(&harness);
+    assert_eq!(state(&harness).diff.as_ref().unwrap().active, Side::B);
+
+    the(&harness, Region::Center, Role::Button, PAINT_ORDER_LABEL).click();
+    settle(&mut harness);
+
+    // The stepper walks B, the active side: its last operator on the page shown, selected on B.
+    let s = state(&harness);
+    assert!(s.canvas.view.stepper);
+    assert_eq!(s.stepped_side(), Side::B);
+    let step = s.canvas.view.step;
+    let (_, shown_b) = s.diff.as_ref().unwrap().pages().unwrap();
+    assert_eq!(Some(step.page), shown_b);
+    assert_eq!(s.selection.side(), Side::B);
+    assert_eq!(s.selection.primary().cloned(), Some(NodeId::from(step)));
+    // At the last operator the page is whole: step back and the picture is cut.
+    harness.key_press(egui::Key::Home);
+    settle(&mut harness);
+    let s = state(&harness);
+    assert_eq!(s.canvas.view.step.ix, 0);
+    assert_ne!(digest_shown(&harness), whole, "B is cut at its first operator");
+    // The page's operators, counted as the line counts them: the last one's index plus one.
+    let page_ops = s
+        .doc_of(Side::B)
+        .unwrap()
+        .captured(s.canvas.view.step.page)
+        .unwrap()
+        .ops
+        .last()
+        .unwrap()
+        .ix
+        + 1;
+    let texts = painted_texts(&harness);
+    assert!(texts.contains(&stepped_label(Side::B, 0, page_ops)), "{texts:?}");
+    assert!(texts.contains(&whole_label(Side::A)), "{texts:?}");
+    // What B still has to paint is outlined, with the label of the first box.
+    assert!(
+        texts.iter().any(|t| t.starts_with("not painted yet · ops 1–")),
+        "{texts:?}"
+    );
+
+    // The drawer's A | B switch moves the stepper over to A, on A's page.
+    the(&harness, Region::Drawer, Role::Button, "A").click();
+    settle(&mut harness);
+    let s = state(&harness);
+    assert_eq!(s.stepped_side(), Side::A);
+    assert_eq!(
+        s.diff.as_ref().unwrap().active,
+        Side::A,
+        "one state with the canvas switch"
+    );
+    assert_eq!(s.selection.side(), Side::A);
+    let texts = painted_texts(&harness);
+    assert!(texts.contains(&whole_label(Side::B)), "{texts:?}");
+
+    // Smoke: ending the comparison while stepping B turns the stepper off, A stays stepped.
+    harness.state_mut().state.set_stepped_side(Side::B);
+    harness.state_mut().state.end_diff();
+    assert!(!state(&harness).canvas.view.stepper);
+}

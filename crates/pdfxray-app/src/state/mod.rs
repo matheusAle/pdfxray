@@ -57,7 +57,7 @@ pub use tables::{TableContext, TableData};
 use self::derived::Derived;
 use crate::instances::{Spawner, native_spawner};
 use crate::modes::RenderRequest;
-use crate::open::{FilePicker, Opener, native_picker};
+use crate::open::{FilePicker, Opener, SavePicker, native_picker, native_save_picker};
 use crate::page_cache::{Frame, PageCache};
 use crate::previews::{PreviewFrame, Previews};
 use crate::recents::{Clock, Recent, Recents, RecentsError, unix_now};
@@ -140,6 +140,8 @@ pub struct AppState {
     pub canvas: CanvasState,
     /// Asked for a path when "Open…" is pressed.
     pub picker: FilePicker,
+    /// Asked where to write a file: *Save image…*.
+    pub save_picker: SavePicker,
     /// Starts a new window (a new process) when one is needed; see [`crate::instances`].
     pub spawner: Spawner,
     /// The operating system's menu bar has New Window, Open…, Close Window and Quit with their
@@ -185,6 +187,7 @@ impl Default for AppState {
             drawer: DrawerState::default(),
             canvas: CanvasState::default(),
             picker: native_picker(),
+            save_picker: native_save_picker(),
             spawner: native_spawner(),
             native_menu: false,
             opening: Opener::default(),

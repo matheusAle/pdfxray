@@ -197,6 +197,7 @@ fn right_click_on_a_tags_row_lists_the_actions_and_show_in_tree_and_object_work(
         [
             "Isolate",
             "Hide",
+            "Go to paint order",
             "Show in tree",
             "Object",
             "Raw bytes",
@@ -241,7 +242,17 @@ fn right_click_on_a_content_row_lists_the_actions_of_the_operator() {
         .query_all_by_role(Role::MenuItem)
         .filter_map(|n| n.accesskit_node().label())
         .collect();
-    assert_eq!(items, ["Isolate", "Hide", "Show in tree", "Copy id", "Copy JSON"]);
+    assert_eq!(
+        items,
+        [
+            "Isolate",
+            "Hide",
+            "Go to paint order",
+            "Show in tree",
+            "Copy id",
+            "Copy JSON"
+        ]
+    );
 
     harness.get_by_role_and_label(Role::MenuItem, "Isolate").click();
     harness.run_steps(3);

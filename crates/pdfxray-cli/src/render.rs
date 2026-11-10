@@ -448,6 +448,7 @@ fn against(args: &RenderArgs, doc_a: &Document, file_b: &PathBuf) -> anyhow::Res
         },
         registration,
         comparator: Comparator::SameEngine(args.visual.perceptual()),
+        step: None,
     };
     let mut picture = composite::composite((doc_a, page_a), (&doc_b, page_b), &request)?;
 

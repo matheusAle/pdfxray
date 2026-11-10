@@ -249,6 +249,19 @@ impl DiffSession {
         }
     }
 
+    /// Shows the page pair that holds page `page` of `side`, when the pairing has one.
+    pub fn show_page_of(&mut self, side: Side, page: PageIx) {
+        let found = self.pairing().and_then(|pairing| {
+            pairing.pages.iter().position(|m| match side {
+                Side::A => m.a == Some(page),
+                Side::B => m.b == Some(page),
+            })
+        });
+        if let Some(index) = found {
+            self.page = index;
+        }
+    }
+
     /// The selected pair.
     pub fn selected(&self) -> Option<&Pair> {
         self.pairing()?.pairs.get(self.selected?)
@@ -726,8 +739,11 @@ impl AppState {
         }
     }
 
-    /// Ends the comparison: A stays open.
+    /// Ends the comparison: A stays open. A stepper on B stops, as B is gone.
     pub fn end_diff(&mut self) {
+        if self.stepped_side() == Side::B {
+            self.set_stepper(false);
+        }
         self.diff = None;
         self.drawer.hit_stack = None;
         if self.nav.rail == super::RailItem::Changes {

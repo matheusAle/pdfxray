@@ -406,3 +406,42 @@ fn the_breadcrumb_stays_on_one_line_and_folds_its_middle_when_it_is_long() {
             .any(|(name, _)| name == pdfxray_app::components::crumb::MORE)
     );
 }
+
+#[test]
+fn the_page_bbox_is_a_row_per_coordinate_named_for_its_edge() {
+    use pdfxray_app::inspector::geometry::{BBOX_KEYS, BBOX_LABEL, bbox_note};
+
+    let figure = NodeId::StructElem(ObjRef::new(11, 0));
+    let harness = opened("reading-order", "Tags", &figure);
+    let doc = pdfxray_core::Document::open(common::fixture_path("reading-order")).unwrap();
+    let (_, rect) = doc.bbox(&figure).unwrap();
+    let rows: Vec<String> = harness
+        .get_all_by_role(Role::ListItem)
+        .filter_map(|n| n.accesskit_node().label())
+        .filter(|name| BBOX_KEYS.iter().any(|key| name.starts_with(key)))
+        .collect();
+
+    // In the order of `[x0 y0 x1 y1]`, each number on its own row; 40 and 140 are whole points.
+    let number = |v: f64| {
+        let text = format!("{v:.2}");
+        text.trim_end_matches('0').trim_end_matches('.').to_owned()
+    };
+    assert_eq!(
+        rows,
+        [
+            format!("x0 · left: {}", number(rect.x0)),
+            format!("y0 · bottom: {}", number(rect.y0)),
+            format!("x1 · right: {}", number(rect.x1)),
+            format!("y1 · top: {}", number(rect.y1)),
+        ]
+    );
+    assert_eq!(rows[0], "x0 · left: 40");
+    // The label says the order and the unit; there is no one-line array any more.
+    let all = labels(&harness);
+    assert!(all.contains(&BBOX_LABEL.to_owned()), "{all:?}");
+    assert!(all.contains(&bbox_note("pt")), "{all:?}");
+    assert!(
+        !all.iter()
+            .any(|t| t.starts_with('[') && t.contains(' ') && t.ends_with(']') && t.len() > 8)
+    );
+}

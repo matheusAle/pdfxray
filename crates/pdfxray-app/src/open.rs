@@ -33,6 +33,23 @@ pub fn native_picker() -> FilePicker {
     })
 }
 
+/// Asks the user where to save a file and returns the path, or `None` when they cancel. It is
+/// given the name to suggest, e.g. `image-5-0.png`.
+///
+/// The native dialog is [`native_save_picker`]; tests inject a closure that returns a path.
+pub type SavePicker = Box<dyn FnMut(&str) -> Option<PathBuf>>;
+
+/// The operating system's Save dialog for a PNG, suggesting `name`.
+pub fn native_save_picker() -> SavePicker {
+    Box::new(|name| {
+        rfd::FileDialog::new()
+            .set_title("Save Image")
+            .set_file_name(name)
+            .add_filter("PNG image", &["png"])
+            .save_file()
+    })
+}
+
 /// How long the Opening card waits before it shows, so a quick open does not flash it.
 pub const CARD_DELAY: Duration = Duration::from_millis(150);
 

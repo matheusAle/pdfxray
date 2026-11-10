@@ -67,7 +67,27 @@ impl Unit {
     pub fn format(self, points: f64) -> String {
         format!("{} {}", self.number(points), self.label())
     }
+
+    /// Like [`Self::format`], but a length under one unit keeps [`PRECISE_DECIMALS`] digits, so
+    /// a fraction of a point does not round to nothing: `0.0042 pt`, `12.5 pt`.
+    pub fn precise(self, points: f64) -> String {
+        format!("{} {}", self.precise_number(points), self.label())
+    }
+
+    /// [`Self::precise`] without the unit name, e.g. `0.0042`.
+    pub fn precise_number(self, points: f64) -> String {
+        let value = self.from_points(points);
+        let decimals = if value.abs() < 1.0 {
+            PRECISE_DECIMALS
+        } else {
+            self.decimals()
+        };
+        trim(value, decimals)
+    }
 }
+
+/// Digits [`Unit::precise`] keeps for a length under one unit.
+pub const PRECISE_DECIMALS: usize = 4;
 
 /// Formats lengths of one page: user-space units are scaled by its `/UserUnit` to points and
 /// then shown in the chosen [`Unit`].
@@ -93,6 +113,17 @@ impl Lengths {
     /// A user-space length with its unit, e.g. `17.64 mm`.
     pub fn format(&self, user: f64) -> String {
         self.unit.format(self.points(user))
+    }
+
+    /// A user-space length with its unit, small ones kept to [`PRECISE_DECIMALS`] digits, e.g.
+    /// `0.0042 pt` (see [`Unit::precise`]).
+    pub fn precise(&self, user: f64) -> String {
+        self.unit.precise(self.points(user))
+    }
+
+    /// [`Self::precise`] without the unit name.
+    pub fn precise_number(&self, user: f64) -> String {
+        self.unit.precise_number(self.points(user))
     }
 
     /// A user-space length without its unit, e.g. `17.64`.

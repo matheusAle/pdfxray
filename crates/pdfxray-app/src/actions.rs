@@ -20,6 +20,8 @@ pub enum Action {
     Isolate,
     /// Paint everything except the node's content.
     Hide,
+    /// Turn the paint-order stepper on at the node's first painting operator.
+    PaintOrder,
     /// Select the node in the navigator that lists it.
     ShowInTree,
     /// Open the object behind the node in the object view.
@@ -28,6 +30,8 @@ pub enum Action {
     RawBytes,
     /// The raw view with the stream's data marked.
     StreamBytes,
+    /// Write the image behind the node to a PNG file.
+    SaveImage,
     /// Copy the node's id (`struct:14:0`).
     CopyId,
     /// Copy everything the inspector shows about the node, as JSON.
@@ -36,13 +40,15 @@ pub enum Action {
 
 impl Action {
     /// Every action, in menu order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 10] = [
         Self::Isolate,
         Self::Hide,
+        Self::PaintOrder,
         Self::ShowInTree,
         Self::Object,
         Self::RawBytes,
         Self::StreamBytes,
+        Self::SaveImage,
         Self::CopyId,
         Self::CopyJson,
     ];
@@ -52,12 +58,23 @@ impl Action {
         match self {
             Self::Isolate => "Isolate",
             Self::Hide => "Hide",
+            Self::PaintOrder => "Go to paint order",
             Self::ShowInTree => "Show in tree",
             Self::Object => "Object",
             Self::RawBytes => "Raw bytes",
             Self::StreamBytes => "Stream bytes",
+            Self::SaveImage => "Save image…",
             Self::CopyId => "Copy id",
             Self::CopyJson => "Copy JSON",
+        }
+    }
+
+    /// The name on the selection bar, where room is short: `Paint order` for
+    /// [`Self::PaintOrder`], else [`Self::label`].
+    pub const fn short_label(self) -> &'static str {
+        match self {
+            Self::PaintOrder => "Paint order",
+            _ => self.label(),
         }
     }
 
@@ -66,9 +83,11 @@ impl Action {
         match self {
             Self::Isolate => Icon::Isolate,
             Self::Hide => Icon::Hide,
+            Self::PaintOrder => Icon::PaintOrder,
             Self::ShowInTree => Icon::Tags,
             Self::Object => Icon::Braces,
             Self::RawBytes | Self::StreamBytes => Icon::Bytes,
+            Self::SaveImage => Icon::Download,
             Self::CopyId | Self::CopyJson => Icon::Copy,
         }
     }
@@ -88,9 +107,19 @@ impl Action {
             .into_iter()
             .filter(|action| match action {
                 Self::Isolate | Self::Hide => paints(id),
+                // Hidden where it would do nothing: no painting operator, or the stepper is
+                // already there.
+                Self::PaintOrder => {
+                    let view = &state.canvas.view;
+                    paints(id)
+                        && state
+                            .paint_order_start(id)
+                            .is_some_and(|at| !(view.stepper && at == view.step))
+                }
                 Self::ShowInTree => tree_of(id).is_some(),
                 Self::Object | Self::RawBytes => object_of(state, id).is_some(),
                 Self::StreamBytes => stream_range(state, id).is_some(),
+                Self::SaveImage => state.image_object(id).is_some(),
                 Self::CopyId => true,
                 Self::CopyJson => has_props(state, id),
             })
@@ -274,6 +303,9 @@ pub fn run(state: &mut AppState, ctx: &Context, id: &NodeId, action: Action) {
             };
             state.toggle_isolation(mode);
         }
+        Action::PaintOrder => {
+            state.go_to_paint_order(id);
+        }
         Action::ShowInTree => {
             if let Some(rail) = tree_of(id) {
                 state.set_rail(rail);
@@ -292,6 +324,11 @@ pub fn run(state: &mut AppState, ctx: &Context, id: &NodeId, action: Action) {
         Action::StreamBytes => {
             if let Some(range) = stream_range(state, id) {
                 state.show_bytes(range);
+            }
+        }
+        Action::SaveImage => {
+            if let Some(image) = state.image_object(id) {
+                state.save_image(image);
             }
         }
         Action::CopyId => ctx.copy_text(id.to_string()),
@@ -347,13 +384,18 @@ mod tests {
             [
                 "Isolate",
                 "Hide",
+                "Go to paint order",
                 "Show in tree",
                 "Object",
                 "Raw bytes",
                 "Stream bytes",
+                "Save image…",
                 "Copy id",
                 "Copy JSON"
             ]
         );
+        // The selection bar's short name, and the menus' full one.
+        assert_eq!(Action::PaintOrder.short_label(), "Paint order");
+        assert_eq!(Action::Hide.short_label(), Action::Hide.label());
     }
 }

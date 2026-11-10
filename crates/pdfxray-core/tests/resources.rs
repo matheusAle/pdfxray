@@ -986,3 +986,18 @@ fn every_tree_entry_resolves_to_props() {
         "building the tree is deterministic"
     );
 }
+
+#[test]
+fn a_do_resolves_to_the_xobject_it_paints_in_the_resources_its_stream_reads() {
+    let doc = fixture("images");
+
+    // op 2: the page paints /Im1; op 10 the form /Fm1; op 13, inside the form, /Im1 again from
+    // the form's own resources: the same image object.
+    assert_eq!(doc.xobject_of_op(0, 2), Some(obj(5)));
+    assert_eq!(doc.xobject_of_op(0, 10), Some(obj(6)));
+    assert_eq!(doc.xobject_of_op(0, 13), Some(obj(5)));
+    // Smoke: an inline image and an operator that is not Do paint no XObject.
+    assert_eq!(doc.xobject_of_op(0, 6), None);
+    assert_eq!(doc.xobject_of_op(0, 0), None);
+    assert_eq!(doc.xobject_of_op(0, 999), None);
+}
