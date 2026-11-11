@@ -1,0 +1,42 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 80] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 314 >>
+stream
+
+0.18 0.44 0.71 rg
+10.3 52.35 60 18.4 re f
+70.3 52.35 60 18.4 re f
+0 0 0 RG
+0.4 w
+10.3 44.6 m 190.3 44.6 l S
+0.12 0.13 0.15 rg
+BT /F1 7.3 Tf 10.4 30.37 Td (Revenue grew in every region; costs fell in two of them.) Tj ET
+BT /F1 7.3 Tf 10.4 18.37 Td (illillillillillillillillillillillillillillillillillillill) Tj ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000240 00000 n 
+0000000605 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+675
+%%EOF

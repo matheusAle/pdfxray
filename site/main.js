@@ -217,6 +217,80 @@
   fit();
   addEventListener('resize', fit);
 
+  // Windows viewers and screens: the popover's controls swap in pdfxray's real renders of the test page.
+  const emu = document.querySelector('.emu-demo');
+  if (emu) {
+    // Measured from the renders: the 0.4 pt rule's pixel rows (ink %), and where the narrow run ends (px).
+    const M = {
+      96: { size: '266 × 106', rule: { pdfium: [30, 70], acrobat: [100] }, run: { pdfium: 136, acrobat: 127 } },
+      120: { size: '333 × 133', rule: { pdfium: [50, 50], acrobat: [100] }, run: { pdfium: 170, acrobat: 186 } },
+      144: { size: '400 × 160', rule: { pdfium: [70, 30], acrobat: [100] }, run: { pdfium: 204, acrobat: 191 } },
+    };
+    const NAME = { pdfxray: 'pdfxray', chrome: 'Chrome', edge: 'Edge', acrobat: 'Acrobat' };
+    const WHY = {
+      pdfxray: 'pdfxray’s own rounding, on the emulated screen’s pixels.',
+      pdfium: 'PDFium: each glyph starts on a whole pixel, rectangular clips grow out to whole pixels, upright images cover a whole number of pixels. No snapping, no fill overlap, no stroke adjustment.',
+      acrobat: 'Adobe’s engine: coordinates within 0.0001 px snap to the pixel, fills overlap 0.01 px, every stroke is a whole number of pixels (at least one), and each glyph advance is rounded, so long runs drift.',
+    };
+    const state = { viewer: 'acrobat', dpi: '120' };
+    const $ = (id) => document.getElementById(id);
+    const render = () => {
+      const { viewer, dpi } = state;
+      const m = M[dpi];
+      const eng = viewer === 'acrobat' ? 'acrobat' : 'pdfium';
+      const pct = { 96: 100, 120: 125, 144: 150 }[dpi];
+      const img = $('emu-img');
+      img.src = `img/emu/${viewer}-${dpi}.png?v=1`;
+      img.alt = `Part of a test page drawn as ${NAME[viewer]} on a ${pct} % screen, magnified so each device pixel shows`;
+      $('emu-read').textContent = `${(dpi / 72).toFixed(3)} device px per pt · page ${m.size} px`;
+      $('emu-why').textContent = WHY[viewer === 'pdfxray' ? 'pdfxray' : eng];
+      $('emu-sb').textContent = viewer === 'pdfxray' ? `pdfxray · 1920×1080 · ${dpi} DPI · 100%` : `${NAME[viewer]} · 1920×1080 · ${dpi} DPI · 100%`;
+      const rows = m.rule[eng];
+      $('emu-rule').textContent = rows.length === 1
+        ? 'One solid black pixel row: Acrobat makes every stroke a whole number of pixels.'
+        : `Two grey pixel rows, ${rows[0]} % and ${rows[1]} % ink: the line lands between pixels and nothing moves it.`;
+      const d = m.run.acrobat - m.run.pdfium;
+      $('emu-run').textContent = eng === 'acrobat'
+        ? `Ends ${Math.abs(d)} px ${d > 0 ? 'later' : 'earlier'} than in Chrome: each advance is rounded, and the error adds up.`
+        : `Ends ${m.run.pdfium} px in, where its advances add up to. The same run ends ${Math.abs(d)} px ${d > 0 ? 'later' : 'earlier'} in Acrobat.`;
+      for (const g of emu.querySelectorAll('[data-emu]')) {
+        for (const b of g.querySelectorAll('button')) {
+          const on = b.dataset.v === state[g.dataset.emu];
+          b.setAttribute('aria-checked', on);
+          b.tabIndex = on ? 0 : -1;
+        }
+      }
+    };
+    // The facts are announced only for the reader's own changes, never for the automatic flip.
+    let touched = false;
+    const stop = () => { touched = true; emu.querySelector('.emu-facts').setAttribute('aria-live', 'polite'); };
+    emu.addEventListener('pointerenter', stop);
+    emu.addEventListener('focusin', stop);
+    for (const g of emu.querySelectorAll('[data-emu]')) {
+      const btns = [...g.querySelectorAll('button')];
+      btns.forEach((b, i) => {
+        b.addEventListener('click', () => { stop(); state[g.dataset.emu] = b.dataset.v; render(); });
+        b.addEventListener('keydown', (e) => {
+          const d = ['ArrowRight', 'ArrowDown'].includes(e.key) ? 1 : ['ArrowLeft', 'ArrowUp'].includes(e.key) ? -1 : 0;
+          if (!d) return;
+          e.preventDefault();
+          const n = btns[(i + d + btns.length) % btns.length];
+          n.focus(); n.click();
+        });
+      });
+    }
+    for (const v of ['pdfxray', 'chrome', 'edge', 'acrobat']) for (const d of [96, 120, 144]) { const im = new Image(); im.src = `img/emu/${v}-${d}.png?v=1`; }
+    render();
+    // While on screen and untouched, flip between Chrome and Acrobat so the difference shows itself.
+    if (!reduce) {
+      let t;
+      new IntersectionObserver(([e]) => {
+        clearInterval(t);
+        if (e.isIntersecting) t = setInterval(() => { if (touched) return clearInterval(t); state.viewer = state.viewer === 'acrobat' ? 'chrome' : 'acrobat'; render(); }, 2200);
+      }, { threshold: 0.5 }).observe(emu);
+    }
+  }
+
   // Inertial wheel scrolling: wheel notches glide instead of jumping, so every scroll-linked
   // animation moves continuously too. Touch, keyboard, scrollbar and anchor jumps stay native.
   if (!reduce) {
