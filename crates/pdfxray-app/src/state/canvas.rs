@@ -263,8 +263,8 @@ impl AppState {
     }
 
     /// Settles a wheel or pinch zoom on an emulated screen on its nearest whole-pixel step,
-    /// [`ZOOM_SETTLE`] seconds after it last moved. Returns where the pointer was, to anchor the
-    /// settling there; `None` while there is nothing to settle yet.
+    /// 0.15 seconds (`ZOOM_SETTLE`) after it last moved. Returns where the pointer was, to
+    /// anchor the settling there; `None` while there is nothing to settle yet.
     pub fn settle_zoom(&mut self, now: f64) -> Option<Vec2> {
         let (at, anchor) = self.canvas.zoom_settle?;
         if now - at < ZOOM_SETTLE {
