@@ -255,6 +255,7 @@ fn emulate_draws_the_page_on_the_device_pixels_of_the_emulated_screen() {
             "zoom": "150%",
             "zoom_percent": 150.0,
             "pixels_per_point": 2.5,
+            "acrobat": { "enhance_thin_lines": true, "line_weights": true },
         })
     );
     assert_eq!(
@@ -276,6 +277,29 @@ fn emulate_draws_the_page_on_the_device_pixels_of_the_emulated_screen() {
     assert_eq!(fitted["emulation"]["viewer"], serde_json::Value::Null);
     assert_eq!(fitted["emulation"]["zoom"], "fit width");
     assert_eq!(fitted["emulation"]["zoom_percent"], 250.0);
+    // Acrobat's preferences turn off one by one.
+    let plain = render_report(
+        "minimal-one-page",
+        &[
+            "0",
+            "--emulate",
+            "acrobat",
+            "--no-enhance-thin-lines",
+            "--no-line-weights",
+        ],
+        &out_path("render-acrobat-plain.png"),
+    );
+    assert_eq!(
+        plain["emulation"]["acrobat"],
+        serde_json::json!({ "enhance_thin_lines": false, "line_weights": false })
+    );
+    // Chrome has no such preferences to report.
+    let chrome = render_report(
+        "minimal-one-page",
+        &["0", "--emulate", "chrome"],
+        &out_path("render-chrome.png"),
+    );
+    assert_eq!(chrome["emulation"].get("acrobat"), None);
     // Smoke: without the flags the report has no emulation.
     let plain = render_report("minimal-one-page", &["0"], &out_path("render-plain.png"));
     assert_eq!(plain.get("emulation"), None);
@@ -304,6 +328,10 @@ fn emulation_refuses_a_scale_a_comparison_and_values_out_of_range() {
     refused(&["--screen", "1920"], "write it as WIDTHxHEIGHT, e.g. 1920x1080");
     refused(&["--zoom", "0"], "`0` is not a zoom");
     refused(&["--dpi", "20"], "48..=480");
+    refused(
+        &["--emulate", "chrome", "--no-line-weights"],
+        "they need --emulate acrobat",
+    );
     // Smoke: a viewer clap does not know.
     refused(&["--emulate", "safari"], "possible values: chrome, edge, acrobat");
 }

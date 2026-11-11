@@ -14,9 +14,11 @@ use egui_kittest::kittest::Queryable;
 use pdfxray_app::PdfxrayApp;
 use pdfxray_app::emulation::OFF_TEXT;
 use pdfxray_app::modes::Pixels;
-use pdfxray_app::shell::display::{COMPARING_NOTE, DISPLAY_LABEL, EMULATE_LABEL, item_text};
+use pdfxray_app::shell::display::{
+    COMPARING_NOTE, DISPLAY_LABEL, EMULATE_LABEL, ENHANCE_LABEL, LINE_WEIGHTS_LABEL, item_text,
+};
 use pdfxray_core::Document;
-use pdfxray_render::{Display, Emulation, RenderSpec, Viewer, ViewerZoom, render_page};
+use pdfxray_render::{AcrobatPrefs, Display, Emulation, RenderSpec, Viewer, ViewerZoom, render_page};
 use pretty_assertions::assert_eq;
 
 /// The digest of page 0 of `fixture` drawn on `emulation`'s screen, as its viewer rounds.
@@ -25,6 +27,7 @@ fn emulated_digest(fixture: &str, emulation: Emulation) -> u64 {
     let size = pdfxray_render::page_dimensions(&doc, 0).unwrap();
     let spec = RenderSpec {
         viewer: emulation.viewer,
+        acrobat: emulation.acrobat,
         ..RenderSpec::new(emulation.scale_for(size))
     };
     pdfxray_app::pixel_digest(&render_page(&doc, 0, &spec).unwrap().rgba)
@@ -52,6 +55,7 @@ fn the_display_item_draws_the_page_on_an_emulated_windows_screen() {
         viewer: Some(Viewer::Chrome),
         display: Display::default(),
         zoom: ViewerZoom::Percent(100),
+        acrobat: AcrobatPrefs::default(),
     };
     let state = &harness.state().state;
     assert_eq!(item_text(state), "Chrome · 1920×1080 · 96 DPI · 100%");
@@ -64,6 +68,24 @@ fn the_display_item_draws_the_page_on_an_emulated_windows_screen() {
         has_label(&harness, "1.333 device px per pt · page 266 × 133 px"),
         "the popover says what the screen does to the page"
     );
+
+    // ⌘0 is 1×: each device pixel one display pixel, the page as wide as its 266 px bitmap.
+    harness.state_mut().state.set_zoom(1.0);
+    harness.run();
+    let ppp = harness.ctx.pixels_per_point();
+    let unit = 96.0 / 72.0 / ppp;
+    assert!((harness.state().state.canvas.zoom - unit).abs() < 1e-4);
+    let shown = |h: &Harness<'_, PdfxrayApp>| {
+        h.get_by_role_and_label(Role::Image, "Page 1 canvas")
+            .rect()
+            .width()
+            * ppp
+    };
+    assert!((shown(&harness) - 266.0).abs() < 0.01, "{}", shown(&harness));
+    // Zooming in goes to 2×: every device pixel two display pixels.
+    harness.state_mut().state.zoom_in();
+    harness.run_steps(30);
+    assert!((shown(&harness) - 532.0).abs() < 0.01, "{}", shown(&harness));
 
     // Acrobat at 150 % scaling.
     click(&mut harness, Role::Button, "Acrobat");
@@ -84,8 +106,27 @@ fn the_display_item_draws_the_page_on_an_emulated_windows_screen() {
     );
     assert_eq!(digest(&harness), emulated_digest("minimal-one-page", acrobat));
     assert!(has_label(&harness, "2 device px per pt · page 400 × 200 px"));
+    // Acrobat's thin-line preferences show for Acrobat, both on as it starts.
+    assert!(common::is_selected(
+        &harness.get_by_role_and_label(Role::Switch, LINE_WEIGHTS_LABEL)
+    ));
+    assert!(common::is_selected(
+        &harness.get_by_role_and_label(Role::Switch, ENHANCE_LABEL)
+    ));
+    click(&mut harness, Role::Switch, ENHANCE_LABEL);
+    wait_for_render(&mut harness);
+    let acrobat = Emulation {
+        acrobat: AcrobatPrefs {
+            enhance_thin_lines: false,
+            line_weights: true,
+        },
+        ..acrobat
+    };
+    assert_eq!(digest(&harness), emulated_digest("minimal-one-page", acrobat));
 
-    // Smoke: off again, the page is back on the Mac's pixels and the settings are kept.
+    // Smoke: off again (and fitting, as at first), the page is back on the Mac's pixels and
+    // the settings are kept.
+    harness.state_mut().state.fit_page();
     click(&mut harness, Role::Switch, EMULATE_LABEL);
     wait_for_render(&mut harness);
     let state = &harness.state().state;

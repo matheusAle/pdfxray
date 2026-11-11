@@ -6,6 +6,7 @@ use pdfxray_core::PageIx;
 
 use super::PointerOutput;
 use crate::state::AppState;
+use crate::state::canvas::ZOOM_SETTLE;
 
 /// Turns what the pointer did on `page` into measure tool and hit stack updates. A page the user
 /// acts on becomes the current page.
@@ -63,16 +64,26 @@ pub(super) fn apply_pointer(state: &mut AppState, page: PageIx, output: &Pointer
 /// egui turns the wheel into a factor that is exponential in the wheel's delta and spreads a
 /// notch of a mouse wheel over a few frames, so each frame zooms by a little. The scroll delta
 /// of those frames is taken too: the pages must not scroll while they zoom.
+///
+/// On an emulated screen the zoom follows the hand too, then settles on the nearest whole-pixel
+/// step a moment after it stops, anchored where the pointer was.
 pub(super) fn apply_wheel_zoom(ui: &Ui, state: &mut AppState) -> Option<Vec2> {
+    let now = ui.input(|input| input.time);
     let pointer = ui
         .ctx()
         .pointer_hover_pos()
-        .filter(|_| ui.rect_contains_pointer(ui.max_rect()))?;
+        .filter(|_| ui.rect_contains_pointer(ui.max_rect()));
     let delta = ui.input(egui::InputState::zoom_delta);
-    if (delta - 1.0).abs() <= f32::EPSILON {
-        return None;
-    }
+    let Some(pointer) = pointer.filter(|_| (delta - 1.0).abs() > f32::EPSILON) else {
+        let settled = state.settle_zoom(now);
+        if state.canvas.zoom_settle.is_some() {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_secs_f64(ZOOM_SETTLE));
+        }
+        return settled;
+    };
     ui.input_mut(|input| input.smooth_scroll_delta = Vec2::ZERO);
-    state.set_zoom(state.canvas.zoom * delta);
-    Some(pointer - ui.max_rect().min)
+    let anchor = pointer - ui.max_rect().min;
+    state.wheel_zoom(delta, now, anchor);
+    Some(anchor)
 }

@@ -2,10 +2,10 @@
 //! screen's, and the popover that sets the emulated screen: its viewer, size, scaling and zoom.
 
 use egui::{Align, DragValue, Layout, RectAlign, RichText, Ui};
-use pdfxray_render::{Display, Viewer, ViewerZoom};
+use pdfxray_render::{AcrobatPrefs, Display, Viewer, ViewerZoom};
 
 use crate::components::segmented::segmented_compact;
-use crate::components::{Icon, Segment, popover, switch};
+use crate::components::{Icon, Segment, popover, switch, tooltip};
 use crate::emulation::{
     DPI_RANGE, OFF_TEXT, SCALINGS, SCREENS, SIDE_RANGE, ZOOM_RANGE, dpi_of, rounding_text, scale_text,
     summary,
@@ -30,6 +30,15 @@ pub const SCALING_LABEL: &str = "Scaling";
 
 /// The row that sets the viewer's zoom.
 pub const ZOOM_LABEL: &str = "Zoom";
+
+/// Acrobat's row of preferences.
+pub const ACROBAT_LABEL: &str = "Acrobat";
+
+/// Acrobat's *Enhance thin lines* preference.
+pub const ENHANCE_LABEL: &str = "Enhance thin lines";
+
+/// Acrobat's *Line Weights* preference (Ctrl+5).
+pub const LINE_WEIGHTS_LABEL: &str = "Line weights";
 
 /// What the popover says while comparing, whose pages are drawn on this Mac's pixels.
 pub const COMPARING_NOTE: &str = "A comparison is drawn on this Mac's pixels.";
@@ -80,6 +89,9 @@ fn body(ui: &mut Ui, state: &mut AppState) {
         row(ui, SCREEN_LABEL, |ui| screen(ui, &mut settings.display));
         row(ui, SCALING_LABEL, |ui| scaling(ui, &mut settings.display));
         row(ui, ZOOM_LABEL, |ui| zoom(ui, &mut settings.zoom));
+        if settings.viewer == Some(Viewer::Acrobat) {
+            row(ui, ACROBAT_LABEL, |ui| acrobat(ui, &mut settings.acrobat));
+        }
     });
     let settings = state.screen.settings;
     let page = state.canvas.page;
@@ -163,6 +175,17 @@ fn scaling(ui: &mut Ui, display: &mut Display) {
         .collect();
     segmented_compact(ui, &mut display.dpi, &segments);
     ui.add(DragValue::new(&mut display.dpi).range(DPI_RANGE).suffix(" DPI"));
+}
+
+/// Acrobat's Page Display preferences that change thin lines.
+fn acrobat(ui: &mut Ui, prefs: &mut AcrobatPrefs) {
+    let enhance = switch(ui, &mut prefs.enhance_thin_lines, ENHANCE_LABEL);
+    tooltip::text(enhance, "A stroke under 1 pt is a solid 1 px black line");
+    let weights = switch(ui, &mut prefs.line_weights, LINE_WEIGHTS_LABEL);
+    tooltip::text(
+        weights,
+        "Strokes at their own width (Ctrl+5); off, every stroke is 1 px",
+    );
 }
 
 fn zoom(ui: &mut Ui, zoom: &mut ViewerZoom) {

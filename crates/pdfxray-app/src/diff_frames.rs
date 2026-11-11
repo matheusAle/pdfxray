@@ -22,9 +22,9 @@ use egui::{ColorImage, Context, TextureHandle, TextureOptions};
 use pdfxray_core::diff::Side;
 use pdfxray_core::numeric::usize_from_u32;
 use pdfxray_core::{Document, PageIx};
-use pdfxray_render::composite::{self, Comparator, Composite, CompositeError, Fit, Mode, Request};
+use pdfxray_render::composite::{self, Comparator, Composite, CompositeError, Fit, Mode, Request, Steps};
 use pdfxray_render::score::VisualScore;
-use pdfxray_render::{ContentFilter, RenderSpec, Transform, render_page};
+use pdfxray_render::{RenderSpec, Transform, render_page};
 
 use crate::page_cache::pixel_digest;
 use crate::view::ScaleKey;
@@ -48,8 +48,8 @@ pub(crate) struct PictureKey {
     pub(crate) scale: ScaleKey,
     /// What to do about differing page geometry.
     pub(crate) fit: Fit,
-    /// The paint-order stepper's cut: that side's page painted up to this operator.
-    pub(crate) step: Option<(Side, u32)>,
+    /// The paint-order stepper's cuts: each side's page painted up to its operator.
+    pub(crate) steps: Steps,
 }
 
 /// Where the sides landed on a picture.
@@ -270,7 +270,7 @@ fn draw(ctx: &Context, a: &Document, b: &Document, key: PictureKey) -> Outcome {
                 fit: key.fit,
                 registration: None,
                 comparator: Comparator::same_engine(),
-                step: key.step,
+                steps: key.steps,
             };
             let mut picture = composite::composite((a, pa), (b, pb), &request).map_err(|e| match e {
                 CompositeError::Geometry(why) => Refusal::Geometry(why),
@@ -290,10 +290,7 @@ fn draw(ctx: &Context, a: &Document, b: &Document, key: PictureKey) -> Outcome {
             } else {
                 (Side::B, b)
             };
-            let content = match key.step {
-                Some((stepped, ix)) if stepped == side => ContentFilter::UpTo(ix),
-                _ => ContentFilter::All,
-            };
+            let content = key.steps.content(side);
             let spec = RenderSpec {
                 content,
                 ..RenderSpec::new(scale)

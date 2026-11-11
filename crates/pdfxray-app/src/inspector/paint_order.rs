@@ -65,11 +65,11 @@ pub fn visible_text(step: &PaintStep) -> String {
     }
 }
 
-/// True when the section is for `cx`'s node: the stepper is on and it is the operator it stopped
-/// at. The inspector shows nodes of A, so a comparison's stepper on B has no section.
+/// True when the section is for `cx`'s node: the stepper is on and it is the operator A's step
+/// stopped at. The section reads A's checks, so B's step has none.
 fn applies(cx: &Cx<'_>) -> bool {
     let view = &cx.state.canvas.view;
-    cx.state.stepped_side() == pdfxray_core::diff::Side::A
+    cx.state.selection.side() == pdfxray_core::diff::Side::A
         && matches!(cx.id, NodeId::Op { page, ix } if view.stepper && *page == view.step.page && *ix == view.step.ix)
 }
 

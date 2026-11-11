@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use pdfxray_core::{Document, HeaderScope, NodeId, ScopeSource};
 use pdfxray_render::annotate::{self, CONFLICT_RING, Grid, Palette, TagShow, TagView};
-use pdfxray_render::composite::{self, Comparator, CompositeError, Fit, Mode, Registration, Request};
+use pdfxray_render::composite::{self, Comparator, CompositeError, Fit, Mode, Registration, Request, Steps};
 use pdfxray_render::{Overlay, PixelGrid, RenderError, RenderSpec, render_page};
 use pretty_assertions::assert_eq;
 
@@ -27,7 +27,7 @@ fn request(mode: Mode) -> Request {
         fit: Fit::Refuse,
         registration: None,
         comparator: Comparator::same_engine(),
-        step: None,
+        steps: composite::Steps::NONE,
     }
 }
 
@@ -235,17 +235,17 @@ fn header_scopes_come_from_core_so_an_export_draws_the_conflict_ring() {
     clippy::cast_sign_loss,
     reason = "the pixel bounds of a small picture"
 )]
-fn a_step_cuts_the_page_of_its_side_and_leaves_the_other_whole() {
+fn each_side_is_cut_at_its_own_step() {
     // graphics-state paints on page 1 from op 3 on; with A cut before anything paints, the
     // left half of a side-by-side is a blank page and the right half is B whole.
     let doc = open("graphics-state");
     let whole = composite::composite((&doc, 0), (&doc, 0), &request(Mode::SideBySide)).unwrap();
-    let cut = |side| {
+    let cut = |steps: Steps| {
         composite::composite(
             (&doc, 0),
             (&doc, 0),
             &Request {
-                step: Some((side, 2)),
+                steps,
                 ..request(Mode::SideBySide)
             },
         )
@@ -261,13 +261,20 @@ fn a_step_cuts_the_page_of_its_side_and_leaves_the_other_whole() {
             .flat_map(|y| c.rgba[(y * width + x0) * 4..(y * width + x1) * 4].to_vec())
             .collect()
     };
-    let a_cut = cut(pdfxray_core::diff::Side::A);
-    let b_cut = cut(pdfxray_core::diff::Side::B);
+    let a_cut = cut(Steps { a: Some(2), b: None });
+    let b_cut = cut(Steps { a: None, b: Some(2) });
+    let both_cut = cut(Steps {
+        a: Some(2),
+        b: Some(2),
+    });
 
     assert_ne!(half(&a_cut, false), half(&whole, false), "A is cut");
     assert_eq!(half(&a_cut, true), half(&whole, true), "B stays whole");
     assert_eq!(half(&b_cut, false), half(&whole, false), "A stays whole");
     assert_ne!(half(&b_cut, true), half(&whole, true), "B is cut");
+    // Both cut at once: each half is its own cut.
+    assert_eq!(half(&both_cut, false), half(&a_cut, false), "A cut with B");
+    assert_eq!(half(&both_cut, true), half(&b_cut, true), "B cut with A");
     // Smoke: a blank page is one colour.
     let blank = half(&a_cut, false);
     assert!(

@@ -69,7 +69,7 @@ mod paint;
 mod path;
 mod rules;
 
-pub use rules::PixelRules;
+pub use rules::{DeviceStroke, PixelRules};
 
 pub(crate) struct GlobalState<'g> {
     level: Level,

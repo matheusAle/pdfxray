@@ -67,6 +67,7 @@ pub struct StepTrack<'a> {
     ticks: &'a [Tick],
     pages: &'a [PageMark],
     height: f32,
+    name: &'a str,
 }
 
 impl<'a> StepTrack<'a> {
@@ -78,7 +79,14 @@ impl<'a> StepTrack<'a> {
             ticks: &[],
             pages: &[],
             height: 24.0,
+            name: LABEL,
         }
+    }
+
+    /// The track's accessible name, when there is more than one: [`LABEL`] otherwise.
+    pub const fn name(mut self, name: &'a str) -> Self {
+        self.name = name;
+        self
     }
 
     /// Marks where each page starts, in track order; a band above the track holds their
@@ -123,7 +131,7 @@ impl<'a> StepTrack<'a> {
             vec2(ui.available_width(), self.height + band),
             Sense::click_and_drag(),
         );
-        response.widget_info(|| WidgetInfo::slider(true, f64::from(self.step), LABEL));
+        response.widget_info(|| WidgetInfo::slider(true, f64::from(self.step), self.name));
         let response = response.on_hover_cursor(CursorIcon::PointingHand);
         if ui.is_rect_visible(rect) {
             self.paint(ui, rect);

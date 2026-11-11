@@ -26,6 +26,7 @@ pub mod composite;
 mod diff;
 pub mod emulate;
 mod filter;
+mod hinting;
 mod overlay;
 #[cfg(feature = "pdfium")]
 pub mod pdfium;
@@ -50,7 +51,7 @@ use pdfxray_core::numeric::{u32_from_f32_trunc, usize_from_u32};
 use pdfxray_core::{Document, EngineError, PageIx, Point};
 
 pub use diff::{Diff, diff};
-pub use emulate::{Display, Emulation, Viewer, ViewerZoom};
+pub use emulate::{AcrobatPrefs, Display, Emulation, Viewer, ViewerZoom};
 pub use filter::{ContentFilter, ops_for, ops_for_all};
 pub use overlay::{Edge, Ink, Line, Overlay};
 pub use preview::{
@@ -82,6 +83,8 @@ pub struct RenderSpec {
     /// The viewer whose pixel rounding the page is drawn with; `None` is pdfxray's own. The
     /// scale is the caller's: see [`Emulation::scale_for`].
     pub viewer: Option<Viewer>,
+    /// Acrobat's thin-line preferences, for when the viewer is Acrobat.
+    pub acrobat: AcrobatPrefs,
 }
 
 impl RenderSpec {
@@ -94,6 +97,10 @@ impl RenderSpec {
             content: ContentFilter::All,
             grid: None,
             viewer: None,
+            acrobat: AcrobatPrefs {
+                enhance_thin_lines: true,
+                line_weights: true,
+            },
         }
     }
 }
@@ -301,7 +308,7 @@ fn rasterise_cached<'a>(
             &RenderSettings::default(),
             &mut ctx,
             forward,
-            viewer.rules(),
+            &viewer.rules(spec.acrobat),
         ),
         None => hayro::render_into(
             engine_page,

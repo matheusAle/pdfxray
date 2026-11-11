@@ -15,7 +15,7 @@ use crate::selection::node_page;
 use crate::state::AppState;
 use crate::state::canvas::Reveal;
 use crate::theme::{effects, motion};
-use crate::view::{ZoomMode, fit_zoom};
+use crate::view::{ZoomMode, fit_to_pixels, fit_zoom, snap_to_pixels};
 
 /// Size of a page whose dimensions cannot be read: US Letter, so it still takes its place.
 const FALLBACK_SIZE: Vec2 = vec2(612.0, 792.0);
@@ -64,16 +64,42 @@ pub(super) fn pages_view(
     let wheel_anchor = apply_wheel_zoom(ui, state);
     let current = state.canvas.page;
     let current_ix = usize::try_from(current).unwrap_or(0);
+    let emulation = state.emulation();
+    // On an emulated screen a page is as big as its bitmap, a whole number of device pixels:
+    // shown at a whole-pixel step, each device pixel then covers the same display pixels.
     let size_of = |page: usize| {
-        dims.get(page)
+        let size = dims
+            .get(page)
             .and_then(|d| d.as_ref().ok().copied())
-            .unwrap_or(FALLBACK_SIZE)
+            .unwrap_or(FALLBACK_SIZE);
+        emulation.map_or(size, |emulation| {
+            let scale = emulation.scale_for((size.x, size.y));
+            Vec2::new((size.x * scale).trunc() / scale, (size.y * scale).trunc() / scale)
+        })
     };
+    // On an emulated screen the zoom keeps to whole pixels of it (see `AppState::set_zoom`).
+    let unit = emulation.map(|emulation| {
+        let size = dims
+            .get(current_ix)
+            .and_then(|d| d.as_ref().ok().copied())
+            .unwrap_or(FALLBACK_SIZE);
+        emulation.scale_for((size.x, size.y)) / ui.ctx().pixels_per_point()
+    });
+    if unit != state.canvas.pixel_unit {
+        state.canvas.pixel_unit = unit;
+        state.canvas.zoom_settle = None;
+        if let Some(unit) = unit
+            && state.canvas.zoom_mode == ZoomMode::Manual
+        {
+            state.canvas.zoom = snap_to_pixels(state.canvas.zoom, unit);
+        }
+    }
     if state.canvas.zoom_mode == ZoomMode::Fit {
         // Fit the largest page in the view, with the gap around it: one zoom for the whole
         // scroll, so it does not jump between pages of different sizes.
         let largest = (0..dims.len()).map(size_of).fold(Vec2::ZERO, Vec2::max);
         let fitted = fit_zoom(largest, ui.available_size() - Vec2::splat(PAGE_GAP * 2.0));
+        let fitted = unit.map_or(fitted, |unit| fit_to_pixels(fitted, unit));
         if (fitted - state.canvas.zoom).abs() > f32::EPSILON {
             state.canvas.zoom = fitted;
             ui.ctx().request_repaint();

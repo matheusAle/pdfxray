@@ -6,6 +6,28 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 
 ## [Unreleased]
 
+### Added
+
+- **Thin lines as each viewer draws them.** Emulating Chrome or Edge, no stroke is under one
+  device pixel, a fill without area is a faint 1 px line, a dot of a segment still shows, and
+  tiny dash patterns draw solid. Emulating Acrobat, stroke adjustment makes a thin line 1 px or
+  2 px depending on where it falls, and its *Enhance thin lines* and *Line weights* preferences
+  are switches in the display popover (`--no-enhance-thin-lines`, `--no-line-weights` with
+  `pdfxray render --emulate acrobat`).
+- **Text is hinted as each viewer hints it**, so small text is as sharp as on that screen:
+  Acrobat with the font's own hints, Chrome and Edge with the autohinter.
+- While emulating, the canvas zoom moves in whole steps of the emulated pixels (½×, 1×, 2×…),
+  so they are never stretched unevenly or smoothed: ⌘0 is 1×, one emulated pixel on one
+  display pixel. The wheel and a pinch follow the hand and settle on a step when it stops.
+
+### Changed
+
+- **Paint order steps both files of a comparison.** Each file keeps its own step and its page is
+  cut there, so both can be stepped without switching sides. The Paint order tab has a row and a
+  track per file, each moving that file alone; the buttons, the arrow keys and play move both,
+  or the one the new *Moves* switch (A · Both · B) picks. Moving both, the files turn the page
+  together: one at the end of its page waits for the other, forward and back.
+
 ## [0.5.0] - 2026-11-11
 
 ### Added

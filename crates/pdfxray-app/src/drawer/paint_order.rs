@@ -11,6 +11,11 @@
 //!
 //! Clicking a card or the track moves the stepper there; the canvas, the tree, the breadcrumb
 //! and the inspector follow because the stepper selects the operator it stops at.
+//!
+//! In a comparison each file has its own step: a line with its position and a track per side,
+//! A then B, each moving that side alone. The buttons, the keys and play move the sides the
+//! *Moves* switch names (A, both or B; both at first), each through its own paint order; the
+//! cards are those of the side last shown (the selection's), and wait for a drawer tall enough.
 
 use egui::text::LayoutJob;
 use egui::{
@@ -28,6 +33,7 @@ use crate::components::segmented::{Segment, segmented_mini, segmented_mini_width
 use crate::components::step_track::{PageMark, StepTrack, Tick, TickKind};
 use crate::components::{Icon, ToolButton, focus, switch_named, switch_width, tooltip};
 use crate::state::AppState;
+use crate::stepper::Stepping;
 use crate::theme::{fonts, tokens};
 
 /// Name of the button that goes to the start of the page.
@@ -74,8 +80,33 @@ pub const UNPAINTED_LABEL: &str = "Unpainted boxes";
 /// What [`UNPAINTED_LABEL`] does, in its tooltip.
 pub const UNPAINTED_HINT: &str = "Outline what the later operators of the page will paint";
 
-/// What the A | B switch of a comparison does, in its tooltip.
-pub const SIDE_HINT: &str = "The side the stepper walks: its page is cut at the step, the other drawn whole";
+/// Name of a comparison's switch of the sides the buttons move.
+pub const MOVES_LABEL: &str = "Moves";
+
+/// What [`MOVES_LABEL`] does, in its tooltip.
+pub const MOVES_HINT: &str = "Which files the buttons, the arrow keys and play move. Each file keeps its own step; its track moves it alone";
+
+/// The accessible name of `side`'s track in a comparison: `A paint order position`.
+pub fn track_name(side: Side) -> String {
+    format!(
+        "{} {}",
+        side_letter(side),
+        crate::components::step_track::LABEL.to_lowercase()
+    )
+}
+
+/// `A` or `B`.
+const fn side_letter(side: Side) -> &'static str {
+    match side {
+        Side::A => "A",
+        Side::B => "B",
+    }
+}
+
+/// What a side's row says when its document has no operators, e.g. `B has no operators.`
+pub fn no_operators_of(side: Side) -> String {
+    format!("{} has no operators.", side_letter(side))
+}
 
 /// Shown when no page has captured operators.
 pub const NO_OPERATORS: &str = "This document has no operators.";
@@ -122,10 +153,10 @@ pub(crate) fn summary(captured: &CapturedPage, op: &OpRecord) -> String {
 
 /// What the user did in the tab this frame.
 enum Act {
-    /// An operator of the stepper's page (a card).
+    /// An operator of the lead side's page (a card).
     To(u32),
-    /// A paint-order position of the whole document (the track).
-    Index(u32),
+    /// A paint-order position of a side's whole document (its track).
+    Index(Side, u32),
     /// The start (`false`) or end of the page.
     PageEdge(bool),
     Next(bool),
@@ -133,8 +164,8 @@ enum Act {
     Skip(bool),
     Follow(bool),
     Unpainted(bool),
-    /// A comparison's side to step.
-    Side(Side),
+    /// The sides a comparison's buttons move.
+    Moves(Stepping),
 }
 
 /// One operator card.
@@ -145,19 +176,21 @@ struct Card {
 }
 
 pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
-    let (Some(index), Some(last)) = (
-        state.step_index().filter(|_| state.canvas.view.stepper),
-        state.last_step_index(),
+    let lead = state.lead_side();
+    let (Some(index), Some(last), Some(at)) = (
+        state.step_index_of(lead).filter(|_| state.canvas.view.stepper),
+        state.last_step_index_of(lead),
+        state.step_of(lead),
     ) else {
         ui.label(RichText::new(NO_OPERATORS).color(tokens::TEXT_3));
         return;
     };
-    let at = state.canvas.view.step;
-    let ticks = ticks(state, last);
-    let pages = page_marks(state);
-    let cards = cards(state, at);
+    let comparing = state.in_diff();
+    let card_side = card_side(state);
+    let card_at = state.step_of(card_side).unwrap_or(at);
+    let cards = cards(state, card_side, card_at);
     let mut act = None;
-    if !controls(ui, state, &mut act) {
+    if !controls(ui, state, !comparing, &mut act) {
         ui.allocate_ui_with_layout(
             vec2(ui.available_width(), tokens::CONTROL_H),
             Layout::right_to_left(Align::Center),
@@ -165,14 +198,27 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
         );
     }
     ui.add_space(2.0);
-    if let Some(picked) = StepTrack::new(index, last).ticks(&ticks).pages(&pages).show(ui) {
-        act = Some(Act::Index(picked));
+    if comparing {
+        for side in [Side::A, Side::B] {
+            side_track(ui, state, side, &mut act);
+        }
+    } else {
+        let ticks = ticks(state, lead, last);
+        let pages = page_marks(state, lead);
+        if let Some(picked) = StepTrack::new(index, last).ticks(&ticks).pages(&pages).show(ui) {
+            act = Some(Act::Index(lead, picked));
+        }
     }
     ui.add_space(4.0);
-    card_row(ui, &cards, at.ix, &mut act);
+    // Two tracks leave a short drawer no room for the cards: they come back as it grows.
+    if !comparing || ui.available_height() >= CARD_H {
+        card_row(ui, &cards, card_at.ix, &mut act);
+    }
     match act {
-        Some(Act::To(ix)) => state.step_to(OpPosition::new(at.page, ix)),
-        Some(Act::Index(picked)) => state.step_to_index(picked),
+        Some(Act::To(ix)) => {
+            state.step_side_to(card_side, OpPosition::new(card_at.page, ix), true);
+        }
+        Some(Act::Index(side, picked)) => state.step_side_to_index(side, picked),
         Some(Act::PageEdge(forward)) => {
             state.step_to_page_edge(forward);
         }
@@ -183,33 +229,96 @@ pub(super) fn ui(ui: &mut Ui, state: &mut AppState) {
         Some(Act::Skip(on)) => state.canvas.view.skip_state_only = on,
         Some(Act::Follow(on)) => state.canvas.view.follow_step = on,
         Some(Act::Unpainted(on)) => state.canvas.view.unpainted = on,
-        Some(Act::Side(side)) => state.set_stepped_side(side),
+        Some(Act::Moves(stepping)) => state.set_stepping(stepping),
         None => {}
     }
 }
 
-/// The number of pages of the document the stepper walks.
-fn stepped_pages(state: &AppState) -> PageIx {
-    let count = state.stepped_doc().map_or(0, pdfxray_core::Document::page_count);
+/// The side whose operators the cards show: in a comparison, the side of the selection when it
+/// has a step (moving a side's track selects its operator), the lead side otherwise.
+fn card_side(state: &AppState) -> Side {
+    let side = state.selection.side();
+    if state.in_diff() && state.step_of(side).is_some() {
+        side
+    } else {
+        state.lead_side()
+    }
+}
+
+/// Height of a comparison's track, its page numbers excluded: lower than a document's alone, so
+/// two fit the drawer.
+const SIDE_TRACK_H: f32 = 18.0;
+
+/// A comparison's row for `side`: its letter (in the accent while the buttons move it) and its
+/// position, then its track across the rest of the row, which moves that side alone.
+fn side_track(ui: &mut Ui, state: &mut AppState, side: Side, act: &mut Option<Act>) {
+    let total = state.op_total_of(side);
+    let (Some(index), Some(last), Some(at)) = (
+        state.step_index_of(side),
+        state.last_step_index_of(side),
+        state.step_of(side),
+    ) else {
+        ui.label(RichText::new(no_operators_of(side)).color(tokens::TEXT_3));
+        return;
+    };
+    let moving = state.moving_sides().contains(&side);
+    let ticks = ticks(state, side, last);
+    let pages = page_marks(state, side);
+    let name = track_name(side);
+    // Both rows keep the room of the wider position, so the two tracks line up.
+    let room = [Side::A, Side::B]
+        .map(|s| position_room(ui, state.op_total_of(s), page_count_of(state, s)))
+        .into_iter()
+        .fold(0.0, f32::max);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        let ink = if moving { tokens::ACCENT } else { tokens::TEXT_3 };
+        let from = ui.cursor().min.x;
+        ui.label(
+            RichText::new(side_letter(side))
+                .font(fonts::mono_medium(tokens::mono::LARGE))
+                .color(ink),
+        );
+        position(ui, total, index + 1, at);
+        let used = ui.cursor().min.x - from;
+        ui.add_space((room + LETTER_W - used).max(0.0));
+        if let Some(picked) = StepTrack::new(index, last)
+            .ticks(&ticks)
+            .pages(&pages)
+            .name(&name)
+            .height(SIDE_TRACK_H)
+            .show(ui)
+        {
+            *act = Some(Act::Index(side, picked));
+        }
+    });
+}
+
+/// Room for a side's letter and the space after it, before its position.
+const LETTER_W: f32 = 16.0;
+
+/// The number of pages of `side`'s document.
+fn page_count_of(state: &AppState, side: Side) -> PageIx {
+    let count = state.doc_of(side).map_or(0, |doc| doc.page_count());
     PageIx::try_from(count).unwrap_or(PageIx::MAX)
 }
 
-/// The marks of the track, at paint-order positions of the whole document: a dim tick per
+/// The marks of `side`'s track, at paint-order positions of its whole document: a dim tick per
 /// operator that paints nothing and a red one per operator that paints untagged content. The
-/// red ones are the open document's checks, so a comparison's stepper on B has none.
-fn ticks(state: &mut AppState, last: u32) -> Vec<Tick> {
+/// red ones are the open document's checks, so B's track has none.
+fn ticks(state: &mut AppState, side: Side, last: u32) -> Vec<Tick> {
     if last >= MAX_MARKED {
         return Vec::new();
     }
-    let flagged = state.stepped_side() == Side::A;
+    let flagged = side == Side::A;
     let mut ticks = Vec::new();
-    for page in 0..stepped_pages(state) {
-        let Some(doc) = state.stepped_doc() else {
+    for page in 0..page_count_of(state, side) {
+        let Some(doc) = state.doc_of(side) else {
             break;
         };
         let (Some(start), Some(page_last)) = (
             doc.paint_order_index(OpPosition::new(page, 0)),
-            state.last_op(page),
+            state.last_op_of(side, page),
         ) else {
             continue;
         };
@@ -234,13 +343,13 @@ fn ticks(state: &mut AppState, last: u32) -> Vec<Tick> {
     ticks
 }
 
-/// Where each page starts on the track, for a document of more than one page that has
+/// Where each page starts on `side`'s track, for a document of more than one page that has
 /// operators.
-fn page_marks(state: &AppState) -> Vec<PageMark> {
-    let Some(doc) = state.stepped_doc() else {
+fn page_marks(state: &AppState, side: Side) -> Vec<PageMark> {
+    let Some(doc) = state.doc_of(side) else {
         return Vec::new();
     };
-    let pages = stepped_pages(state);
+    let pages = page_count_of(state, side);
     if pages < 2 {
         return Vec::new();
     }
@@ -252,9 +361,9 @@ fn page_marks(state: &AppState) -> Vec<PageMark> {
         .collect()
 }
 
-/// The cards around `at`, all on its page.
-fn cards(state: &AppState, at: OpPosition) -> Vec<Card> {
-    let Some(captured) = state.stepped_doc().and_then(|doc| doc.captured(at.page)) else {
+/// The cards around `at`, `side`'s step, all on its page.
+fn cards(state: &AppState, side: Side, at: OpPosition) -> Vec<Card> {
+    let Some(captured) = state.doc_of(side).and_then(|doc| doc.captured(at.page)) else {
         return Vec::new();
     };
     let last = captured.ops.last().map_or(0, |op| op.ix);
@@ -271,14 +380,15 @@ fn cards(state: &AppState, at: OpPosition) -> Vec<Card> {
         .collect()
 }
 
-/// The buttons and the position, then the switches when they fit; returns whether they did.
-fn controls(ui: &mut Ui, state: &AppState, act: &mut Option<Act>) -> bool {
+/// The buttons, the position when `with_position` (a comparison has one per side, over its
+/// track), then the switches when they fit; returns whether they did.
+fn controls(ui: &mut Ui, state: &AppState, with_position: bool, act: &mut Option<Act>) -> bool {
     let view = &state.canvas.view;
-    let can_back = state.next_target(false).is_some();
-    let can_forward = state.next_target(true).is_some();
+    let can_back = state.can_step(false);
+    let can_forward = state.can_step(true);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        ui.add_enabled_ui(state.page_start_target().is_some(), |ui| {
+        ui.add_enabled_ui(state.can_step_to_page_edge(false), |ui| {
             let start = ToolButton::new(PAGE_START_LABEL)
                 .icon(Icon::StepBack)
                 .icon_only(true)
@@ -312,7 +422,7 @@ fn controls(ui: &mut Ui, state: &AppState, act: &mut Option<Act>) -> bool {
             }
             tooltip::with_shortcut(forward, "Next operator", "→");
         });
-        ui.add_enabled_ui(state.page_end_target().is_some(), |ui| {
+        ui.add_enabled_ui(state.can_step_to_page_edge(true), |ui| {
             let end = ToolButton::new(PAGE_END_LABEL)
                 .icon(Icon::StepForward)
                 .icon_only(true)
@@ -324,12 +434,15 @@ fn controls(ui: &mut Ui, state: &AppState, act: &mut Option<Act>) -> bool {
             tooltip::with_shortcut(end, &hint, "End");
         });
         ui.add_space(10.0);
-        let count = state.step_index().map_or(0, |index| index + 1);
-        let from = ui.cursor().min.x;
-        position(ui, state.op_total(), count, view.step);
-        // Keep the widest position's room, so the switches do not move as the stepper does.
-        let used = ui.cursor().min.x - from;
-        ui.add_space((position_room(ui, state.op_total(), stepped_pages(state)) - used).max(0.0));
+        if with_position {
+            let count = state.step_index().map_or(0, |index| index + 1);
+            let from = ui.cursor().min.x;
+            position(ui, state.op_total(), count, view.step);
+            // Keep the widest position's room, so the switches do not move as the stepper does.
+            let used = ui.cursor().min.x - from;
+            let room = position_room(ui, state.op_total(), page_count_of(state, Side::A));
+            ui.add_space((room - used).max(0.0));
+        }
         // The switches go at the end of the row, their labels shortened when the full ones do
         // not fit after the position; when neither fits they go on a row of their own: they
         // never run over the position.
@@ -365,7 +478,7 @@ pub const SHORT_LABELS: [&str; 3] = ["Skip state-only", "Follow", "Unpainted"];
 /// What each switch does, in its tooltip, in the order of [`NAMES`].
 const HINTS: [Option<&str>; 3] = [None, Some(FOLLOW_HINT), Some(UNPAINTED_HINT)];
 
-/// The width the switches take with `labels`, the side of a comparison included.
+/// The width the switches take with `labels`, a comparison's *Moves* switch included.
 fn switches_width(ui: &Ui, state: &AppState, labels: Labels) -> f32 {
     let shown = if labels == Labels::Full {
         NAMES
@@ -374,7 +487,7 @@ fn switches_width(ui: &Ui, state: &AppState, labels: Labels) -> f32 {
     };
     let switches: f32 = shown.iter().map(|label| switch_width(ui, label)).sum::<f32>() + 2.0 * 8.0;
     let side = if state.in_diff() {
-        12.0 + segmented_mini_width(ui, &side_segments())
+        12.0 + segmented_mini_width(ui, &moves_segments())
     } else {
         0.0
     };
@@ -382,12 +495,17 @@ fn switches_width(ui: &Ui, state: &AppState, labels: Labels) -> f32 {
     switches + side + ui.spacing().item_spacing.x * 4.0
 }
 
-/// The segments of a comparison's A | B switch.
-fn side_segments() -> [Segment<'static, Side>; 2] {
-    [Segment::new(Side::A, "A"), Segment::new(Side::B, "B")]
+/// The segments of a comparison's *Moves* switch, backwards: the row it is in runs right to
+/// left, so they read A, Both, B.
+fn moves_segments() -> [Segment<'static, Stepping>; 3] {
+    [
+        Segment::new(Stepping::B, "B"),
+        Segment::new(Stepping::Both, "Both"),
+        Segment::new(Stepping::A, "A"),
+    ]
 }
 
-/// The switches, right to left, and before them the side of a comparison.
+/// The switches, right to left, and before them a comparison's *Moves* switch.
 fn switches(ui: &mut Ui, state: &AppState, labels: Labels, act: &mut Option<Act>) {
     let view = &state.canvas.view;
     let mut values = [view.skip_state_only, view.follow_step, view.unpainted];
@@ -419,16 +537,16 @@ fn switches(ui: &mut Ui, state: &AppState, labels: Labels, act: &mut Option<Act>
             });
         }
     }
-    if state.in_diff() {
+    if let Some(diff) = state.diff.as_ref() {
         ui.add_space(12.0);
-        let mut side = state.stepped_side();
+        let mut stepping = diff.stepping;
         let toggle = ui
-            .scope(|ui| segmented_mini(ui, &mut side, &side_segments()))
+            .scope(|ui| segmented_mini(ui, &mut stepping, &moves_segments()))
             .response;
-        if side != state.stepped_side() {
-            *act = Some(Act::Side(side));
+        if stepping != diff.stepping {
+            *act = Some(Act::Moves(stepping));
         }
-        tooltip::text(toggle, SIDE_HINT);
+        tooltip::named(toggle, MOVES_LABEL, MOVES_HINT, None);
     }
 }
 
@@ -611,7 +729,7 @@ mod tests {
         state.set_stepper(true);
         let last = state.last_step_index().unwrap();
 
-        let mut marks = ticks(&mut state, last);
+        let mut marks = ticks(&mut state, Side::A, last);
         marks.sort_by_key(|t| (t.ix, t.kind == TickKind::Flagged));
         let by_kind = |kind| {
             marks

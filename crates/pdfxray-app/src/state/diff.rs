@@ -25,7 +25,7 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::{Duration, Instant};
 
 use pdfxray_core::diff::{Method, Pair, Pairing, Rung, Side, Status};
-use pdfxray_core::{Badge, Document, NodeId, PageIx, Severity, TagBox, TreeNode};
+use pdfxray_core::{Badge, Document, NodeId, OpPosition, PageIx, Severity, TagBox, TreeNode};
 use pdfxray_render::annotate::{ChangeShow, status_rgba};
 use pdfxray_render::composite::{Fit, Mode};
 use pdfxray_render::score::{VisualScore, percent};
@@ -33,6 +33,7 @@ use pdfxray_render::score::{VisualScore, percent};
 use super::{AppState, LoadedDocument};
 use crate::components::{Annotation, Tone};
 use crate::diff_frames::DiffFrames;
+use crate::stepper::Stepping;
 use crate::tree_view::{Decor, TreeModel};
 
 /// Pages per side above which a comparison warns that it will be slow and large. It never
@@ -85,6 +86,11 @@ pub struct DiffSession {
     pub fit: Fit,
     /// Overlaid, the side whose reading order is drawn and whose content a click picks.
     pub active: Side,
+    /// Which sides the paint-order stepper's buttons, keys and play move.
+    pub stepping: Stepping,
+    /// B's paint-order step ([`AppState::step_of`]); A's is the view's. `None` until the
+    /// stepper runs while B is open.
+    pub(crate) b_step: Option<OpPosition>,
     /// The Changes list shows unchanged pairs too.
     pub show_unchanged: bool,
     /// The page pair on the canvas: an index into [`Pairing::pages`].
@@ -135,6 +141,8 @@ impl DiffSession {
             mode: Mode::SideBySide,
             fit: Fit::Refuse,
             active: Side::B,
+            stepping: Stepping::default(),
+            b_step: None,
             show_unchanged: false,
             page: 0,
             selected: None,
@@ -739,11 +747,8 @@ impl AppState {
         }
     }
 
-    /// Ends the comparison: A stays open. A stepper on B stops, as B is gone.
+    /// Ends the comparison: A stays open, and a stepper that is on goes on with A alone.
     pub fn end_diff(&mut self) {
-        if self.stepped_side() == Side::B {
-            self.set_stepper(false);
-        }
         self.diff = None;
         self.drawer.hit_stack = None;
         if self.nav.rail == super::RailItem::Changes {
@@ -770,6 +775,7 @@ impl AppState {
             self.diff = Some(DiffSession::new(&a, loaded));
             self.set_rail(super::RailItem::Changes);
         }
+        self.start_b_step();
         self.drawer.hit_stack = None;
         if self.selection.side() == Side::B {
             self.selection = super::SelectionState::default();

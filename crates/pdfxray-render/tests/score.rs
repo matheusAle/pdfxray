@@ -248,7 +248,7 @@ fn scores_are_byte_identical_across_runs_and_agree_with_the_mask() {
         fit: Fit::Refuse,
         registration: None,
         comparator: Comparator::same_engine(),
-        step: None,
+        steps: composite::Steps::NONE,
     };
     let mask = || composite::composite((&a, 1), (&b, 2), &request).unwrap();
     let (m1, m2) = (mask(), mask());

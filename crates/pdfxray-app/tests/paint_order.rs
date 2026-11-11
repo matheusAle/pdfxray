@@ -393,7 +393,11 @@ fn space_plays_over_frames_pauses_and_stops_at_the_end() {
 fn a_click_or_drag_on_the_track_scrubs_to_the_operator_under_it() {
     for fixture in FIXTURES {
         let mut harness = opened(fixture);
-        let last = harness.state().state.last_op(0).unwrap();
+        let last = harness
+            .state()
+            .state
+            .last_op_of(pdfxray_core::diff::Side::A, 0)
+            .unwrap();
         start_at(&mut harness, 0);
         let track = the(&harness, Region::Drawer, Role::Slider, TRACK).rect();
         let at = |fraction: f32| {

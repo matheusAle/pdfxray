@@ -14,7 +14,11 @@ use super::AppState;
 use super::marquee::Marquee;
 use crate::measure::{Cursor, MeasureTool};
 use crate::modes::{SelectedOps, ViewMode};
-use crate::view::{ZoomMode, clamp_zoom, zoom_in, zoom_out};
+use crate::view::{ZoomMode, clamp_zoom, pixel_step, snap_to_pixels, zoom_in, zoom_out};
+
+/// How long after the last wheel or pinch zoom an emulated screen's zoom settles on its nearest
+/// whole-pixel step, in seconds.
+pub(crate) const ZOOM_SETTLE: f64 = 0.15;
 
 /// How the canvas brings the selection into view once it is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,6 +92,12 @@ pub struct CanvasState {
     pub(crate) context_node: Option<NodeId>,
     /// The marquee being drawn, if any.
     pub marquee: Option<Marquee>,
+    /// On an emulated screen, the zoom at which one of its device pixels is one pixel of this
+    /// display (as of the last frame): the zoom then moves in whole-pixel steps from it.
+    pub(crate) pixel_unit: Option<f32>,
+    /// On an emulated screen, a wheel or pinch zoom off the whole-pixel steps: when it last
+    /// moved (egui's clock) and where the pointer was, to settle on the nearest step there.
+    pub(crate) zoom_settle: Option<(f64, Vec2)>,
 }
 
 impl Default for CanvasState {
@@ -121,6 +131,8 @@ impl Default for CanvasState {
             outlined: None,
             context_node: None,
             marquee: None,
+            pixel_unit: None,
+            zoom_settle: None,
         }
     }
 }
@@ -211,20 +223,58 @@ impl AppState {
         }
     }
 
-    /// Zooms in one step and stops fitting the page.
+    /// Zooms in one step and stops fitting the page. On an emulated screen the step is the
+    /// next whole number of display pixels per device pixel.
     pub fn zoom_in(&mut self) {
-        self.set_zoom(zoom_in(self.canvas.zoom));
+        let zoom = match self.canvas.pixel_unit {
+            Some(unit) => pixel_step(self.canvas.zoom, unit, true),
+            None => zoom_in(self.canvas.zoom),
+        };
+        self.set_zoom(zoom);
     }
 
-    /// Zooms out one step and stops fitting the page.
+    /// Zooms out one step and stops fitting the page; on an emulated screen, a whole-pixel
+    /// step.
     pub fn zoom_out(&mut self) {
-        self.set_zoom(zoom_out(self.canvas.zoom));
+        let zoom = match self.canvas.pixel_unit {
+            Some(unit) => pixel_step(self.canvas.zoom, unit, false),
+            None => zoom_out(self.canvas.zoom),
+        };
+        self.set_zoom(zoom);
     }
 
-    /// Sets an explicit zoom, limited to the allowed range.
+    /// Sets an explicit zoom, limited to the allowed range; on an emulated screen, the nearest
+    /// whole-pixel step (100 % is then 1×: a device pixel a display pixel).
     pub fn set_zoom(&mut self, zoom: f32) {
-        self.canvas.zoom = clamp_zoom(zoom);
+        self.canvas.zoom = match self.canvas.pixel_unit {
+            Some(unit) => snap_to_pixels(zoom, unit),
+            None => clamp_zoom(zoom),
+        };
         self.canvas.zoom_mode = ZoomMode::Manual;
+    }
+
+    /// The wheel or a pinch zoomed by `factor` at `now` (egui's clock), the pointer at
+    /// `anchor`: continuously, following the hand. On an emulated screen the zoom settles on the
+    /// nearest whole-pixel step once the hand stops ([`Self::settle_zoom`]).
+    pub fn wheel_zoom(&mut self, factor: f32, now: f64, anchor: Vec2) {
+        self.canvas.zoom = clamp_zoom(self.canvas.zoom * factor);
+        self.canvas.zoom_mode = ZoomMode::Manual;
+        self.canvas.zoom_settle = self.canvas.pixel_unit.map(|_| (now, anchor));
+    }
+
+    /// Settles a wheel or pinch zoom on an emulated screen on its nearest whole-pixel step,
+    /// [`ZOOM_SETTLE`] seconds after it last moved. Returns where the pointer was, to anchor the
+    /// settling there; `None` while there is nothing to settle yet.
+    pub fn settle_zoom(&mut self, now: f64) -> Option<Vec2> {
+        let (at, anchor) = self.canvas.zoom_settle?;
+        if now - at < ZOOM_SETTLE {
+            return None;
+        }
+        self.canvas.zoom_settle = None;
+        if let Some(unit) = self.canvas.pixel_unit {
+            self.canvas.zoom = snap_to_pixels(self.canvas.zoom, unit);
+        }
+        Some(anchor)
     }
 
     /// Fits the whole page into the canvas from now on.

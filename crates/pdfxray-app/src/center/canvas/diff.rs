@@ -13,9 +13,10 @@
 //! Pages that differ in size or `/Rotate` are never scaled silently: overlaid, a banner gives the
 //! reason and the way to opt into scaling B to A.
 //!
-//! The paint-order stepper (*Paint order* on the toolbar, `P`) walks the active side: that side's
-//! page is cut at the step and the other drawn whole, a line over the picture says which is which,
-//! and the operators still to come are outlined on the stepped side as on the ordinary canvas.
+//! The paint-order stepper (*Paint order* on the toolbar, `P`) gives each side a step of its own:
+//! each side's page is cut at its step (a side whose step is on another page is drawn whole), a
+//! line over each side says which, and the operators still to come are outlined on each cut side
+//! as on the ordinary canvas.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -29,7 +30,7 @@ use pdfxray_core::diff::{Side, Status};
 use pdfxray_core::numeric::f32_from_u32;
 use pdfxray_core::{NodeId, PageIx, ReadingOrderSource, Rect, TagBox};
 use pdfxray_render::annotate::{self, Anchor, Annotation, Grid, Palette, Scene, TagShow, TagView};
-use pdfxray_render::composite::{self, Fit, Mode};
+use pdfxray_render::composite::{self, Fit, Mode, Steps};
 use pdfxray_render::score::VisualScore;
 use pdfxray_render::{Overlay, PixelPoint, Transform, page_dimensions};
 
@@ -146,14 +147,7 @@ fn bar(ui: &mut Ui, state: &mut AppState) {
         let stepper = state.canvas.view.stepper;
         let can_step = ViewTool::PaintOrder.available(state);
         if let Some(diff) = state.diff.as_mut() {
-            // The overlay's side is the stepper's too: changing it moves the stepper over.
-            let before = diff.active;
             let toggle = mode_controls(ui, diff, stepper, can_step);
-            let after = diff.active;
-            if after != before {
-                diff.active = before;
-                state.set_stepped_side(after);
-            }
             if toggle {
                 ViewTool::PaintOrder.toggle(state);
             }
@@ -324,6 +318,8 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
     let Some(doc_a) = state.document.as_ref().map(|l| Arc::clone(&l.doc)) else {
         return;
     };
+    let stepper = state.canvas.view.stepper;
+    let steps = steps_here(state, (a, b));
     let Some(diff) = state.diff.as_mut() else {
         return;
     };
@@ -335,14 +331,13 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
     }
     .map_or(Vec2::splat(612.0), |(w, h)| vec2(w, h));
     let wide = if diff.mode == Mode::SideBySide { 2.0 } else { 1.0 };
-    let step = stepped_page(&state.canvas.view, diff.active, (a, b));
     let key = PictureKey {
         a,
         b,
         mode: diff.mode,
         scale: render_scale(state.canvas.zoom, ppp, vec2(dims.x * wide, dims.y), MAX_SIDE),
         fit: diff.fit,
-        step,
+        steps,
     };
     let shown = diff.frames.get(&ctx, &doc_a, &doc_b, key);
     if diff.frames.is_pending() {
@@ -396,17 +391,23 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
         })
     };
     let band = grid_at(Pos2::ZERO).map_or(0.0, |g| annotate::legend_extent(&g, &legend).1);
-    let sides_line = if step.is_some() { SIDES_LINE_H } else { 0.0 };
+    let sides_line = if stepper { SIDES_LINE_H } else { 0.0 };
     #[allow(clippy::cast_possible_truncation)]
     let total = vec2(size.x, sides_line + size.y + band as f32);
-    let ghost = step
-        .filter(|_| state.canvas.view.unpainted)
-        .and_then(|(side, ix)| {
-            let page = state.canvas.view.step.page;
-            let captured = state.doc_of(side)?.captured(page)?;
-            Some((side, paint_order::ghosts(captured, ix)))
-        });
-    let lines = step.map(|(side, ix)| side_lines(state, picture.placed.as_ref(), mode, side, ix));
+    let ghosts: Vec<(Side, paint_order::Ghost)> = if state.canvas.view.unpainted {
+        [Side::A, Side::B]
+            .into_iter()
+            .filter_map(|side| {
+                let ix = steps.of(side)?;
+                let page = state.step_of(side)?.page;
+                let captured = state.doc_of(side)?.captured(page)?;
+                Some((side, paint_order::ghosts(captured, ix)))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let lines = stepper.then(|| side_lines(state, picture.placed.as_ref(), mode, steps));
 
     let mut clicked: Option<(Side, NodeId)> = None;
     let mut picked: Option<Pos2> = None;
@@ -431,7 +432,7 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
             };
             let (shapes, _) = composite::layout(&grid, &Palette::DESIGN, &scenes, &legend);
             let painter = ui.painter().with_clip_rect(ui.clip_rect());
-            if let Some((side, ghost)) = &ghost {
+            for (side, ghost) in &ghosts {
                 let placed = picture.placed.as_ref();
                 paint_order::draw_with(
                     &painter,
@@ -468,60 +469,56 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
     }
 }
 
-/// The stepper's cut on this page pair: the active side and the operator, when the stepper is
-/// on and the step is on that side's page here.
-fn stepped_page(
-    view: &crate::modes::ViewMode,
-    side: Side,
-    (a, b): (Option<PageIx>, Option<PageIx>),
-) -> Option<(Side, u32)> {
-    let page = match side {
-        Side::A => a,
-        Side::B => b,
+/// The stepper's cuts on the page pair `(a, b)`: each side's step, when the stepper is on and
+/// that side's step is on its page here. A side whose step is on another page is drawn whole.
+fn steps_here(state: &AppState, (a, b): (Option<PageIx>, Option<PageIx>)) -> Steps {
+    if !state.canvas.view.stepper {
+        return Steps::NONE;
+    }
+    let cut = |side: Side, page: Option<PageIx>| {
+        state
+            .step_of(side)
+            .filter(|step| Some(step.page) == page)
+            .map(|step| step.ix)
     };
-    (view.stepper && page == Some(view.step.page)).then_some((side, view.step.ix))
+    Steps {
+        a: cut(Side::A, a),
+        b: cut(Side::B, b),
+    }
 }
 
 /// One line over the picture: its text, where it starts (pixels of the composite) and whether
-/// it names the stepped side.
+/// it names a side cut at its step.
 struct SideLine {
     text: String,
     x: f64,
     stepped: bool,
 }
 
-/// The lines over the picture: over each page side by side, one after the other overlaid, and
-/// only the stepped side's for a page the other side does not have.
-fn side_lines(state: &AppState, placed: &Placed, mode: Mode, stepped: Side, ix: u32) -> Vec<SideLine> {
-    let page = state.canvas.view.step.page;
-    let page_ops = state
-        .doc_of(stepped)
-        .and_then(|doc| doc.captured(page)?.ops.last().map(|op| op.ix + 1))
-        .unwrap_or(0);
-    let other = match stepped {
-        Side::A => Side::B,
-        Side::B => Side::A,
-    };
-    let line = |side: Side, x: f64| SideLine {
-        text: if side == stepped {
-            stepped_label(side, ix, page_ops)
-        } else {
-            whole_label(side)
-        },
-        x,
-        stepped: side == stepped,
+/// The lines over the picture while the stepper is on: over each page side by side, one after
+/// the other overlaid (A first), and only its own for a page one side has alone.
+fn side_lines(state: &AppState, placed: &Placed, mode: Mode, steps: Steps) -> Vec<SideLine> {
+    let line = |side: Side, x: f64| {
+        let cut = steps.of(side).zip(state.step_of(side));
+        let text = cut.map_or_else(
+            || whole_label(side),
+            |(ix, step)| {
+                let page_ops = state.last_op_of(side, step.page).map_or(0, |last| last + 1);
+                stepped_label(side, ix, page_ops)
+            },
+        );
+        SideLine {
+            text,
+            x,
+            stepped: cut.is_some(),
+        }
     };
     match placed {
-        Placed::One(..) => vec![line(stepped, 0.0)],
+        Placed::One(side, _) => vec![line(*side, 0.0)],
         Placed::Both(c) if mode == Mode::SideBySide => {
-            let x_of = |side| match side {
-                Side::A => c.a.bounds.x0,
-                Side::B => c.b.bounds.x0,
-            };
-            vec![line(Side::A, x_of(Side::A)), line(Side::B, x_of(Side::B))]
+            vec![line(Side::A, c.a.bounds.x0), line(Side::B, c.b.bounds.x0)]
         }
-        // Overlaid, the stepped side first.
-        Placed::Both(_) => vec![line(stepped, 0.0), line(other, f64::NAN)],
+        Placed::Both(_) => vec![line(Side::A, 0.0), line(Side::B, f64::NAN)],
     }
 }
 

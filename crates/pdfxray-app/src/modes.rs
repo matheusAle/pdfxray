@@ -370,14 +370,19 @@ impl Pixels {
         matches!(self, Self::Emulated(_))
     }
 
-    /// Pixels per point for `page` of `doc`, and the viewer whose rounding draws it.
-    fn scale(self, doc: &Document, page: PageIx) -> (f32, Option<pdfxray_render::Viewer>) {
+    /// The spec of `page` of `doc` drawn on these pixels: its scale, and the viewer whose
+    /// rounding draws it with Acrobat's preferences.
+    fn spec(self, doc: &Document, page: PageIx) -> RenderSpec {
         match self {
-            Self::Canvas(key) => (key.scale(), None),
+            Self::Canvas(key) => RenderSpec::new(key.scale()),
             Self::Emulated(emulation) => {
                 // A page that cannot be measured cannot be drawn either: the render says why.
                 let scale = page_dimensions(doc, page).map_or(1.0, |size| emulation.scale_for(size));
-                (scale, emulation.viewer)
+                RenderSpec {
+                    viewer: emulation.viewer,
+                    acrobat: emulation.acrobat,
+                    ..RenderSpec::new(scale)
+                }
             }
         }
     }
@@ -405,7 +410,8 @@ impl RenderRequest {
     /// The render specification: overlays are x-ray first, then the heat map, then the clip.
     /// A page that cannot be drawn gets none; the render reports why.
     pub fn spec(&self, doc: &Document) -> RenderSpec {
-        let (scale, viewer) = self.pixels.scale(doc, self.page);
+        let base = self.pixels.spec(doc, self.page);
+        let scale = base.scale;
         let mut overlays = Vec::new();
         if let Ok(to_pixel) = page_transform(doc, self.page, scale) {
             if let Some(options) = self.xray {
@@ -421,8 +427,7 @@ impl RenderRequest {
         RenderSpec {
             overlays,
             content: self.content.clone(),
-            viewer,
-            ..RenderSpec::new(scale)
+            ..base
         }
     }
 }

@@ -8,7 +8,7 @@ impl Renderer<'_> {
     fn fill_glyph<'a>(&mut self, glyph: &Glyph<'a>, props: DrawProps<'a>, transform: Affine) {
         match glyph {
             Glyph::Outline(glyph) => {
-                let outline = self.cached_outline(glyph);
+                let outline = self.glyph_path(glyph, props.transform * transform);
                 let props = DrawProps {
                     transform: props.transform * transform,
                     ..props
@@ -35,7 +35,7 @@ impl Renderer<'_> {
     ) {
         match glyph {
             Glyph::Outline(glyph) => {
-                let outline = self.cached_outline(glyph);
+                let outline = self.glyph_path(glyph, props.transform * transform);
                 self.stroke_path(
                     &(transform * outline.as_ref().clone()),
                     props,
@@ -64,7 +64,21 @@ impl Renderer<'_> {
         path
     }
 
-    fn transformed_outlines(&self, glyph_run: &GlyphRun<'_, '_>, transforms: &[Affine]) -> Vec<BezPath> {
+    /// `glyph`'s outline drawn at `device` (pdfxray patch): the rules' hinted one when they
+    /// give one, the font's own otherwise.
+    fn glyph_path(&self, glyph: &OutlineGlyph, device: Affine) -> Rc<BezPath> {
+        if let Some(path) = self.rules().and_then(|rules| rules.glyph_outline(glyph, device)) {
+            return Rc::new(path);
+        }
+        self.cached_outline(glyph)
+    }
+
+    fn transformed_outlines(
+        &self,
+        glyph_run: &GlyphRun<'_, '_>,
+        transforms: &[Affine],
+        device: Affine,
+    ) -> Vec<BezPath> {
         glyph_run
             .glyphs()
             .iter()
@@ -74,7 +88,7 @@ impl Renderer<'_> {
                     return None;
                 };
 
-                Some(*transform * self.cached_outline(outline).as_ref().clone())
+                Some(*transform * self.glyph_path(outline, device * *transform).as_ref().clone())
             })
             .collect()
     }
@@ -160,12 +174,13 @@ impl Renderer<'_> {
                     };
 
                     self.ctx.set_transform(props.transform * *transform);
-                    self.ctx.fill_path(self.cached_outline(outline).as_ref());
+                    let path = self.glyph_path(outline, props.transform * *transform);
+                    self.ctx.fill_path(path.as_ref());
                 }
                 self.finish_run(clip_path);
             }
             Paint::Pattern(_) => {
-                let outlines = self.transformed_outlines(glyph_run, transforms);
+                let outlines = self.transformed_outlines(glyph_run, transforms, props.transform);
                 let clip_path = self.begin_fill_run(props, Self::outline_bbox(&outlines));
                 for outline in &outlines {
                     self.ctx.fill_path(outline);
@@ -190,13 +205,17 @@ impl Renderer<'_> {
                         continue;
                     };
 
-                    let outline = *transform * self.cached_outline(outline).as_ref().clone();
+                    let outline = *transform
+                        * self
+                            .glyph_path(outline, props.transform * *transform)
+                            .as_ref()
+                            .clone();
                     self.ctx.stroke_path(&outline);
                 }
                 self.finish_run(clip_path);
             }
             Paint::Pattern(_) => {
-                let outlines = self.transformed_outlines(glyph_run, transforms);
+                let outlines = self.transformed_outlines(glyph_run, transforms, props.transform);
                 let clip_path =
                     self.begin_stroke_run(props, stroke_props, Self::outline_bbox(&outlines));
                 for outline in &outlines {

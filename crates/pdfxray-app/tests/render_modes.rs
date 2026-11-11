@@ -484,7 +484,11 @@ fn isolation_and_the_stepper_belong_to_their_page() {
 #[test]
 fn the_stepper_follows_the_track_the_buttons_and_the_arrow_keys() {
     let mut harness = opened("graphics-state");
-    let last = harness.state().state.last_op(0).unwrap();
+    let last = harness
+        .state()
+        .state
+        .last_op_of(pdfxray_core::diff::Side::A, 0)
+        .unwrap();
     assert_eq!(last, 79);
 
     press(&mut harness, "Paint order");

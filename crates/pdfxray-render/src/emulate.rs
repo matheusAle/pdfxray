@@ -7,25 +7,41 @@
 //! draw on this Mac. The viewer sets the rules that place geometry on that pixel grid, following
 //! `docs/pdf-rendering-rounding-windows.md`:
 //!
-//! * **Chrome and Edge** draw with `PDFium`. Positions stay floats, with no snapping, overlap or
-//!   stroke adjustment. A rectangular clip grows out to whole pixels (`GetOuterRect`). Each
-//!   glyph's origin is rounded to the nearest pixel. An axis-aligned image covers a whole number
-//!   of pixels, `ceil` of its size, starting at the floor or ceiling of its edge, whichever moves
-//!   it less (`MatchFloatRange`).
+//! * **Chrome and Edge** draw with `PDFium`. Positions stay floats, with no snapping or overlap.
+//!   A rectangular clip grows out to whole pixels (`GetOuterRect`). Each glyph's origin is
+//!   rounded to the nearest pixel. An axis-aligned image covers a whole number of pixels, `ceil`
+//!   of its size, starting at the floor or ceiling of its edge, whichever moves it less
+//!   (`MatchFloatRange`). Thin lines: no stroke is narrower than one device pixel, a fill that
+//!   encloses no area is a 1 pixel line at a quarter of its opacity, a segment that goes nowhere
+//!   is nudged a pixel to the right, and a dash cycle under 0.1 px draws solid (a dash under a
+//!   millionth becomes 0.1 px).
 //! * **Acrobat** draws with Adobe's AGM. A coordinate within 0.0001 px of a whole pixel snaps to
-//!   it (`SnapToPureTolerance`). Fills reach 0.01 px past their edges (`PixelOverlap`). Strokes are
-//!   adjusted to a whole number of pixels, at least one, centred so both edges land on pixel
-//!   boundaries. A text run starts on the pixel grid and each glyph advance is rounded, unless
-//!   it would round to zero.
+//!   it (`SnapToPureTolerance`). Fills reach 0.01 px past their edges (`PixelOverlap`). Stroke
+//!   adjustment puts a straight stroke's edges on the nearest pixel boundaries, at least a pixel
+//!   apart, so a thin line is 1 px inside a pixel row and 2 px when it straddles two. A text run starts on
+//!   the pixel grid and each glyph advance is rounded, unless it would round to zero. Its Page
+//!   Display preferences ([`AcrobatPrefs`]): *Enhance thin lines* draws a stroke under 1 pt as a
+//!   solid 1 px black line, and with *Line Weights* off every stroke is 1 px.
 //!
-//! What is not emulated, because the document gives no values for it or it is the viewer's own
-//! code: Acrobat's discrete resolution table and its feature thresholds, integer rasteriser
-//! precision, font hinting, anti-aliasing (every viewer here is drawn with pdfxray's), GPU or GDI
-//! compositing, and `PDFium`'s legacy truncating rectangles.
+//! Both hint upright text to the pixel grid (`crate::hinting`): Acrobat with the font's own
+//! hints, as `CoolType` does, `PDFium` with the autohinter, as its `FreeType` does. A font skrifa
+//! cannot read (a bare CFF program, a Type 1 font) and turned or squeezed text stay unhinted.
+//!
+//! What is not emulated, because the document gives no values for it, hayro does not have it, or
+//! it is the viewer's own code: Acrobat's discrete resolution table and its feature thresholds
+//! (dash conversion among them), integer rasteriser precision, `CoolType`'s own hinter and its
+//! dynamic anti-aliasing (`ClearType`-like subpixel text among it), anti-aliasing and
+//! blending arithmetic (every viewer here is drawn with pdfxray's), knockout groups, GPU or GDI
+//! compositing, `PDFium`'s endpoint snapping under the `SA` flag (hayro does not read it), its
+//! knockout of a path's semi-transparent stroke over its own fill, and its legacy truncating
+//! rectangles.
 
 use std::fmt;
 
-use hayro::PixelRules;
+use hayro::hayro_interpret::font::OutlineGlyph;
+use hayro::{DeviceStroke, PixelRules};
+
+use crate::hinting::{Hinter, Hinting};
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
 
 /// A Windows PDF viewer whose pixel rounding can be emulated.
@@ -69,11 +85,12 @@ impl Viewer {
         }
     }
 
-    /// The rules it places geometry on device pixels with.
-    pub(crate) fn rules(self) -> &'static dyn PixelRules {
+    /// The rules it places geometry on device pixels with; `acrobat` are Acrobat's
+    /// preferences, which the other viewers do not have.
+    pub(crate) fn rules(self, acrobat: AcrobatPrefs) -> Rules {
         match self.engine() {
-            Engine::Pdfium => &PdfiumRules,
-            Engine::Adobe => &AdobeRules,
+            Engine::Pdfium => Rules::Pdfium(PdfiumRules::new()),
+            Engine::Adobe => Rules::Adobe(AdobeRules::new(acrobat)),
         }
     }
 }
@@ -155,6 +172,25 @@ impl fmt::Display for ViewerZoom {
     }
 }
 
+/// Acrobat's Page Display preferences that change how thin lines are drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AcrobatPrefs {
+    /// *Enhance thin lines*: a stroke under 1 pt (one user unit) is a solid 1 px black line.
+    pub enhance_thin_lines: bool,
+    /// *Line Weights* (Ctrl+5): strokes at their own width; off, every stroke is 1 px.
+    pub line_weights: bool,
+}
+
+impl Default for AcrobatPrefs {
+    /// Both on, as Acrobat starts.
+    fn default() -> Self {
+        Self {
+            enhance_thin_lines: true,
+            line_weights: true,
+        }
+    }
+}
+
 /// A display, the zoom a viewer shows the page at on it, and the viewer whose rounding is
 /// emulated (`None`: pdfxray's own, on that display's pixels).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
@@ -165,6 +201,8 @@ pub struct Emulation {
     pub display: Display,
     /// The viewer's zoom.
     pub zoom: ViewerZoom,
+    /// Acrobat's preferences, for when the viewer is Acrobat.
+    pub acrobat: AcrobatPrefs,
 }
 
 impl Emulation {
@@ -200,10 +238,92 @@ pub const ADOBE_SNAP_TOLERANCE: f64 = 0.0001;
 /// How far Acrobat lets a fill reach past its edge, in device pixels (`PixelOverlap`).
 pub const ADOBE_PIXEL_OVERLAP: f64 = 0.01;
 
-/// `PDFium`'s rounding.
-struct PdfiumRules;
+/// The rules of a viewer, as [`Viewer::rules`] gives them.
+pub(crate) enum Rules {
+    /// Chrome's and Edge's.
+    Pdfium(PdfiumRules),
+    /// Acrobat's.
+    Adobe(AdobeRules),
+}
+
+impl Rules {
+    fn get(&self) -> &dyn PixelRules {
+        match self {
+            Self::Pdfium(rules) => rules,
+            Self::Adobe(rules) => rules,
+        }
+    }
+}
+
+impl PixelRules for Rules {
+    fn fill(&self, path: &mut BezPath) {
+        self.get().fill(path);
+    }
+
+    fn fill_overlap(&self) -> f64 {
+        self.get().fill_overlap()
+    }
+
+    fn thin_fill_alpha(&self) -> Option<f32> {
+        self.get().thin_fill_alpha()
+    }
+
+    fn stroke(&self, path: &mut BezPath, stroke: &mut DeviceStroke) {
+        self.get().stroke(path, stroke);
+    }
+
+    fn clip(&self, path: &mut BezPath) {
+        self.get().clip(path);
+    }
+
+    fn glyph_origins(&self, origins: &mut [Point]) {
+        self.get().glyph_origins(origins);
+    }
+
+    fn image(&self, transform: Affine, width: u32, height: u32) -> Affine {
+        self.get().image(transform, width, height)
+    }
+
+    fn glyph_outline(&self, glyph: &OutlineGlyph, device: Affine) -> Option<BezPath> {
+        self.get().glyph_outline(glyph, device)
+    }
+}
+
+/// The opacity `PDFium` draws a fill that encloses no area with, as a 1 pixel line: a quarter
+/// (`alpha >> 2`).
+pub const PDFIUM_THIN_FILL_ALPHA: f32 = 0.25;
+
+/// The shortest dash cycle `PDFium` draws dashed, in device pixels; a shorter one is solid.
+pub const PDFIUM_MIN_DASH_CYCLE: f64 = 0.1;
+
+/// `PDFium`'s rounding, and its glyphs autohinted.
+pub(crate) struct PdfiumRules {
+    hinter: Hinter,
+}
+
+impl PdfiumRules {
+    fn new() -> Self {
+        Self {
+            hinter: Hinter::new(Hinting::Auto),
+        }
+    }
+}
 
 impl PixelRules for PdfiumRules {
+    fn glyph_outline(&self, glyph: &OutlineGlyph, device: Affine) -> Option<BezPath> {
+        self.hinter.outline(glyph, device)
+    }
+
+    fn thin_fill_alpha(&self) -> Option<f32> {
+        Some(PDFIUM_THIN_FILL_ALPHA)
+    }
+
+    fn stroke(&self, path: &mut BezPath, stroke: &mut DeviceStroke) {
+        stroke.width = stroke.width.max(1.0);
+        nudge_degenerate_segments(path);
+        collapse_dashes(stroke);
+    }
+
     fn clip(&self, path: &mut BezPath) {
         if let Some(rect) = axis_rect(path) {
             *path = outer_rect(rect).to_path(0.1);
@@ -223,10 +343,26 @@ impl PixelRules for PdfiumRules {
     }
 }
 
-/// Acrobat's rounding.
-struct AdobeRules;
+/// Acrobat's rounding, with its preferences, and its glyphs hinted by their own hints.
+pub(crate) struct AdobeRules {
+    prefs: AcrobatPrefs,
+    hinter: Hinter,
+}
+
+impl AdobeRules {
+    fn new(prefs: AcrobatPrefs) -> Self {
+        Self {
+            prefs,
+            hinter: Hinter::new(Hinting::FontHints),
+        }
+    }
+}
 
 impl PixelRules for AdobeRules {
+    fn glyph_outline(&self, glyph: &OutlineGlyph, device: Affine) -> Option<BezPath> {
+        self.hinter.outline(glyph, device)
+    }
+
     fn fill(&self, path: &mut BezPath) {
         map_points(path, snap_to_device);
     }
@@ -235,14 +371,14 @@ impl PixelRules for AdobeRules {
         ADOBE_PIXEL_OVERLAP
     }
 
-    fn stroke(&self, path: &mut BezPath, width: &mut f64) {
-        *width = adjusted_width(*width);
-        if is_polyline(path) {
-            let on_grid = stroke_grid(*width);
-            map_points(path, |p| Point::new(on_grid(p.x), on_grid(p.y)));
-        } else {
-            map_points(path, snap_to_device);
+    fn stroke(&self, path: &mut BezPath, stroke: &mut DeviceStroke) {
+        let thin = self.prefs.enhance_thin_lines && stroke.user_width < 1.0;
+        if thin || !self.prefs.line_weights {
+            // A hairline: stroke adjustment makes it the one pixel it falls in.
+            stroke.width = 0.0;
+            stroke.black |= thin;
         }
+        stroke_adjust(path, stroke);
     }
 
     fn clip(&self, path: &mut BezPath) {
@@ -293,17 +429,161 @@ pub fn match_float_range(start: f64, length: f64) -> (f64, f64) {
     (start, length)
 }
 
-/// A stroke's width in device pixels after stroke adjustment: a whole number, at least one.
-pub fn adjusted_width(width: f64) -> f64 {
-    width.round().max(1.0)
+/// The pixel boundaries stroke adjustment puts the edges of a stroke `width` pixels wide,
+/// centred on coordinate `c`: each edge on its nearest boundary, the centre where it is. A
+/// stroke that would close up, narrower than a pixel there, covers the pixels it touches: one
+/// inside a pixel, two across a boundary. A coordinate within the snapping tolerance of a
+/// boundary is on it.
+pub fn adjusted_edges(c: f64, width: f64) -> (f64, f64) {
+    let half = width.max(0.0) / 2.0;
+    let (low, high) = (snap(c - half), snap(c + half));
+    if high.round() - low.round() >= 1.0 {
+        return (low.round(), high.round());
+    }
+    let (low, high) = (low.floor(), high.ceil());
+    if high > low { (low, high) } else { (low, low + 1.0) }
 }
 
-/// Where stroke adjustment puts a coordinate for a stroke `width` whole pixels wide: on a pixel
-/// centre when the width is odd, on a pixel edge when it is even, so both of the stroke's edges
-/// land on pixel boundaries.
-pub fn stroke_grid(width: f64) -> impl Fn(f64) -> f64 {
-    let odd = width.rem_euclid(2.0) >= 1.0;
-    move |c| if odd { c.floor() + 0.5 } else { c.round() }
+/// Acrobat's stroke adjustment of `path`, in device space. A straight segment along an axis
+/// has its edges put on pixel boundaries ([`adjusted_edges`]): the stroke is as many whole
+/// pixels wide as the widest of those spans, one at least, and each such coordinate is moved to
+/// the middle of its span. So a thin line inside a pixel row is 1 px, and 2 px when it straddles
+/// two rows: the line weight jumps as the zoom moves it. The other coordinates, and a path with curves,
+/// keep their place but for the snapping tolerance; a curve's stroke is one pixel wide at least.
+pub fn stroke_adjust(path: &mut BezPath, stroke: &mut DeviceStroke) {
+    let width = stroke.width.max(0.0);
+    if !is_polyline(path) {
+        stroke.width = width.max(1.0);
+        map_points(path, snap_to_device);
+        return;
+    }
+    let (along_x, along_y) = axis_coordinates(path);
+    let span = |c: f64| {
+        let (low, high) = adjusted_edges(c, width);
+        high - low
+    };
+    let points: Vec<Point> = path
+        .elements()
+        .iter()
+        .filter_map(|el| match el {
+            PathEl::MoveTo(p) | PathEl::LineTo(p) => Some(*p),
+            _ => None,
+        })
+        .collect();
+    let widest = points
+        .iter()
+        .zip(along_x.iter().zip(&along_y))
+        .flat_map(|(p, (x, y))| [x.then(|| span(p.x)), y.then(|| span(p.y))])
+        .flatten()
+        .fold(None, |widest: Option<f64>, s| {
+            Some(widest.map_or(s, |w| w.max(s)))
+        });
+    let Some(widest) = widest else {
+        stroke.width = width.max(1.0);
+        map_points(path, snap_to_device);
+        return;
+    };
+    let adjusted = widest.max(1.0);
+    let place = |c: f64, fixed: bool| {
+        if fixed {
+            adjusted_edges(c, width).0 + adjusted / 2.0
+        } else {
+            snap(c)
+        }
+    };
+    let mut n = 0;
+    for el in path.elements_mut() {
+        if let PathEl::MoveTo(p) | PathEl::LineTo(p) = el {
+            *p = Point::new(place(p.x, along_x[n]), place(p.y, along_y[n]));
+            n += 1;
+        }
+    }
+    stroke.width = adjusted;
+}
+
+/// For each point of a polyline (its `MoveTo` and `LineTo` points, in order): whether a
+/// vertical segment runs through it (its x is a stroke's centre across x), and whether a
+/// horizontal one does (its y).
+fn axis_coordinates(path: &BezPath) -> (Vec<bool>, Vec<bool>) {
+    let (mut along_x, mut along_y) = (Vec::new(), Vec::new());
+    let mut points: Vec<Point> = Vec::new();
+    let mut start = 0;
+    for el in path.elements() {
+        match el {
+            PathEl::MoveTo(p) => {
+                start = points.len();
+                points.push(*p);
+                along_x.push(false);
+                along_y.push(false);
+            }
+            PathEl::LineTo(p) => {
+                points.push(*p);
+                along_x.push(false);
+                along_y.push(false);
+                let last = points.len() - 1;
+                if last > 0 {
+                    mark_axis(&points, (last - 1, last), &mut along_x, &mut along_y);
+                }
+            }
+            PathEl::ClosePath => {
+                if let Some(last) = points.len().checked_sub(1) {
+                    mark_axis(&points, (last, start), &mut along_x, &mut along_y);
+                }
+            }
+            PathEl::QuadTo(..) | PathEl::CurveTo(..) => {}
+        }
+    }
+    (along_x, along_y)
+}
+
+/// Marks the segment from point `a` to point `b` of `points`: its x when it is vertical, its y
+/// when it is horizontal.
+fn mark_axis(points: &[Point], (a, b): (usize, usize), along_x: &mut [bool], along_y: &mut [bool]) {
+    let (p, q) = (points[a], points[b]);
+    if (p.x - q.x).abs() < 1e-9 && (p.y - q.y).abs() >= 1e-9 {
+        along_x[a] = true;
+        along_x[b] = true;
+    }
+    if (p.y - q.y).abs() < 1e-9 && (p.x - q.x).abs() >= 1e-9 {
+        along_y[a] = true;
+        along_y[b] = true;
+    }
+}
+
+/// `PDFium`'s nudge of a segment that goes nowhere (a `LineTo` the point it starts from): its
+/// end moves one pixel to the right, so the line is not lost.
+pub fn nudge_degenerate_segments(path: &mut BezPath) {
+    let mut previous: Option<Point> = None;
+    for el in path.elements_mut() {
+        match el {
+            PathEl::LineTo(p) => {
+                if previous == Some(*p) {
+                    p.x += 1.0;
+                }
+                previous = Some(*p);
+            }
+            PathEl::MoveTo(p) | PathEl::QuadTo(_, p) | PathEl::CurveTo(_, _, p) => previous = Some(*p),
+            PathEl::ClosePath => {}
+        }
+    }
+}
+
+/// `PDFium`'s dashes: a cycle shorter than [`PDFIUM_MIN_DASH_CYCLE`] is drawn solid, and a dash
+/// or gap under a millionth becomes 0.1.
+pub fn collapse_dashes(stroke: &mut DeviceStroke) {
+    if stroke.dashes.is_empty() {
+        return;
+    }
+    if stroke.dashes.iter().sum::<f64>() < PDFIUM_MIN_DASH_CYCLE {
+        stroke.dashes.clear();
+        stroke.dash_offset = 0.0;
+        return;
+    }
+    for dash in &mut stroke.dashes {
+        if *dash < 1e-6 {
+            *dash = 0.1;
+        }
+    }
 }
 
 /// Acrobat's text placement for one run: its first glyph on the pixel grid, and each glyph
@@ -424,6 +704,7 @@ mod tests {
             viewer: None,
             display,
             zoom,
+            acrobat: AcrobatPrefs::default(),
         };
 
         assert_eq!(display.scale_factor(), 1.25);
@@ -454,7 +735,7 @@ mod tests {
             Rect::new(10.0, 3.0, 21.0, 8.0)
         );
         let mut clip = Rect::new(10.2, 3.7, 20.1, 8.5).to_path(0.1);
-        PdfiumRules.clip(&mut clip);
+        PdfiumRules::new().clip(&mut clip);
         assert_eq!(clip.bounding_box(), Rect::new(10.0, 3.0, 21.0, 9.0));
         // Smoke: a clip that is not a rectangle is left as it is.
         let mut triangle = BezPath::new();
@@ -463,7 +744,7 @@ mod tests {
         triangle.line_to((0.5, 9.5));
         triangle.close_path();
         let before = triangle.clone();
-        PdfiumRules.clip(&mut triangle);
+        PdfiumRules::new().clip(&mut triangle);
         assert_eq!(triangle, before);
     }
 
@@ -484,7 +765,7 @@ mod tests {
         // A 4 × 2 image drawn upside down (as a PDF image is), 10.5 × 5.25 px from (3.3, 20.6).
         let drawn = Affine::new([2.625, 0.0, 0.0, -2.625, 3.3, 25.85]);
 
-        let placed = PdfiumRules.image(drawn, 4, 2);
+        let placed = PdfiumRules::new().image(drawn, 4, 2);
 
         // x: 3.3 .. 13.8 becomes 11 px from 3; y: 20.6 .. 25.85 becomes 6 px from 20.
         assert_eq!(placed.as_coeffs(), [2.75, 0.0, 0.0, -3.0, 3.0, 26.0]);
@@ -492,42 +773,155 @@ mod tests {
         assert_eq!(corner, Point::new(3.0, 20.0));
         // Smoke: a rotated image keeps its transform.
         let turned = Affine::rotate(0.3).then_translate(Vec2::new(5.0, 5.0));
-        assert_eq!(PdfiumRules.image(turned, 4, 2), turned);
+        assert_eq!(PdfiumRules::new().image(turned, 4, 2), turned);
+    }
+
+    /// A solid stroke `width` px wide, `user_width` units in user space.
+    fn device_stroke(width: f64, user_width: f64) -> DeviceStroke {
+        DeviceStroke {
+            width,
+            user_width,
+            dashes: Vec::new(),
+            dash_offset: 0.0,
+            black: false,
+        }
+    }
+
+    /// A horizontal line from x 10.2 to 30.9 at `y`.
+    fn horizontal(y: f64) -> BezPath {
+        let mut line = BezPath::new();
+        line.move_to((10.2, y));
+        line.line_to((30.9, y));
+        line
+    }
+
+    /// The y of `line`'s points.
+    fn ys(line: &BezPath) -> Vec<f64> {
+        line.elements()
+            .iter()
+            .filter_map(|el| match el {
+                PathEl::MoveTo(p) | PathEl::LineTo(p) => Some(p.y),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Acrobat with *Enhance thin lines* off and *Line Weights* on: stroke adjustment alone.
+    fn adjust_only() -> AdobeRules {
+        AdobeRules::new(AcrobatPrefs {
+            enhance_thin_lines: false,
+            line_weights: true,
+        })
+    }
+
+    /// `stroke` adjusted by `rules` on a horizontal line at `y`: its width, its y and whether it
+    /// turned black.
+    fn adjusted(rules: &AdobeRules, y: f64, mut stroke: DeviceStroke) -> (f64, f64, bool) {
+        let mut line = horizontal(y);
+        rules.stroke(&mut line, &mut stroke);
+        (stroke.width, ys(&line)[0], stroke.black)
     }
 
     #[test]
-    fn stroke_adjustment_rounds_the_width_and_centres_the_edges_on_pixel_boundaries() {
-        assert_eq!(adjusted_width(0.4), 1.0);
-        assert_eq!(adjusted_width(1.4), 1.0);
-        assert_eq!(adjusted_width(1.6), 2.0);
-        let mut line = BezPath::new();
-        line.move_to((10.2, 4.7));
-        line.line_to((30.9, 4.7));
-        let mut width = 0.67;
-
-        AdobeRules.stroke(&mut line, &mut width);
-
-        // One pixel wide: its centre on the pixel centre, 4.5, so it covers 4..5 exactly.
-        assert_eq!(width, 1.0);
+    fn stroke_adjustment_makes_a_thin_line_one_pixel_inside_a_row_and_two_across_rows() {
+        // 0.6 px centred in row 4: its edges round to 4 and 5, one pixel.
         assert_eq!(
-            line.elements(),
-            [
-                PathEl::MoveTo(Point::new(10.5, 4.5)),
-                PathEl::LineTo(Point::new(30.5, 4.5))
-            ]
+            adjusted(&adjust_only(), 4.5, device_stroke(0.6, 1.5)),
+            (1.0, 4.5, false)
         );
-        // Two pixels wide: centred on a pixel edge.
-        assert_eq!(stroke_grid(2.0)(4.7), 5.0);
-        // Smoke: a curve keeps its shape; only coordinates within the tolerance snap.
+        // The same line on the boundary of rows 4 and 5 would close up: it covers both.
+        assert_eq!(
+            adjusted(&adjust_only(), 5.0, device_stroke(0.6, 1.5)),
+            (2.0, 5.0, false)
+        );
+        // 1.33 px (1 pt at 96 DPI): 1 px in a row, 2 px across two.
+        assert_eq!(adjusted(&adjust_only(), 4.5, device_stroke(1.33, 1.0)).0, 1.0);
+        assert_eq!(adjusted(&adjust_only(), 5.0, device_stroke(1.33, 1.0)).0, 2.0);
+        // A hairline (width 0) is the pixel it falls in.
+        assert_eq!(
+            adjusted(&adjust_only(), 4.7, device_stroke(0.0, 0.0)),
+            (1.0, 4.5, false)
+        );
+        // x runs along the line: its ends keep their place.
+        let mut line = horizontal(4.7);
+        adjust_only().stroke(&mut line, &mut device_stroke(0.6, 1.5));
+        assert_eq!(line.elements()[1], PathEl::LineTo(Point::new(30.9, 4.5)));
+        // Smoke: a curve keeps its shape, only coordinates within the tolerance snap, and its
+        // stroke is a pixel wide at least.
         let mut curve = BezPath::new();
         curve.move_to((0.3, 0.3));
         curve.curve_to((4.3, 0.3), (8.3, 4.3), (8.00002, 8.3));
-        let mut width = 1.0;
-        AdobeRules.stroke(&mut curve, &mut width);
+        let mut stroke = device_stroke(0.4, 0.3);
+        adjust_only().stroke(&mut curve, &mut stroke);
         assert_eq!(
             curve.elements()[1],
             PathEl::CurveTo((4.3, 0.3).into(), (8.3, 4.3).into(), (8.0, 8.3).into())
         );
+        assert_eq!(stroke.width, 1.0);
+    }
+
+    #[test]
+    fn acrobat_enhances_thin_lines_and_without_line_weights_draws_every_stroke_one_pixel() {
+        let enhanced = AdobeRules::new(AcrobatPrefs::default());
+        // 0.9 pt is under one user unit: a solid black pixel row, even on a row boundary.
+        assert_eq!(
+            adjusted(&enhanced, 5.0, device_stroke(1.2, 0.9)),
+            (1.0, 5.5, true)
+        );
+        // 1 pt is not thin: adjusted as it is, in its own colour.
+        assert_eq!(
+            adjusted(&enhanced, 5.0, device_stroke(1.33, 1.0)),
+            (2.0, 5.0, false)
+        );
+        // Line Weights off: a 4 px stroke is one pixel too, in its colour.
+        let no_weights = AdobeRules::new(AcrobatPrefs {
+            enhance_thin_lines: false,
+            line_weights: false,
+        });
+        assert_eq!(
+            adjusted(&no_weights, 4.5, device_stroke(4.0, 3.0)),
+            (1.0, 4.5, false)
+        );
+        // Smoke: with both as Acrobat starts, a 4 px stroke keeps 4 px.
+        assert_eq!(adjusted(&enhanced, 4.5, device_stroke(4.0, 3.0)).0, 4.0);
+    }
+
+    #[test]
+    fn pdfium_clamps_strokes_to_a_pixel_nudges_dots_and_collapses_tiny_dashes() {
+        let mut line = horizontal(4.7);
+        let mut stroke = device_stroke(0.13, 0.1);
+
+        PdfiumRules::new().stroke(&mut line, &mut stroke);
+
+        // A 0.1 pt line at 96 DPI is a full pixel wide, where it is: no snapping.
+        assert_eq!(stroke.width, 1.0);
+        assert_eq!(ys(&line), [4.7, 4.7]);
+        // A segment that goes nowhere ends a pixel to the right.
+        let mut dot = BezPath::new();
+        dot.move_to((3.0, 3.0));
+        dot.line_to((3.0, 3.0));
+        nudge_degenerate_segments(&mut dot);
+        assert_eq!(dot.elements()[1], PathEl::LineTo(Point::new(4.0, 3.0)));
+        // A dash cycle under 0.1 px is solid; a vanishing dash becomes 0.1 px.
+        let mut fine = DeviceStroke {
+            dashes: vec![0.04, 0.04],
+            dash_offset: 0.02,
+            ..device_stroke(1.0, 1.0)
+        };
+        collapse_dashes(&mut fine);
+        assert_eq!((fine.dashes.len(), fine.dash_offset), (0, 0.0));
+        let mut dotted = DeviceStroke {
+            dashes: vec![0.0, 3.0],
+            ..device_stroke(1.0, 1.0)
+        };
+        collapse_dashes(&mut dotted);
+        assert_eq!(dotted.dashes, [0.1, 3.0]);
+        // Smoke: a stroke wider than a pixel keeps its width, and zero-area fills are a
+        // quarter-opacity line.
+        let mut wide = device_stroke(2.6, 2.0);
+        PdfiumRules::new().stroke(&mut horizontal(4.7), &mut wide);
+        assert_eq!(wide.width, 2.6);
+        assert_eq!(PdfiumRules::new().thin_fill_alpha(), Some(0.25));
     }
 
     #[test]
@@ -545,7 +939,7 @@ mod tests {
         assert_eq!(tight[1].x, 0.3);
         // Smoke: PDFium rounds each origin on its own, so it never falls behind.
         let mut pdfium = [10.3, 17.7, 25.1, 32.5].map(|x| Point::new(x, 50.6));
-        PdfiumRules.glyph_origins(&mut pdfium);
+        PdfiumRules::new().glyph_origins(&mut pdfium);
         assert_eq!(pdfium.map(|p| p.x), [10.0, 18.0, 25.0, 33.0]);
     }
 
@@ -556,7 +950,9 @@ mod tests {
             [("Chrome", "PDFium"), ("Edge", "PDFium"), ("Acrobat", "Adobe AGM")]
         );
         // Smoke: Acrobat's fills overlap; PDFium's do not.
-        assert_eq!(Viewer::Acrobat.rules().fill_overlap(), ADOBE_PIXEL_OVERLAP);
-        assert_eq!(Viewer::Chrome.rules().fill_overlap(), 0.0);
+        let prefs = AcrobatPrefs::default();
+        assert_eq!(Viewer::Acrobat.rules(prefs).fill_overlap(), ADOBE_PIXEL_OVERLAP);
+        assert_eq!(Viewer::Chrome.rules(prefs).fill_overlap(), 0.0);
+        assert_eq!(Viewer::Acrobat.rules(prefs).thin_fill_alpha(), None);
     }
 }

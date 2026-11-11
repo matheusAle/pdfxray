@@ -409,6 +409,31 @@ fn snapshot_diff_side_by_side() {
     harness.snapshot("app_diff_side_by_side");
 }
 
+#[test]
+fn snapshot_diff_paint_order_on_both_sides() {
+    use pdfxray_app::center::canvas::diff::PAINT_ORDER_LABEL;
+
+    let _gpu = common::gpu_lock();
+    let (a, b) = pair("change-heading-level");
+    let mut harness = launched(&a, &b);
+    the(&harness, Region::Center, Role::Button, PAINT_ORDER_LABEL).click();
+    settle(&mut harness);
+    // Both a few operators into their page, then B on its own a little further.
+    harness.key_press(egui::Key::Home);
+    settle(&mut harness);
+    for _ in 0..6 {
+        harness.key_press(egui::Key::ArrowRight);
+    }
+    settle(&mut harness);
+    let b_index = state(&harness).step_index_of(Side::B).unwrap();
+    harness.state_mut().state.step_side_to_index(Side::B, b_index + 4);
+    settle(&mut harness);
+    harness.remove_cursor();
+    settle(&mut harness);
+
+    harness.snapshot("app_diff_paint_order");
+}
+
 /// An untagged comparison has no element pairs at all, so nothing the canvas used to know how
 /// to outline. Clicking an operator must still ring it, as it does outside a comparison.
 #[test]
@@ -660,68 +685,156 @@ fn digest_shown(harness: &Harness<'_, PdfxrayApp>) -> u64 {
 }
 
 #[test]
-fn paint_order_steps_the_active_side_and_draws_the_other_whole() {
-    use pdfxray_app::center::canvas::diff::{PAINT_ORDER_LABEL, stepped_label, whole_label};
+fn both_files_turn_the_page_together_forward_and_back() {
+    use pdfxray_app::center::canvas::diff::PAINT_ORDER_LABEL;
+    use pdfxray_app::stepper::Stepping;
+    use pdfxray_core::OpPosition;
+
+    let (a, b) = pair("change-heading-level");
+    let mut harness = launched(&a, &b);
+    the(&harness, Region::Center, Role::Button, PAINT_ORDER_LABEL).click();
+    settle(&mut harness);
+    let step = |h: &Harness<'_, PdfxrayApp>, side| state(h).step_of(side).unwrap();
+    let press = |h: &mut Harness<'_, PdfxrayApp>, key| {
+        h.key_press(key);
+        settle(h);
+    };
+    let (a_end, b_end) = {
+        let s = state(&harness);
+        (
+            s.last_op_of(Side::A, 0).unwrap(),
+            s.last_op_of(Side::B, 0).unwrap(),
+        )
+    };
+    // A at the end of the first page, B three operators before the end of its own.
+    {
+        let s = &mut harness.state_mut().state;
+        s.step_side_to(Side::A, OpPosition::new(0, a_end), true);
+        s.step_side_to(Side::B, OpPosition::new(0, b_end - 3), false);
+    }
+    settle(&mut harness);
+
+    // → moves B on while A waits at the end of its page.
+    for n in 1..=3 {
+        press(&mut harness, egui::Key::ArrowRight);
+        assert_eq!(step(&harness, Side::A), OpPosition::new(0, a_end), "A waits");
+        assert_eq!(step(&harness, Side::B), OpPosition::new(0, b_end - 3 + n));
+    }
+    // Both at the end of their page: the next → turns both.
+    press(&mut harness, egui::Key::ArrowRight);
+    assert_eq!(step(&harness, Side::A), OpPosition::new(1, 0));
+    assert_eq!(step(&harness, Side::B), OpPosition::new(1, 0));
+
+    // Back: B two operators in, A at the start of the page waits for it.
+    harness
+        .state_mut()
+        .state
+        .step_side_to(Side::B, OpPosition::new(1, 2), false);
+    for b_ix in [1, 0] {
+        press(&mut harness, egui::Key::ArrowLeft);
+        assert_eq!(step(&harness, Side::A), OpPosition::new(1, 0), "A waits");
+        assert_eq!(step(&harness, Side::B), OpPosition::new(1, b_ix));
+    }
+    press(&mut harness, egui::Key::ArrowLeft);
+    assert_eq!(step(&harness, Side::A), OpPosition::new(0, a_end));
+    assert_eq!(step(&harness, Side::B), OpPosition::new(0, b_end));
+
+    // Smoke: one file moving alone turns its page on its own.
+    harness.state_mut().state.set_stepping(Stepping::A);
+    press(&mut harness, egui::Key::ArrowRight);
+    assert_eq!(step(&harness, Side::A), OpPosition::new(1, 0));
+    assert_eq!(step(&harness, Side::B), OpPosition::new(0, b_end), "B stays");
+}
+
+#[test]
+fn paint_order_steps_both_files_each_with_its_own_track() {
+    use pdfxray_app::center::canvas::diff::{PAINT_ORDER_LABEL, stepped_label};
+    use pdfxray_app::drawer::paint_order::track_name;
+    use pdfxray_app::stepper::Stepping;
 
     let (a, b) = pair("drop-alt");
     let mut harness = launched(&a, &b);
     let whole = digest_shown(&harness);
-    assert_eq!(state(&harness).diff.as_ref().unwrap().active, Side::B);
 
     the(&harness, Region::Center, Role::Button, PAINT_ORDER_LABEL).click();
     settle(&mut harness);
 
-    // The stepper walks B, the active side: its last operator on the page shown, selected on B.
+    // Each side starts at the last operator of its page on the canvas; the buttons move both.
     let s = state(&harness);
     assert!(s.canvas.view.stepper);
-    assert_eq!(s.stepped_side(), Side::B);
-    let step = s.canvas.view.step;
-    let (_, shown_b) = s.diff.as_ref().unwrap().pages().unwrap();
-    assert_eq!(Some(step.page), shown_b);
-    assert_eq!(s.selection.side(), Side::B);
-    assert_eq!(s.selection.primary().cloned(), Some(NodeId::from(step)));
-    // At the last operator the page is whole: step back and the picture is cut.
+    assert_eq!(s.diff.as_ref().unwrap().stepping, Stepping::Both);
+    let (shown_a, shown_b) = s.diff.as_ref().unwrap().pages().unwrap();
+    let (step_a, step_b) = (s.step_of(Side::A).unwrap(), s.step_of(Side::B).unwrap());
+    assert_eq!((Some(step_a.page), Some(step_b.page)), (shown_a, shown_b));
+    assert_eq!(s.selection.side(), Side::A, "A leads");
+    assert_eq!(s.selection.primary().cloned(), Some(NodeId::from(step_a)));
+
+    // Home takes both to the start of their page: both are cut, each line says so.
     harness.key_press(egui::Key::Home);
     settle(&mut harness);
     let s = state(&harness);
-    assert_eq!(s.canvas.view.step.ix, 0);
-    assert_ne!(digest_shown(&harness), whole, "B is cut at its first operator");
-    // The page's operators, counted as the line counts them: the last one's index plus one.
-    let page_ops = s
-        .doc_of(Side::B)
-        .unwrap()
-        .captured(s.canvas.view.step.page)
-        .unwrap()
-        .ops
-        .last()
-        .unwrap()
-        .ix
-        + 1;
+    let ix = |side| s.step_of(side).unwrap().ix;
+    assert_eq!((ix(Side::A), ix(Side::B)), (0, 0));
+    assert_ne!(digest_shown(&harness), whole, "both cut at their first operator");
+    let page_ops = |side| {
+        let step = s.step_of(side).unwrap();
+        s.last_op_of(side, step.page).unwrap() + 1
+    };
     let texts = painted_texts(&harness);
-    assert!(texts.contains(&stepped_label(Side::B, 0, page_ops)), "{texts:?}");
-    assert!(texts.contains(&whole_label(Side::A)), "{texts:?}");
-    // What B still has to paint is outlined, with the label of the first box.
     assert!(
-        texts.iter().any(|t| t.starts_with("not painted yet · ops 1–")),
+        texts.contains(&stepped_label(Side::A, 0, page_ops(Side::A))),
         "{texts:?}"
     );
+    assert!(
+        texts.contains(&stepped_label(Side::B, 0, page_ops(Side::B))),
+        "{texts:?}"
+    );
+    assert!(
+        texts
+            .iter()
+            .filter(|t| t.starts_with("not painted yet · ops 1–"))
+            .count()
+            >= 2,
+        "what each side still has to paint is outlined: {texts:?}"
+    );
 
-    // The drawer's A | B switch moves the stepper over to A, on A's page.
-    the(&harness, Region::Drawer, Role::Button, "A").click();
+    // → moves both one operator, each in its own paint order.
+    harness.key_press(egui::Key::ArrowRight);
     settle(&mut harness);
     let s = state(&harness);
-    assert_eq!(s.stepped_side(), Side::A);
     assert_eq!(
-        s.diff.as_ref().unwrap().active,
-        Side::A,
-        "one state with the canvas switch"
+        (s.step_of(Side::A).unwrap().ix, s.step_of(Side::B).unwrap().ix),
+        (1, 1)
     );
-    assert_eq!(s.selection.side(), Side::A);
-    let texts = painted_texts(&harness);
-    assert!(texts.contains(&whole_label(Side::B)), "{texts:?}");
 
-    // Smoke: ending the comparison while stepping B turns the stepper off, A stays stepped.
-    harness.state_mut().state.set_stepped_side(Side::B);
+    // B's track moves B alone, to its end, and shows it.
+    let track = the(&harness, Region::Drawer, Role::Slider, &track_name(Side::B)).rect();
+    common::click_at(&mut harness, egui::pos2(track.max.x - 2.0, track.center().y));
+    settle(&mut harness);
+    let s = state(&harness);
+    assert_eq!(s.step_of(Side::A).unwrap().ix, 1, "A stays");
+    assert_eq!(s.step_index_of(Side::B), s.last_step_index_of(Side::B));
+    assert_eq!(s.selection.side(), Side::B);
+
+    // Moves: A, and the keys move A alone.
+    the(&harness, Region::Drawer, Role::Button, "A").click();
+    settle(&mut harness);
+    let b_before = state(&harness).step_of(Side::B);
+    harness.key_press(egui::Key::ArrowLeft);
+    settle(&mut harness);
+    let s = state(&harness);
+    assert_eq!(s.diff.as_ref().unwrap().stepping, Stepping::A);
+    assert_eq!(s.step_of(Side::A).unwrap().ix, 0);
+    assert_eq!(s.step_of(Side::B), b_before, "B keeps its step");
+    assert!(
+        !is_selected(&the(&harness, Region::Drawer, Role::Button, "Both")),
+        "the Moves switch reads A"
+    );
+
+    // Smoke: ending the comparison keeps stepping A alone.
     harness.state_mut().state.end_diff();
-    assert!(!state(&harness).canvas.view.stepper);
+    let s = state(&harness);
+    assert!(s.canvas.view.stepper);
+    assert_eq!(s.step_of(Side::B), None);
+    assert_eq!(s.moving_sides(), [Side::A]);
 }

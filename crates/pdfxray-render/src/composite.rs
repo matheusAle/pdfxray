@@ -18,9 +18,9 @@
 //! [`Composite::b`]), so the annotation layer can be laid out over both sides at once, and the
 //! app and an export draw the same picture.
 //!
-//! One side can be cut by the paint-order stepper ([`Request::step`]): its page is painted up to
-//! an operator, the other side whole, so a mask shows what that much of A (or B) leaves unlike
-//! the other file.
+//! Each side can be cut by the paint-order stepper ([`Request::steps`]): its page painted up to
+//! an operator, so a mask shows what that much of A leaves unlike that much of B, or unlike B
+//! whole.
 
 use hayro::vello_cpu::Pixmap;
 use pdfxray_core::diff::Side;
@@ -217,18 +217,42 @@ pub struct Request {
     pub registration: Option<Registration>,
     /// How the pixels are compared.
     pub comparator: Comparator,
-    /// The paint-order stepper's cut: that side's page painted up to and including this
-    /// operator, the other side whole. `None` paints both whole.
-    pub step: Option<(Side, u32)>,
+    /// The paint-order stepper's cuts, one per side. [`Steps::NONE`] paints both whole.
+    pub steps: Steps,
+}
+
+/// Where the paint-order stepper cuts each side's page: painted up to and including that
+/// operator, or whole (`None`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Steps {
+    /// A's cut.
+    pub a: Option<u32>,
+    /// B's cut.
+    pub b: Option<u32>,
+}
+
+impl Steps {
+    /// Both sides whole.
+    pub const NONE: Self = Self { a: None, b: None };
+
+    /// `side`'s cut.
+    pub const fn of(self, side: Side) -> Option<u32> {
+        match side {
+            Side::A => self.a,
+            Side::B => self.b,
+        }
+    }
+
+    /// What paints on `side`'s page: up to its cut, or everything.
+    pub fn content(self, side: Side) -> ContentFilter {
+        self.of(side).map_or(ContentFilter::All, ContentFilter::UpTo)
+    }
 }
 
 impl Request {
-    /// What paints on `side`'s page: up to the step on the stepped side, everything otherwise.
+    /// What paints on `side`'s page: up to its step, or everything.
     fn content(&self, side: Side) -> ContentFilter {
-        match self.step {
-            Some((stepped, ix)) if stepped == side => ContentFilter::UpTo(ix),
-            _ => ContentFilter::All,
-        }
+        self.steps.content(side)
     }
 
     /// The spec of `side`'s page at `scale`.
@@ -332,7 +356,7 @@ pub fn score_pages(
         fit: Fit::Refuse,
         registration: None,
         comparator: Comparator::SameEngine(*how),
-        step: None,
+        steps: Steps::NONE,
     };
     let drawn = shared_grid(a, b, &request)?;
     Ok(score::score(&drawn.a, &drawn.b, how))

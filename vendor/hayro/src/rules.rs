@@ -4,6 +4,7 @@
 //! (pixels, y down) just before it is rasterised and may move it. The defaults change nothing,
 //! so [`crate::render_into`] draws exactly as upstream does.
 
+use hayro_interpret::font::OutlineGlyph;
 use kurbo::{Affine, BezPath, Point};
 
 /// Rules a renderer applies to device-space geometry before rasterising it.
@@ -25,8 +26,15 @@ pub trait PixelRules {
         0.0
     }
 
-    /// A path about to be stroked, and the width of the stroke in device pixels.
-    fn stroke(&self, _path: &mut BezPath, _width: &mut f64) {}
+    /// The opacity a fill that encloses no area (a line drawn there and back, a rectangle of
+    /// zero width) is drawn with, as a 1 pixel line; `None` draws nothing, as upstream.
+    fn thin_fill_alpha(&self) -> Option<f32> {
+        None
+    }
+
+    /// A path about to be stroked, and the stroke, both in device space. The stroke's width
+    /// arrives as the PDF asks, before upstream's minimum of one pixel: the rules set their own.
+    fn stroke(&self, _path: &mut BezPath, _stroke: &mut DeviceStroke) {}
 
     /// A clip path about to be pushed.
     fn clip(&self, _path: &mut BezPath) {}
@@ -34,10 +42,32 @@ pub trait PixelRules {
     /// The origins of one run's glyphs, in the order they are drawn.
     fn glyph_origins(&self, _origins: &mut [Point]) {}
 
+    /// `glyph`'s outline as the viewer draws it at `device` (glyph space to device pixels, the
+    /// glyph's origin already placed): hinted to the pixel grid, in the glyph space of
+    /// [`OutlineGlyph::outline`]. `None` keeps the outline as it is.
+    fn glyph_outline(&self, _glyph: &OutlineGlyph, _device: Affine) -> Option<BezPath> {
+        None
+    }
+
     /// The map from an image's `width` x `height` sample grid to device space.
     fn image(&self, transform: Affine, _width: u32, _height: u32) -> Affine {
         transform
     }
+}
+
+/// A stroke in device space, as [`PixelRules::stroke`] sees and changes it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeviceStroke {
+    /// Width in device pixels.
+    pub width: f64,
+    /// Width in user space, as the `w` operator set it.
+    pub user_width: f64,
+    /// Dash lengths in device pixels; empty for a solid line.
+    pub dashes: Vec<f64>,
+    /// Dash offset in device pixels.
+    pub dash_offset: f64,
+    /// Set by the rules: the stroke is drawn in opaque black, whatever its colour.
+    pub black: bool,
 }
 
 /// The rules of upstream hayro: nothing moves.

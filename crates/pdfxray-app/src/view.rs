@@ -56,6 +56,86 @@ pub fn fit_zoom(page: Vec2, available: Vec2) -> f32 {
     clamp_zoom((available.x / page.x).min(available.y / page.y))
 }
 
+/// The whole-pixel step of `zoom` on an emulated screen whose 1× zoom is `unit` (the zoom at
+/// which one of its device pixels is one pixel of this display): `n ≥ 1` for n× (n display
+/// pixels a device pixel), `-n` for 1/n× (n device pixels a display pixel). On a step every
+/// device pixel shows the same size, crisp.
+fn pixel_step_of(zoom: f32, unit: f32) -> i32 {
+    let factor = zoom / unit;
+    // A factor of a few hundred at most either way.
+    #[allow(clippy::cast_possible_truncation)]
+    if factor >= 0.75 {
+        (factor.round() as i32).max(1)
+    } else {
+        -((1.0 / factor).round() as i32).max(2)
+    }
+}
+
+/// The zoom of whole-pixel step `step` (see [`pixel_step_of`]).
+fn pixel_zoom(step: i32, unit: f32) -> f32 {
+    // A small step number.
+    #[allow(clippy::cast_precision_loss)]
+    let factor = if step >= 1 {
+        step as f32
+    } else {
+        1.0 / (-step) as f32
+    };
+    unit * factor
+}
+
+/// The step after `step` (`up`) or before it: …, 1/3, 1/2, 1, 2, 3, …
+const fn next_step(step: i32, up: bool) -> i32 {
+    match (up, step) {
+        (true, -2) => 1,
+        (false, 1) => -2,
+        (true, s) => s + 1,
+        (false, s) => s - 1,
+    }
+}
+
+/// `step`, or the nearest step towards it inside [`MIN_ZOOM`]..=[`MAX_ZOOM`].
+fn step_in_range(mut step: i32, unit: f32) -> f32 {
+    for _ in 0..512 {
+        let zoom = pixel_zoom(step, unit);
+        if zoom > MAX_ZOOM {
+            step = next_step(step, false);
+        } else if zoom < MIN_ZOOM {
+            step = next_step(step, true);
+        } else {
+            return zoom;
+        }
+    }
+    clamp_zoom(pixel_zoom(step, unit))
+}
+
+/// `zoom` on the nearest whole-pixel step of an emulated screen whose 1× zoom is `unit`.
+pub fn snap_to_pixels(zoom: f32, unit: f32) -> f32 {
+    step_in_range(pixel_step_of(zoom, unit), unit)
+}
+
+/// The whole-pixel step after `zoom` (`up`) or before it; the same step at either end.
+pub fn pixel_step(zoom: f32, unit: f32, up: bool) -> f32 {
+    let step = pixel_step_of(zoom, unit);
+    let next = pixel_zoom(next_step(step, up), unit);
+    if (MIN_ZOOM..=MAX_ZOOM).contains(&next) {
+        next
+    } else {
+        step_in_range(step, unit)
+    }
+}
+
+/// The largest whole-pixel step at most `fit`, so the page still fits.
+pub fn fit_to_pixels(fit: f32, unit: f32) -> f32 {
+    let mut step = pixel_step_of(fit, unit);
+    for _ in 0..512 {
+        if pixel_zoom(step, unit) <= fit * (1.0 + 1e-4) {
+            break;
+        }
+        step = next_step(step, false);
+    }
+    step_in_range(step, unit)
+}
+
 /// Cache key and render scale (bitmap pixels per page point) for showing a `page`-point page
 /// at `zoom` on a display with `pixels_per_point`.
 ///
@@ -137,6 +217,27 @@ mod tests {
         assert_close(fit_zoom(vec2(10.0, 10.0), vec2(1000.0, 1000.0)), MAX_ZOOM);
         assert_close(fit_zoom(vec2(1000.0, 1000.0), vec2(0.0, 0.0)), MIN_ZOOM);
         assert_close(fit_zoom(vec2(0.0, 100.0), vec2(300.0, 300.0)), 1.0);
+    }
+
+    #[test]
+    fn on_an_emulated_screen_the_zoom_moves_in_whole_pixels() {
+        // 96 DPI at 100 % on a display of one pixel a point: 1× is 133 %.
+        let unit = 96.0 / 72.0;
+
+        assert_close(snap_to_pixels(1.0, unit), unit);
+        assert_close(snap_to_pixels(3.1, unit), 2.0 * unit);
+        assert_close(pixel_step(unit, unit, true), 2.0 * unit);
+        assert_close(pixel_step(2.0 * unit, unit, false), unit);
+        // Below 1×, whole device pixels a display pixel: ½×, then ⅓×.
+        assert_close(pixel_step(unit, unit, false), unit / 2.0);
+        assert_close(pixel_step(unit / 2.0, unit, false), unit / 3.0);
+        assert_close(pixel_step(unit / 2.0, unit, true), unit);
+        // Fit takes the largest step that still fits.
+        assert_close(fit_to_pixels(2.9, unit), 2.0 * unit);
+        assert_close(fit_to_pixels(1.2, unit), unit / 2.0);
+        // Smoke: never past the zoom range; at its end the step stays.
+        assert_close(pixel_step(6.0 * unit, unit, true), 6.0 * unit);
+        assert!(snap_to_pixels(100.0, unit) <= MAX_ZOOM);
     }
 
     #[test]

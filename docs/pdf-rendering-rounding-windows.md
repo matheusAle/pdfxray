@@ -2,8 +2,8 @@
 
 Reference for how Adobe Acrobat and Chromium (PDFium) convert PDF coordinates to
 screen pixels on Windows. Covers the full pipeline from PDF user-space to device
-pixels, including zoom, DPI, rounding strategies, gap prevention, and text
-positioning.
+pixels, including zoom, DPI, rounding strategies, gap prevention, text
+positioning, sub-pixel compositing, thin line handling, and transparency groups.
 
 Target use: emulating per-viewer rendering behavior in pdfxray.
 
@@ -502,6 +502,12 @@ PDF coordinate
 | **Hinting engine** | Proprietary CFF hinter with histogram stem detection | FreeType autohinter |
 | **GPU compositing** | DirectX 9 shaders (CMYK↔XYZ↔RGB, blend modes) | None (AGG CPU-only) |
 | **GDI interop** | Full hybrid path (`WinGDIPort` + DX9 compositor) | None |
+| **Min stroke width** | Variable (stroke adjust → 1px or 2px) + Enhance Thin Lines | Hard clamp to 1 device pixel |
+| **Zero-area paths** | Not directly observable | 1px at 25% alpha |
+| **Adjacent fill gaps** | Prevented by PixelOverlap (0.01px extension) | No prevention — conflation seams |
+| **Knockout groups** | Fully implemented (GPU depth buffer + algebraic) | Supported via backdrop bitmap |
+| **Alpha model** | Not directly observable | Straight alpha (not premultiplied) |
+| **Blend modes** | CPU + DX9 GPU shaders with color management | CPU integer only, per-channel 0–255 |
 
 ---
 
@@ -557,48 +563,381 @@ PDF coordinate
 
 ---
 
-## 5. Emulation Parameters
+## 5. Thin Lines (Below 0.25pt)
+
+The PDF specification (ISO 32000, §10.6.5) defines a zero-width stroke as "the
+thinnest line that can be rendered at device resolution: 1 device pixel wide."
+The `SA` (stroke adjust) flag in the graphics state allows renderers to
+compensate for rasterization effects on thin lines, with the actual rendered
+width allowed to differ from the requested width by up to **2 device pixels**.
+
+### 5.1 Adobe Acrobat
+
+Adobe handles thin lines through three independent layers:
+
+#### 5.1.1 Stroke Adjustment (AGM Core)
+
+The `setstrokeadjust` operator widens thin strokes so their edges land on
+device pixel boundaries. A 0.25pt stroke that would render as ~0.33px is
+widened to exactly 1.0 device pixels. The widening is directional: the stroke
+center stays at its computed position, but edges are pushed to the nearest
+pixel boundaries.
+
+This causes the **line-weight jumping** artifact: as zoom changes, a thin line
+alternates between 1px and 2px depending on where its center falls relative to
+the pixel grid.
+
+#### 5.1.2 Enhance Thin Lines (Viewer Setting)
+
+A display-only post-processing effect controlled by Preferences → Page Display
+→ Rendering → "Enhance thin lines":
+
+- **Trigger**: activates when the stroke width is less than 1 PDF user unit
+  (1/72 inch = 1pt) — this is in PDF coordinate space, not device pixels
+- **Effect**: forces all qualifying strokes to render as solid 1-pixel black
+  lines, regardless of zoom or AA settings
+- **Scope**: screen display only — does not affect print output
+- **Color behavior**: most predictable for black strokes; gray and colored thin
+  lines may render inconsistently
+
+#### 5.1.3 Line Weights View (Ctrl+5)
+
+A display toggle separate from Enhance Thin Lines:
+
+| Line Weights | Effect |
+|---|---|
+| Off (default) | All strokes render at 1 pixel regardless of defined width |
+| On | Strokes render at their true defined width, scaled by zoom |
+
+When Line Weights is off, stroke width is purely cosmetic on screen — a 0.1pt
+and a 3pt line look identical.
+
+#### 5.1.4 DevicePixelSize Thresholds
+
+AGM switches behavior at discrete thresholds based on device pixel size:
+
+- `ConvertAllDashes` — below this threshold, all dash patterns convert to
+  explicit geometry (prevents invisible dashes at low zoom)
+- `ATCThreshold` — text composition strategy change
+- `TrueTypeThreshold` — rasterization mode switch (outline vs bitmap)
+
+#### 5.1.5 Fix Hairlines (Preflight Tool)
+
+Acrobat Pro offers Tools → Print Production → Fix Hairlines, which **modifies
+the PDF itself**: replaces zero-width and very thin strokes with a specified
+minimum width. This is a destructive file operation, not a rendering
+adjustment.
+
+### 5.2 Chromium / PDFium
+
+#### 5.2.1 Minimum Width Clamping
+
+The AGG backend enforces a hard minimum of 1 device pixel:
+
+```
+width = max(line_width × scale, 1.0 / average_device_scale)
+```
+
+Any stroke narrower than 1 device pixel is clamped to 1 device pixel. A 0.1pt
+line at 100% zoom (where it would be ~0.13 device pixels) renders identically
+to a 0.5pt line — both are clamped to 1px.
+
+There is no gradual thinning: the line is widened to 1px, not rendered as a
+faint fractional-coverage stroke.
+
+#### 5.2.2 Zero-Area Paths (Thin Flag)
+
+Degenerate paths that enclose zero area (lines drawn A→B→A, two-point paths)
+are detected and flagged as "thin." These render as 1-pixel lines at **25%
+opacity**:
+
+```
+stroke_alpha = fill_alpha >> 2   // quarter the alpha
+```
+
+Degenerate line segments (move-to then line-to the same point) are nudged by
++1 pixel in X to prevent them from vanishing.
+
+#### 5.2.3 Stroke Adjustment
+
+PDFium reads the PDF `SA` flag but implements only **endpoint snapping**: line
+endpoints are shifted to pixel centers:
+
+```
+point.x = int(point.x) + 0.5
+point.y = int(point.y) + 0.5
+```
+
+There is no widening of thin strokes and no snap-to-grid for stroke edges.
+
+#### 5.2.4 Dash Pattern Collapse
+
+- Dash cycles shorter than 0.1 device pixels are drawn as solid lines
+- Individual dash segments below 0.000001 are replaced with 0.1
+
+### 5.3 Comparison: Sub-0.25pt Lines
+
+| Stroke width | Adobe Acrobat (Enhance ON) | Adobe Acrobat (Enhance OFF, Line Weights OFF) | Chromium / PDFium |
+|---|---|---|---|
+| 0pt (hairline) | 1px solid black | 1px constant | 1px solid |
+| 0.1pt (~0.13px at 96dpi) | 1px solid black | 1px constant | 1px solid (clamped) |
+| 0.25pt (~0.33px at 96dpi) | 1px solid black | 1px constant | 1px solid (clamped) |
+| 0.5pt (~0.67px at 96dpi) | 1px or 2px (stroke adjust boundary) | 1px constant | 1px solid (clamped) |
+| 0.75pt (~1.0px at 96dpi) | 1px or 2px (grid alignment) | 1px constant | 1px (natural width) |
+| 1.0pt (~1.33px at 96dpi) | 1-2px stroke-adjusted | 1px constant | 1-2px with AA edges |
+| Print output | True defined width (all modes) | True defined width | True defined width |
+
+PDFium produces a **hard floor** at 1 device pixel — all sub-pixel strokes
+look identical. Adobe's system produces variable widths (1px or 2px) for the
+same stroke depending on zoom level and pixel-grid alignment.
+
+---
+
+## 6. Sub-Pixel Compositing and Overlay
+
+### 6.1 The Conflation Problem
+
+When two anti-aliased shapes share an edge, sequential compositing produces
+**conflation artifacts** (seam artifacts):
+
+1. Shape A covers 70% of a pixel. Composited: `dest = src_A × 0.7 + bg × 0.3`
+2. Shape B covers the remaining 70% from the other side. Composited:
+   `dest = src_B × 0.7 + prev_dest × 0.3`
+
+The two 70% coverages don't add to 100% — they multiply, leaving a visible
+seam where the background bleeds through. This is inherent to any rasterizer
+that composites shapes independently.
+
+### 6.2 Adobe Acrobat
+
+#### 6.2.1 PixelOverlap Gap Prevention
+
+Adjacent filled regions are extended by `PixelOverlap = 0.01` device pixels
+past their mathematical boundary. At the shared edge, coverage values sum to
+slightly over 100%, eliminating hairline gaps.
+
+**Trade-off**: at high zoom, the overlap becomes a faintly visible dark seam
+where two fills composite over each other.
+
+#### 6.2.2 GPU Compositing (DX9)
+
+Color-managed compositing runs as DirectX 9 pixel shaders:
+
+- CMYK → XYZ → RGB transform chains as shader programs
+- Spot color handling on GPU
+- Highlight and XOR blend modes as custom HLSL shaders
+- `CompositorDX9::StartGDICompositing()` — hybrid GPU+GDI path
+
+The DX9 → GDI handoff can produce compositing seams at layer boundaries when
+the GPU and GDI sub-images don't align to the same pixel grid.
+
+#### 6.2.3 Knockout Groups
+
+Fully implemented via two GPU techniques:
+
+- **Depth-buffer method**: each object in the knockout group gets a z-value;
+  the GPU z-test ensures only the highest-priority object contributes at each
+  pixel, with sub-pixel coverage at MSAA sample level (typically 8 samples)
+- **Non-MSAA method**: algebraic per-pixel approach that avoids the 8-sub-pixel
+  limitation of MSAA
+
+On CPU fallback, knockout composites each object with the group's initial
+backdrop rather than the accumulated stack.
+
+### 6.3 Chromium / PDFium
+
+#### 6.3.1 Coverage Model
+
+AGG's `rasterizer_scanline_aa` produces area-based coverage values (0–255) per
+pixel. Each cell accumulates an area (sub-pixel area contribution) and a cover
+(running winding-number contribution). Final coverage:
+
+```
+alpha = calculate_alpha((cover << (poly_subpixel_shift + 1)) - area)
+```
+
+Where `poly_subpixel_shift` = 8 (256 sub-pixel positions per pixel).
+
+**Compositing per pixel:**
+
+```
+source_alpha = object_alpha × coverage × clip_mask / 255 / 255
+
+if coverage == 255:     // fully covered — fast path
+    write source color directly
+else:                   // partially covered
+    AlphaMerge(dest, src, source_alpha)
+
+dest_alpha = dest_alpha + src_alpha - dest_alpha × src_alpha / 255
+```
+
+Two shapes that each cover 50% of the same pixel are composited sequentially
+(shape 1 at 50%, then shape 2 at 50% over the result), not as a single 100%
+operation. This is **coverage-modulated alpha compositing**, not analytic area
+compositing.
+
+#### 6.3.2 No Adjacent Fill Gap Prevention
+
+PDFium has no equivalent of `PixelOverlap`. Adjacent fills with anti-aliased
+edges will show conflation seams at their shared boundary.
+
+#### 6.3.3 Fill+Stroke Overlap Handling
+
+When a path is both filled and stroked with semi-transparent stroke,
+`DrawFillStrokePath` composites them into an offscreen bitmap with
+`group_knockout=true`, then composites the result once. This prevents the
+stroke from double-blending over the fill — but only for the same path's fill
+and stroke, not for adjacent paths.
+
+#### 6.3.4 Image Edge Snapping
+
+Axis-aligned image edges are snapped to the pixel grid. This avoids partial
+coverage at image boundaries, preventing image-to-image seams.
+
+#### 6.3.5 Transparency Groups
+
+**Isolated groups**: rendered into an offscreen BGRA bitmap with transparent
+backdrop, then composited back to the device with soft mask, text clip mask,
+and group alpha applied.
+
+**Non-isolated groups**: device pixels are cloned as the initial backdrop; the
+group renders on top, and the result replaces the original region.
+
+**Knockout groups**: supported via a `group_knockout_` flag and backdrop
+bitmap. Each object composites with the group's initial backdrop rather than
+the accumulated stack.
+
+#### 6.3.6 Blend Modes
+
+All separable blend modes operate per-channel on integer values 0–255:
+
+| Mode | Formula (b = back, s = src) |
+|---|---|
+| Normal | `s` |
+| Multiply | `s × b / 255` |
+| Screen | `s + b - s × b / 255` |
+| Overlay | `HardLight(s, b)` (args swapped) |
+| Darken | `min(s, b)` |
+| Lighten | `max(s, b)` |
+| ColorDodge | `s == 255 ? 255 : min(b × 255 / (255 - s), 255)` |
+| ColorBurn | `s == 0 ? 0 : 255 - min((255 - b) × 255 / s, 255)` |
+| HardLight | `s < 128 ? s × b × 2 / 255 : Screen(b, 2s - 255)` |
+| SoftLight | `s < 128 ? b - (255-2s) × b × (255-b) / 255² : b + (2s-255) × (√LUT[b] - b) / 255` |
+| Difference | `abs(b - s)` |
+| Exclusion | `b + s - 2 × b × s / 255` |
+
+Non-separable modes (Hue, Saturation, Color, Luminosity) use
+`Lum(c) = (R×30 + G×59 + B×11) / 100` with SetLum/SetSat helpers.
+
+Compositing after blending:
+
+```
+blended = Blend(mode, backdrop, source)
+result_alpha = back_alpha + src_alpha - back_alpha × src_alpha / 255
+mix_ratio = src_alpha × 255 / result_alpha
+result = AlphaMerge(backdrop, blended, mix_ratio)
+```
+
+#### 6.3.7 Alpha Model
+
+PDFium uses **straight alpha** (not premultiplied). Chromium historically
+mishandled this as premultiplied, causing color errors at transparent edges.
+This was fixed but is worth noting for emulation accuracy.
+
+### 6.4 Comparison: Sub-Pixel Compositing
+
+| Aspect | Adobe Acrobat | Chromium / PDFium |
+|---|---|---|
+| **Adjacent fill seams** | Prevented by PixelOverlap (0.01px extension) | No prevention — conflation artifacts occur |
+| **Fill+stroke same path** | Drawn together (knockout within path) | Offscreen knockout bitmap when stroke is semi-transparent |
+| **Image edges** | Not directly observable | Snapped to pixel grid — no partial coverage |
+| **Knockout groups** | Fully implemented (GPU depth buffer or algebraic) | Supported via backdrop bitmap |
+| **Isolated groups** | Full spec compliance | Offscreen BGRA bitmap |
+| **Non-isolated groups** | Backdrop inherited from parent | Backdrop cloned from device |
+| **Blend execution** | CPU integer + DX9 GPU shaders with color management | CPU integer only (AGG) |
+| **Alpha model** | Not directly observable | Straight alpha |
+| **GPU compositing** | DX9 pixel shaders | None |
+
+---
+
+## 7. Emulation Parameters
 
 To emulate each viewer's rendering, the following parameters are needed:
 
-### 5.1 Adobe Acrobat Emulation
+### 7.1 Adobe Acrobat Emulation
 
 ```
+# Coordinate pipeline
 snap_to_device_tolerance: 0.0001
 pixel_overlap: 0.01
 stroke_adjust: true
 text_grid_enabled: true
 resolution_model: discrete
 coordinate_precision: dual (int16 below threshold, int32 above)
+
+# Text
 hinting: full_cff (BlueValues, StemSnap, histogram stem detection)
 aa_mode: dynamic_per_glyph
 glyph_advance_rounding: round_with_zero_guard
+
+# Thin lines
+enhance_thin_lines: true | false  (user preference)
+enhance_threshold: 1.0 user_unit  (triggers when width < 1pt)
+enhance_effect: clamp_to_1px_black
+line_weights_view: true | false  (Ctrl+5 toggle)
+stroke_adjust_widening: snap_edges_to_pixel_boundary
+device_pixel_size_thresholds:
+  convert_all_dashes: <resolution-dependent>
+  atc_threshold: <resolution-dependent>
+  truetype_threshold: <resolution-dependent>
+
+# Compositing
+fill_overlap_prevention: pixel_overlap_0.01
 gpu_compositing: dx9_shaders
 gdi_fallback: true
+knockout_groups: fully_supported (depth_buffer + algebraic)
+blend_execution: cpu_integer + dx9_gpu_shaders
 ```
 
-### 5.2 Chromium/PDFium Emulation
+### 7.2 Chromium/PDFium Emulation
 
 ```
+# Coordinate pipeline
 snap_to_device_tolerance: none
 pixel_overlap: none
-stroke_adjust: false
+stroke_adjust: endpoint_snap_only  (point.xy = int(xy) + 0.5)
 text_grid_enabled: false
 resolution_model: continuous (zoom × device_scale_factor)
 coordinate_precision: float32
+
+# Text
 hinting: freetype_autohint
 aa_mode: fixed_grayscale
 glyph_x_rounding: round (normal) | floor (lcd)
 glyph_y_rounding: round
 glyph_advance_rounding: round_with_drift_compensation
+
+# Thin lines
+min_stroke_width_device_px: 1.0  (hard clamp in AGG)
+zero_area_thin_alpha_factor: 0.25  (alpha >> 2)
+degenerate_segment_nudge: +1px in X
+min_dash_cycle_device_px: 0.1
+min_dash_segment: 0.1  (replaces segments < 0.000001)
+
+# Rounding
 rect_expansion: floor_left_ceil_right (GetOuterRect)
 rect_contraction: ceil_left_floor_right (GetInnerRect)
 image_dest_size: ceil
+image_edge_snapping: snap_axis_aligned_to_pixel_grid
 span_preservation: match_float_range
+
+# Compositing
+fill_overlap_prevention: none
+fill_stroke_overlap: offscreen_knockout_when_semi_transparent
+alpha_model: straight (not premultiplied)
+alpha_composite: porter_duff_over
+knockout_groups: supported (backdrop bitmap)
+blend_execution: cpu_integer_only
 gpu_compositing: none
 gdi_fallback: none
 ```
-
----
-
-

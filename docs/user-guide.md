@@ -188,22 +188,43 @@ The page is then drawn at that screen's device pixels, `zoom × DPI / 72` per po
 says how many and how big the page is), and each viewer puts what lands between two pixels
 where it puts it:
 
-* **PDFium** (Chrome, Edge) moves nothing but this: each glyph starts on a whole pixel, a
-  rectangular clip grows out to whole pixels, and an upright image covers a whole number of
-  pixels. No snapping, no overlap between fills, no stroke adjustment.
+* **PDFium** (Chrome, Edge): each glyph starts on a whole pixel, a rectangular clip grows out to
+  whole pixels, and an upright image covers a whole number of pixels. No stroke is drawn under
+  one device pixel wide (a 0.1 pt line looks like a 0.5 pt one), a fill that encloses no area (a
+  line drawn there and back) is a 1 px line at a quarter of its opacity, a segment that goes
+  nowhere is nudged a pixel right so it still shows, and a dash pattern under 0.1 px a cycle is
+  drawn solid. No snapping, no overlap between fills, no stroke adjustment.
 * **Acrobat** snaps a coordinate within 0.0001 px of a pixel onto it, lets fills overlap by
-  0.01 px, makes every stroke a whole number of pixels wide (at least one) with its edges on
-  pixel boundaries, starts each text run on a pixel and rounds each glyph's advance (but never to
-  zero), so a long run can drift.
+  0.01 px, starts each text run on a pixel and rounds each glyph's advance (but never to zero),
+  so a long run can drift. Stroke adjustment puts a straight stroke's edges on the nearest pixel
+  boundaries, a pixel apart at least: a thin line is 1 px when it sits inside a pixel row and
+  2 px when it straddles two, so line weights jump as the zoom changes. When Acrobat is the
+  viewer, its two Page Display preferences show under it: **Enhance thin lines** (on as Acrobat
+  starts) draws every stroke under 1 pt as a solid 1 px black line, and with **Line weights**
+  off (Ctrl+5 in Acrobat) every stroke is 1 px whatever its width.
 
-The canvas zoom only magnifies those pixels, crisply, so zoom in to see each one. The status bar
+The canvas zoom only magnifies those pixels, and while emulating it moves in whole steps of
+them so every one shows the same size, crisp: ⌘0 (or a click on the zoom readout) is 1×, one
+emulated pixel on one pixel of your display (133 % for 96 DPI at 100 % on a display of one
+pixel a point), and the zoom buttons, ⌘+ and ⌘−, and Fit go to 2×, 3×… or ½×, ⅓×. The wheel
+and a pinch follow your hand, then settle on the nearest step where the pointer is a moment
+after you stop. At 1× you see what that Windows screen shows, pixel for pixel. The status bar
 names the screen (`Acrobat · 1920×1080 · 120 DPI · 100%`), and *Between A and B* in Measure
 gives *On screen* in its device pixels (`0.67 px @Chrome 100%, 120 DPI · under a pixel`). The
 settings stay for the session when you turn emulation off. Comparisons are still drawn on the
 Mac's pixels.
 
-Not emulated: Acrobat's resolution table and the thresholds where its rendering changes, font
-hinting, anti-aliasing (every viewer is anti-aliased as pdfxray does it) and GPU compositing.
+Text is hinted as each viewer hints it, so small text stays sharp: its stems are fitted to the
+emulated pixels. Acrobat uses the font's own hints (TrueType instructions, CFF hints), Chrome
+and Edge the autohinter. An embedded TrueType or OpenType font is hinted; a bare CFF or Type 1
+font, and turned or squeezed text, are drawn unhinted.
+
+Not emulated: Acrobat's resolution table and the thresholds where its rendering changes (dash
+conversion among them), Acrobat's own font engine (its hinting is approximated with the font's
+hints, and its subpixel text smoothing is not reproduced), anti-aliasing and blending arithmetic
+(every viewer is drawn as pdfxray draws), knockout groups, GPU compositing, PDFium's endpoint snapping when a PDF
+asks for stroke adjustment (the `SA` flag is not read), and PDFium's knockout of a path's
+semi-transparent stroke over its own fill.
 
 ## Tags, reading order and tables
 
@@ -369,13 +390,19 @@ reading order (overlaid: of the side picked with A/B, which is also the side a c
 Pages that differ in size or rotation are never scaled silently: overlaid, a banner says why and
 offers *Scale B to A*. The picture is the one `pdfxray render a.pdf --against b.pdf` writes.
 
-**Paint order** (`P`, on the comparison's toolbar) steps through one side at a time: its page is
-painted up to the step and the other side's is drawn whole, in every mode, and a line over the
-picture says which is which (`B · stepped · 12 / 48`, `A · drawn whole`). The side is the A | B
-switch of the Paint order tab, the same one the overlay's A/B picks; switching starts the
-stepper over on that side's page. The Inspector's Paint order section is for A's operators, and
-the track's red marks of untagged content are A's checks. Ending the comparison while stepping B
-turns the stepper off.
+**Paint order** (`P`, on the comparison's toolbar) gives each file its own step. Each side's page
+is painted up to its step, in every mode, and a line over each side says how far
+(`A · stepped · 7 / 39`, `B · stepped · 12 / 48`); a side whose step is on another page is drawn
+whole (`B · drawn whole`). In the Paint order tab each file has a row: its letter, its position
+(`55 / 164 ops page 2 · op #6`) and its own track, which moves that file alone. The buttons, the
+arrow keys, Home and End, and play move the files the **Moves** switch names: *Both* (the
+default), each through its own paint order, or *A* or *B* alone; the moving files' letters are
+in the accent. Moving both, the files turn the page together: one that reaches the end of its
+page waits there while the other finishes its own, then both go on to their next page; going
+back, one at the start of its page waits for the other. A file's own track moves it freely. Moving a file's track shows its page and selects its operator, and the operator
+cards (shown once the drawer is tall enough for them) follow the selected file. The Inspector's
+Paint order section is for A's operators, and the track's red marks of untagged content are A's
+checks. Ending the comparison goes on stepping A alone.
 
 **Visual score.** Once the canvas has drawn a page pair, its row in the Changes list shows the
 share of its pixels that differ (*visual 0.40%*; the tooltip and the mask's legend give the count).
@@ -407,6 +434,7 @@ pdfxray render file.pdf 0 -o page.png --boxes --xray kind --highlight mc:0:3
 pdfxray render file.pdf 0 -o step.png --step 120
 pdfxray render file.pdf 0 -o only.png --isolate struct:12:0
 pdfxray render file.pdf 0 -o chrome.png --emulate chrome --dpi 120 --zoom 100   # or edge, acrobat
+pdfxray render file.pdf 0 -o acro.png --emulate acrobat --no-enhance-thin-lines --no-line-weights
 pdfxray render file.pdf 0 -o wide.png --screen 2560x1440 --zoom fit-width        # pdfxray's rounding
 pdfxray validate file.pdf --profile ua1      # --install downloads veraPDF if missing
 pdfxray reading-order file.pdf 0 --from paint

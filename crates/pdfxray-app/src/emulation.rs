@@ -5,7 +5,7 @@
 //! session whatever document is open, and what they say.
 
 use pdfxray_core::{Document, PageIx};
-use pdfxray_render::{Display, Emulation, Viewer, ViewerZoom, page_dimensions};
+use pdfxray_render::{AcrobatPrefs, Display, Emulation, Viewer, ViewerZoom, page_dimensions};
 
 use crate::state::AppState;
 
@@ -45,6 +45,7 @@ impl Default for ScreenEmulation {
                 viewer: Some(Viewer::Chrome),
                 display: Display::default(),
                 zoom: ViewerZoom::default(),
+                acrobat: AcrobatPrefs::default(),
             },
         }
     }
@@ -75,11 +76,13 @@ pub fn rounding_text(viewer: Option<Viewer>) -> &'static str {
     match viewer.map(Viewer::engine) {
         Some(pdfxray_render::emulate::Engine::Pdfium) => {
             "PDFium: each glyph on a whole pixel, rectangular clips grown out to whole pixels, \
-             upright images on whole pixels. No snapping, overlap or stroke adjustment."
+             upright images on whole pixels, no stroke under 1 px, fills without area a faint \
+             1 px line. No snapping, overlap or stroke adjustment."
         }
         Some(pdfxray_render::emulate::Engine::Adobe) => {
             "Adobe AGM: coordinates within 0.0001 px snap to the pixel, fills overlap 0.01 px, \
-             strokes are adjusted to whole pixels, text advances are rounded."
+             stroke edges go on pixel boundaries (a thin line is 1 or 2 px), text advances are \
+             rounded."
         }
         None => "pdfxray's own rounding, on the screen's device pixels.",
     }
@@ -162,6 +165,33 @@ mod tests {
         assert_eq!(summary(&emulation), "pdfxray · 1920×1080 · 144 DPI · fit width");
         // Smoke: every scaling step is a whole DPI.
         assert_eq!(SCALINGS.map(dpi_of), [96, 120, 144, 168, 192]);
+    }
+
+    #[test]
+    fn a_wheel_zoom_follows_the_hand_then_settles_on_a_whole_pixel_step() {
+        let unit = 96.0 / 72.0;
+        let mut state = AppState::default();
+        state.canvas.pixel_unit = Some(unit);
+        state.canvas.zoom = unit;
+        let pointer = egui::vec2(10.0, 20.0);
+
+        // The wheel zooms as far as the hand goes, off the steps.
+        state.wheel_zoom(1.5, 1.0, pointer);
+        state.wheel_zoom(1.25, 1.05, pointer);
+        let followed = state.canvas.zoom;
+        assert!((followed - unit * 1.875).abs() < 1e-4, "{followed}");
+        // Too soon after it moved: nothing settles yet.
+        assert_eq!(state.settle_zoom(1.1), None);
+        assert!((state.canvas.zoom - followed).abs() < f32::EPSILON);
+
+        // Once the hand has stopped, the zoom settles on 2×, anchored at the pointer.
+        assert_eq!(state.settle_zoom(1.25), Some(pointer));
+        assert!((state.canvas.zoom - 2.0 * unit).abs() < 1e-4);
+        assert_eq!(state.settle_zoom(2.0), None, "settled once");
+        // Smoke: on this display's own pixels the wheel has nothing to settle.
+        state.canvas.pixel_unit = None;
+        state.wheel_zoom(1.1, 3.0, pointer);
+        assert_eq!(state.settle_zoom(4.0), None);
     }
 
     #[test]

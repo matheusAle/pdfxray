@@ -14,19 +14,25 @@ cannot be added from outside the crate.
 ## What changed
 
 - `src/rules.rs` (new): the public `PixelRules` trait. Its methods get device-space geometry just
-  before it is rasterised and may move it: fills (and how far they overlap), strokes and their
-  width, clips, the origins of a run's glyphs, and an image's sample grid. The defaults change
-  nothing.
+  before it is rasterised and may move it: fills (how far they overlap, and how a fill without
+  area is drawn), strokes (a `DeviceStroke`: width as the PDF asks, before upstream's one-pixel
+  minimum, user-space width, dashes, and whether to draw it black), clips, the origins of a
+  run's glyphs and their outlines, and an image's sample grid. The defaults change nothing.
 - `src/lib.rs`: `render_into_with`, which is `render_into` with a `PixelRules`. `render_into`
   calls it with rules that change nothing, so it draws exactly as upstream. The rules live in
   `GlobalState`, so soft masks drawn by child renderers get them too.
   `Renderer::rules()` says whether they apply to what is drawn now: not inside a tiling
   pattern's cell, nor to glyph outlines or Type 3 glyph content.
 - `src/path.rs`: fills and strokes go through the rules. A fill's overlap is a stroke of the same
-  path and paint, twice the overlap wide. `draw_rect` becomes a path when rules apply.
+  path and paint, twice the overlap wide. `draw_rect` becomes a path when rules apply. A fill
+  without area, and the 0.001-wide stroke hayro-interpret draws in place of a fill with flat
+  bounds (pdf.js issue 4260), are drawn as a 1 pixel line at the rules' opacity when they give
+  one.
 - `src/clip.rs`: clip paths and clip rectangles go through the rules.
 - `src/glyph.rs`: each run's glyph transforms are computed once, moved to the origins the rules
-  give, and used wherever the run's own transforms were.
+  give, and used wherever the run's own transforms were. A glyph's outline is the one the rules
+  give for its device transform (`PixelRules::glyph_outline`, a hinted outline), when they give
+  one.
 - `src/image.rs`: an image's transform goes through the rules.
 - `src/mask.rs`: `GlobalState` has a lifetime.
 - `Cargo.toml`: the example (not shipped) is dropped.

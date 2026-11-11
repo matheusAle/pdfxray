@@ -19,8 +19,8 @@ use pdfxray_render::annotate::{self, ChangeShow, Grid, Legend, Palette, Scene, T
 use pdfxray_render::composite::{self, Comparator, Composite, Delta, Fit, Mode, Registration, Request};
 use pdfxray_render::pdfium::PdfiumRenderer;
 use pdfxray_render::{
-    ColorBy, ContentFilter, Display, Emulation, Overlay, RenderSpec, Transform, Viewer, ViewerZoom,
-    XrayOptions, alpha_heatmap_overlays, clip_overlays, ops_for, page_dimensions, page_transform,
+    AcrobatPrefs, ColorBy, ContentFilter, Display, Emulation, Overlay, RenderSpec, Transform, Viewer,
+    ViewerZoom, XrayOptions, alpha_heatmap_overlays, clip_overlays, ops_for, page_dimensions, page_transform,
     render_page, write_image, xray_overlays,
 };
 use serde_json::{Value, json};
@@ -73,6 +73,13 @@ pub struct RenderArgs {
     /// The emulated viewer's zoom: a percentage (`125`), `fit-width` or `fit-page`. Default 100.
     #[arg(long, value_parser = parse_zoom, conflicts_with_all = ["against", "reference"])]
     zoom: Option<ViewerZoom>,
+    /// With `--emulate acrobat`: Acrobat's *Enhance thin lines* off (it is on as Acrobat
+    /// starts: a stroke under 1 pt is a solid 1 px black line).
+    #[arg(long)]
+    no_enhance_thin_lines: bool,
+    /// With `--emulate acrobat`: Acrobat's *Line Weights* off (Ctrl+5): every stroke 1 px.
+    #[arg(long)]
+    no_line_weights: bool,
     /// Outline every defined page box.
     #[arg(long)]
     boxes: bool,
@@ -269,13 +276,17 @@ fn emulation(args: &RenderArgs) -> Option<Emulation> {
             dpi: args.dpi.unwrap_or(defaults.dpi),
         },
         zoom: args.zoom.unwrap_or_default(),
+        acrobat: AcrobatPrefs {
+            enhance_thin_lines: !args.no_enhance_thin_lines,
+            line_weights: !args.no_line_weights,
+        },
     })
 }
 
 /// The `emulation` part of the report: the screen, the zoom it gives this page and the scale
 /// that follows.
 fn emulation_report(emulation: &Emulation, page: (f32, f32), scale: f32) -> Value {
-    json!({
+    let mut report = json!({
         "viewer": emulation.viewer.map(Viewer::name),
         "engine": emulation.viewer.map(|v| v.engine().name()),
         "screen": [emulation.display.width, emulation.display.height],
@@ -284,7 +295,14 @@ fn emulation_report(emulation: &Emulation, page: (f32, f32), scale: f32) -> Valu
         "zoom": emulation.zoom.to_string(),
         "zoom_percent": emulation.zoom_for(page) * 100.0,
         "pixels_per_point": scale,
-    })
+    });
+    if emulation.viewer == Some(Viewer::Acrobat) {
+        report["acrobat"] = json!({
+            "enhance_thin_lines": emulation.acrobat.enhance_thin_lines,
+            "line_weights": emulation.acrobat.line_weights,
+        });
+    }
+    report
 }
 
 /// `--reference` engines.
@@ -338,6 +356,11 @@ pub(crate) fn run(args: &RenderArgs, pretty: bool, out: &mut impl Write) -> anyh
     if args.mode.is_some() && args.against.is_none() && args.reference.is_none() {
         return Err(anyhow!("--mode needs --against <file> or --reference <engine>"));
     }
+    if (args.no_enhance_thin_lines || args.no_line_weights) && args.emulate != Some(ViewerArg::Acrobat) {
+        return Err(anyhow!(
+            "--no-enhance-thin-lines and --no-line-weights are Acrobat's preferences: they need --emulate acrobat"
+        ));
+    }
     if args.tolerance.is_some() && args.reference.is_none() {
         return Err(anyhow!(
             "--tolerance needs --reference <engine>; two files are compared with --threshold"
@@ -372,6 +395,9 @@ fn single(args: &RenderArgs, doc: &Document) -> anyhow::Result<Value> {
     let to_pixel = page_transform(doc, page, scale).with_context(|| format!("rendering page {page}"))?;
     let mut spec = RenderSpec::new(scale);
     spec.viewer = emulation.and_then(|e| e.viewer);
+    if let Some(emulation) = &emulation {
+        spec.acrobat = emulation.acrobat;
+    }
     spec.overlays = debug_overlays(args, doc, &to_pixel)?;
     let grid = Grid::page(doc, page, scale, scale)?;
     let scenes = [tag_scene(args, doc, page)];
@@ -575,7 +601,7 @@ fn against(args: &RenderArgs, doc_a: &Document, file_b: &PathBuf) -> anyhow::Res
         },
         registration,
         comparator: Comparator::SameEngine(args.visual.perceptual()),
-        step: None,
+        steps: composite::Steps::NONE,
     };
     let mut picture = composite::composite((doc_a, page_a), (&doc_b, page_b), &request)?;
 

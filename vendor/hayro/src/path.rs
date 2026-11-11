@@ -1,4 +1,4 @@
-use crate::rules::in_device;
+use crate::rules::{DeviceStroke, in_device};
 use crate::{Renderer, convert_fill_rule};
 use hayro_interpret::{DrawMode, DrawProps, FillRule, StrokeProps};
 use kurbo::{Affine, BezPath, Point, Rect, Shape};
@@ -51,6 +51,52 @@ impl Renderer<'_> {
         }
     }
 
+    /// A fill that encloses no area, drawn as the rules say (pdfxray patch): a 1 pixel line at
+    /// their opacity. False, drawing nothing, for a fill with area or rules that leave it be.
+    fn fill_thin(&mut self, path: &BezPath, props: &DrawProps<'_>) -> bool {
+        let Some(alpha) = self.rules().and_then(|rules| rules.thin_fill_alpha()) else {
+            return false;
+        };
+        let device = props.transform * path.clone();
+        let bounds = device.bounding_box();
+        let extent = bounds.width().max(bounds.height());
+        if extent <= 0.0 || device.area().abs() > 1e-6 * extent.max(1.0) {
+            return false;
+        }
+        self.thin_line(path, props, alpha)
+    }
+
+    /// The stroke hayro-interpret draws in place of a fill whose bounds have no width or no
+    /// height (pdf.js issue 4260): a two-point path, 0.001 wide, bevel-joined and butt-capped.
+    fn is_fill_stand_in(path: &BezPath, stroke_props: &StrokeProps) -> bool {
+        stroke_props.line_width == 0.001
+            && stroke_props.line_join == kurbo::Join::Bevel
+            && stroke_props.line_cap == kurbo::Cap::Butt
+            && stroke_props.dash_array.is_empty()
+            && path.elements().len() == 2
+    }
+
+    /// `path` stroked one device pixel wide at `alpha` of its paint (pdfxray patch).
+    fn thin_line(&mut self, path: &BezPath, props: &DrawProps<'_>, alpha: f32) -> bool {
+        let factor = f64::from(max_factor(&props.transform));
+        if factor <= 0.0 {
+            return false;
+        }
+        self.apply_draw_props(props);
+        let clip_path = self.set_paint(&props.paint, || path.bounding_box(), true);
+        if let Some(clip_path) = clip_path.as_ref() {
+            self.push_clip_path_inner(clip_path, FillRule::NonZero);
+        }
+        self.ctx.push_layer(None, None, Some(alpha), None, None);
+        self.ctx.set_stroke(kurbo::Stroke::new(1.0 / factor));
+        self.ctx.stroke_path(path);
+        self.ctx.pop_layer();
+        if clip_path.is_some() {
+            self.ctx.pop_clip();
+        }
+        true
+    }
+
     pub(super) fn stroke_path(
         &mut self,
         path: &BezPath,
@@ -58,19 +104,38 @@ impl Renderer<'_> {
         stroke_props: &StrokeProps,
         is_text: bool,
     ) {
+        // pdfxray patch: a fill without area that the interpreter turned into a stroke is drawn
+        // as the rules draw such fills.
+        if !is_text
+            && Self::is_fill_stand_in(path, stroke_props)
+            && let Some(alpha) = self.rules().and_then(|rules| rules.thin_fill_alpha())
+            && self.thin_line(path, &props, alpha)
+        {
+            return;
+        }
         self.apply_draw_props(&props);
         let mut stroke = self.stroke_properties(stroke_props, is_text);
-        // pdfxray patch: the rules place the stroke and set its width in device space; a
-        // glyph's outline is left as it is.
+        // pdfxray patch: the rules place the stroke and set its width and dashes in device
+        // space, from the width the PDF asks for; a glyph's outline is left as it is.
+        let mut black = false;
         let adjusted = match self.rules() {
             Some(rules) if !is_text => {
                 let factor = f64::from(max_factor(&props.transform));
                 in_device(path, props.transform, |device| {
-                    let mut width = stroke.width * factor;
-                    rules.stroke(device, &mut width);
+                    let mut device_stroke = DeviceStroke {
+                        width: f64::from(stroke_props.line_width) * factor,
+                        user_width: f64::from(stroke_props.line_width),
+                        dashes: stroke.dash_pattern.iter().map(|d| d * factor).collect(),
+                        dash_offset: stroke.dash_offset * factor,
+                        black: false,
+                    };
+                    rules.stroke(device, &mut device_stroke);
                     if factor > 0.0 {
-                        stroke.width = width / factor;
+                        stroke.width = device_stroke.width / factor;
+                        stroke.dash_pattern = device_stroke.dashes.iter().map(|d| d / factor).collect();
+                        stroke.dash_offset = device_stroke.dash_offset / factor;
                     }
+                    black = device_stroke.black;
                 })
             }
             _ => None,
@@ -79,6 +144,9 @@ impl Renderer<'_> {
         self.ctx.set_stroke(stroke);
 
         let clip_path = self.set_paint(&props.paint, || path.bounding_box(), true);
+        if black {
+            self.ctx.set_paint(vello_cpu::color::palette::css::BLACK);
+        }
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
@@ -94,6 +162,9 @@ impl Renderer<'_> {
             .rules()
             .and_then(|rules| in_device(path, props.transform, |device| rules.fill(device)));
         let path = adjusted.as_ref().unwrap_or(path);
+        if self.fill_thin(path, &props) {
+            return;
+        }
         self.ctx.set_fill_rule(convert_fill_rule(fill_rule));
         self.apply_draw_props(&props);
 

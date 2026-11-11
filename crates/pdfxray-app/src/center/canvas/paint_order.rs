@@ -48,7 +48,8 @@ pub(super) fn collect(state: &AppState) -> Ghost {
         return Ghost::default();
     }
     state
-        .stepped_doc()
+        .doc_of(pdfxray_core::diff::Side::A)
+        .map(AsRef::as_ref)
         .and_then(|doc| doc.captured(view.step.page))
         .map_or_else(Ghost::default, |captured| ghosts(captured, view.step.ix))
 }
