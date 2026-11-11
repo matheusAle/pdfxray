@@ -6,6 +6,8 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-11
+
 ### Added
 
 - **Thin lines as each viewer draws them.** Emulating Chrome or Edge, no stroke is under one
