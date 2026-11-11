@@ -229,8 +229,8 @@
     const NAME = { pdfxray: 'pdfxray', chrome: 'Chrome', edge: 'Edge', acrobat: 'Acrobat' };
     const WHY = {
       pdfxray: 'pdfxray’s own rounding, on the emulated screen’s pixels.',
-      pdfium: 'PDFium: each glyph starts on a whole pixel, rectangular clips grow out to whole pixels, upright images cover a whole number of pixels. No snapping, no fill overlap, no stroke adjustment.',
-      acrobat: 'Adobe’s engine: coordinates within 0.0001 px snap to the pixel, fills overlap 0.01 px, every stroke is a whole number of pixels (at least one), and each glyph advance is rounded, so long runs drift.',
+      pdfium: 'PDFium: each glyph starts on a whole pixel, rectangular clips grow out to whole pixels, upright images cover a whole number of pixels, and no stroke is drawn under 1 device px. No snapping, no fill overlap, no stroke adjustment.',
+      acrobat: 'Adobe’s engine: coordinates within 0.0001 px snap to the pixel, fills overlap 0.01 px, stroke edges go to pixel boundaries (a thin line is 1 or 2 px), and each glyph advance is rounded, so long runs drift.',
     };
     const state = { viewer: 'acrobat', dpi: '120' };
     const $ = (id) => document.getElementById(id);
@@ -240,15 +240,15 @@
       const eng = viewer === 'acrobat' ? 'acrobat' : 'pdfium';
       const pct = { 96: 100, 120: 125, 144: 150 }[dpi];
       const img = $('emu-img');
-      img.src = `img/emu/${viewer}-${dpi}.png?v=1`;
+      img.src = `img/emu/${viewer}-${dpi}.png?v=${viewer === 'acrobat' && dpi === '120' ? 2 : 1}`;
       img.alt = `Part of a test page drawn as ${NAME[viewer]} on a ${pct} % screen, magnified so each device pixel shows`;
       $('emu-read').textContent = `${(dpi / 72).toFixed(3)} device px per pt · page ${m.size} px`;
       $('emu-why').textContent = WHY[viewer === 'pdfxray' ? 'pdfxray' : eng];
       $('emu-sb').textContent = viewer === 'pdfxray' ? `pdfxray · 1920×1080 · ${dpi} DPI · 100%` : `${NAME[viewer]} · 1920×1080 · ${dpi} DPI · 100%`;
       const rows = m.rule[eng];
       $('emu-rule').textContent = rows.length === 1
-        ? 'One solid black pixel row: Acrobat makes every stroke a whole number of pixels.'
-        : `Two grey pixel rows, ${rows[0]} % and ${rows[1]} % ink: the line lands between pixels and nothing moves it.`;
+        ? 'One solid black pixel row: with Enhance thin lines on, as Acrobat starts, a stroke under 1 pt is a 1 px black line.'
+        : `Two grey pixel rows, ${rows[0]} % and ${rows[1]} % ink: PDFium widens it to 1 px but leaves it between pixels.`;
       const d = m.run.acrobat - m.run.pdfium;
       $('emu-run').textContent = eng === 'acrobat'
         ? `Ends ${Math.abs(d)} px ${d > 0 ? 'later' : 'earlier'} than in Chrome: each advance is rounded, and the error adds up.`
@@ -279,7 +279,7 @@
         });
       });
     }
-    for (const v of ['pdfxray', 'chrome', 'edge', 'acrobat']) for (const d of [96, 120, 144]) { const im = new Image(); im.src = `img/emu/${v}-${d}.png?v=1`; }
+    for (const v of ['pdfxray', 'chrome', 'edge', 'acrobat']) for (const d of [96, 120, 144]) { const im = new Image(); im.src = `img/emu/${v}-${d}.png?v=${v === 'acrobat' && d === 120 ? 2 : 1}`; }
     render();
     // While on screen and untouched, flip between Chrome and Acrobat so the difference shows itself.
     if (!reduce) {
