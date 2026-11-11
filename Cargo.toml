@@ -2,6 +2,8 @@
 resolver = "3"
 members = ["crates/*", "xtask"]
 default-members = ["crates/*"]
+# Third-party crates carried with a patch (see each one's PATCHES.md); built, never linted here.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.4.0"
@@ -125,3 +127,7 @@ opt-level = 2
 opt-level = 3
 [profile.dev.package.similar]
 opt-level = 3
+
+# hayro with the hook pdfxray's viewer emulation draws through (vendor/hayro/PATCHES.md).
+[patch.crates-io]
+hayro = { path = "vendor/hayro" }

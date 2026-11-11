@@ -55,6 +55,7 @@ pub use speech::{NoteLink, SpeechData, SpeechState};
 pub use tables::{TableContext, TableData};
 
 use self::derived::Derived;
+use crate::emulation::ScreenEmulation;
 use crate::instances::{Spawner, native_spawner};
 use crate::modes::RenderRequest;
 use crate::open::{FilePicker, Opener, SavePicker, native_picker, native_save_picker};
@@ -126,6 +127,8 @@ pub struct AppState {
     pub open_error: Option<String>,
     /// The unit every length is shown in, switched in the status bar.
     pub unit: Unit,
+    /// The screen pages are drawn on: this Mac's, or an emulated one, set in the status bar.
+    pub screen: ScreenEmulation,
     /// Rail entry, navigator filter and view.
     pub nav: NavState,
     /// The selected nodes.
@@ -180,6 +183,7 @@ impl Default for AppState {
             pending_compare: None,
             open_error: None,
             unit: Unit::default(),
+            screen: ScreenEmulation::default(),
             nav: NavState::default(),
             selection: SelectionState::default(),
             history: ObjectHistory::default(),

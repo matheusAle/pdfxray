@@ -946,7 +946,7 @@ fn file_info_in_the_status_bar_shows_the_counts_the_open_time_and_verapdf_on_hov
 }
 
 #[test]
-fn the_status_bar_keeps_the_cursor_file_info_units_and_problems_and_nothing_else() {
+fn the_status_bar_keeps_the_cursor_file_info_display_units_and_problems_and_nothing_else() {
     let mut harness = app();
     open_fixture(&mut harness, "minimal-one-page");
     harness.remove_cursor();
@@ -960,7 +960,8 @@ fn the_status_bar_keeps_the_cursor_file_info_units_and_problems_and_nothing_else
     // veraPDF moved into the hover.
     assert_eq!(bar[0], "x –  y –");
     assert_eq!(bar[1], "file info");
-    // Left to right on screen: file info, the units, then the problems.
+    // Left to right on screen: file info, the display pages are drawn on, the units, then the
+    // problems.
     let mut buttons = common::nodes_in(&harness, Region::Chrome, Role::Button);
     buttons.sort_by(|a, b| a.rect().min.x.total_cmp(&b.rect().min.x));
     let buttons: Vec<String> = buttons
@@ -968,7 +969,10 @@ fn the_status_bar_keeps_the_cursor_file_info_units_and_problems_and_nothing_else
         .filter_map(|node| node.accesskit_node().label())
         .skip_while(|label| label.starts_with("PDF "))
         .collect();
-    assert_eq!(buttons, ["file info", "pt", "mm", "in", "px", "0 diagnostics"]);
+    assert_eq!(
+        buttons,
+        ["file info", "Display", "pt", "mm", "in", "px", "0 diagnostics"]
+    );
     assert!(
         !bar.iter()
             .any(|t| t.starts_with("opened in") || t.starts_with("veraPDF"))

@@ -14,6 +14,7 @@ use super::{Action, header, print};
 use crate::center::canvas::measure::{Comparison, Horizontal, is_aligned};
 use crate::components::crumb::{SEPARATOR_WIDTH, separator};
 use crate::components::{Crumb, Icon, PropRow, section};
+use crate::emulation::OnScreen;
 use crate::state::AppState;
 use crate::state::path::crumb_label;
 use crate::theme::{fonts, tokens};
@@ -91,11 +92,12 @@ pub fn headline(comparison: &Comparison) -> (f64, &'static str) {
     }
 }
 
-/// `length` points on the canvas at `zoom` (screen points per point): `0.42 px @136% · under a
-/// pixel`, the last part only for a length that is there but under a pixel.
-pub fn on_screen_text(points: f64, zoom: f64) -> String {
-    let px = points * zoom;
-    let mut text = format!("{} px @{:.0}%", trim_px(px), zoom * 100.0);
+/// `length` points on `screen`: `0.42 px @136% · under a pixel` on the canvas,
+/// `0.7 px @Chrome 100%, 120 DPI` on an emulated screen. The last part only for a length that is
+/// there but under a pixel.
+pub fn on_screen_text(points: f64, screen: &OnScreen) -> String {
+    let px = points * screen.pixels_per_point;
+    let mut text = format!("{} px @{}", trim_px(px), screen.at);
     if px > 0.0 && px < 1.0 {
         text.push_str(" · under a pixel");
     }
@@ -127,7 +129,7 @@ pub(super) fn ui(ui: &mut Ui, state: &AppState, action: &mut Action) {
                 super::note(ui, RichText::new(NOT_COMPARABLE).color(tokens::TEXT_3));
                 return;
             };
-            between(ui, &comparison, &lengths, f64::from(state.canvas.zoom));
+            between(ui, &comparison, &lengths, &state.on_screen());
             alignment(ui, &comparison, &lengths);
             if let Some(info) = state
                 .document
@@ -185,7 +187,7 @@ fn title(ui: &mut Ui, comparable: bool) {
     );
 }
 
-fn between(ui: &mut Ui, comparison: &Comparison, lengths: &Lengths, zoom: f64) {
+fn between(ui: &mut Ui, comparison: &Comparison, lengths: &Lengths, screen: &OnScreen) {
     let gap = comparison.gap();
     let (length, word) = headline(comparison);
     section::show(ui, BETWEEN, BETWEEN, |ui| {
@@ -219,8 +221,8 @@ fn between(ui: &mut Ui, comparison: &Comparison, lengths: &Lengths, zoom: f64) {
             PropRow::new(OVERLAP_AREA, &area).show(ui);
         }
         let points = lengths.points(length);
-        let px = points * zoom;
-        PropRow::new(ON_SCREEN, &on_screen_text(points, zoom))
+        let px = points * screen.pixels_per_point;
+        PropRow::new(ON_SCREEN, &on_screen_text(points, screen))
             .warn(px > 0.0 && px < 1.0)
             .show(ui);
     });
@@ -296,9 +298,25 @@ mod tests {
         let (gap, word) = headline(&apart);
         assert!((gap - 0.4).abs() < 1e-9 && word == "gap", "{gap} {word}");
         assert_eq!(headline(&overlapping), (10.0, "overlap"));
-        assert_eq!(on_screen_text(0.4, 1.36), "0.54 px @136% · under a pixel");
-        assert_eq!(on_screen_text(10.0, 1.0), "10 px @100%");
+        let canvas = |zoom: f64| OnScreen {
+            pixels_per_point: zoom,
+            at: format!("{:.0}%", zoom * 100.0),
+        };
+        assert_eq!(
+            on_screen_text(0.4, &canvas(1.36)),
+            "0.54 px @136% · under a pixel"
+        );
+        assert_eq!(on_screen_text(10.0, &canvas(1.0)), "10 px @100%");
+        // An emulated screen counts its device pixels: 0.4 pt at 120 DPI is 0.67 px.
+        let chrome = OnScreen {
+            pixels_per_point: 120.0 / 72.0,
+            at: "Chrome 100%, 120 DPI".to_owned(),
+        };
+        assert_eq!(
+            on_screen_text(0.4, &chrome),
+            "0.67 px @Chrome 100%, 120 DPI · under a pixel"
+        );
         // Smoke: nothing at all is not under a pixel, it is nothing.
-        assert_eq!(on_screen_text(0.0, 2.0), "0 px @200%");
+        assert_eq!(on_screen_text(0.0, &canvas(2.0)), "0 px @200%");
     }
 }

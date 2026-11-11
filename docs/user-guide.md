@@ -17,7 +17,7 @@
 | **Hit stack** | Everything under the last click, most specific first. Shift-click adds to the selection (two make the comparison). |
 | **Speech** (`⌘5`) | What a screen reader would announce, in order, for a chosen reader: Structure (spec), Acrobat (NVDA/JAWS), Firefox or Chrome/Edge. The readers are labelled approximations (their rules and sources are in the tooltip); "Show skipped" lists artifacts, Private content and content hidden by alternate text, with the reason. |
 | **Validation** | veraPDF results mapped onto the nodes they concern. |
-| **Status bar** | Cursor, "file info" (hover: counts, open time, veraPDF), units, diagnostics. |
+| **Status bar** | Cursor, "file info" (hover: counts, open time, veraPDF), the display pages are drawn on (see [Windows viewers and screens](#windows-viewers-and-screens)), units, diagnostics. |
 
 Drag the edge between the navigator, the canvas and the inspector to make either side panel
 wider or narrower; the canvas always keeps room for the page. Drag the drawer's top edge to
@@ -169,6 +169,41 @@ they leave the toolbar; the selection's action bar and their keys still have the
 
 Floating cards (legends, page boxes, the measure readout) sit at the canvas's top-right and
 fold into chips when there is no room beside the page.
+
+## Windows viewers and screens
+
+A page is drawn on this Mac's pixels at the canvas zoom. To see it as someone on Windows does,
+click the display item in the status bar (*Mac display*) and turn on **Emulate a Windows
+screen**:
+
+* **Viewer**: *Chrome* or *Edge* (both draw with PDFium), *Acrobat* (Adobe's engine), or
+  *pdfxray* (its own rounding, on the emulated pixels).
+* **Screen**: its size in device pixels, from the common sizes or typed in.
+* **Scaling**: Windows' display scaling, 100 % to 200 %, or any DPI (96 is 100 %, 120 is 125 %).
+* **Zoom**: the viewer's zoom, *Fit width*, *Fit page* or a percentage. The fit zooms take the
+  whole screen as the viewer's page area; enter the size of the area the page gets to leave out
+  the viewer's toolbars.
+
+The page is then drawn at that screen's device pixels, `zoom × DPI / 72` per point (the popover
+says how many and how big the page is), and each viewer puts what lands between two pixels
+where it puts it:
+
+* **PDFium** (Chrome, Edge) moves nothing but this: each glyph starts on a whole pixel, a
+  rectangular clip grows out to whole pixels, and an upright image covers a whole number of
+  pixels. No snapping, no overlap between fills, no stroke adjustment.
+* **Acrobat** snaps a coordinate within 0.0001 px of a pixel onto it, lets fills overlap by
+  0.01 px, makes every stroke a whole number of pixels wide (at least one) with its edges on
+  pixel boundaries, starts each text run on a pixel and rounds each glyph's advance (but never to
+  zero), so a long run can drift.
+
+The canvas zoom only magnifies those pixels, crisply, so zoom in to see each one. The status bar
+names the screen (`Acrobat · 1920×1080 · 120 DPI · 100%`), and *Between A and B* in Measure
+gives *On screen* in its device pixels (`0.67 px @Chrome 100%, 120 DPI · under a pixel`). The
+settings stay for the session when you turn emulation off. Comparisons are still drawn on the
+Mac's pixels.
+
+Not emulated: Acrobat's resolution table and the thresholds where its rendering changes, font
+hinting, anti-aliasing (every viewer is anti-aliased as pdfxray does it) and GPU compositing.
 
 ## Tags, reading order and tables
 
@@ -371,6 +406,8 @@ pdfxray breadcrumb file.pdf glyph:0:57:3
 pdfxray render file.pdf 0 -o page.png --boxes --xray kind --highlight mc:0:3
 pdfxray render file.pdf 0 -o step.png --step 120
 pdfxray render file.pdf 0 -o only.png --isolate struct:12:0
+pdfxray render file.pdf 0 -o chrome.png --emulate chrome --dpi 120 --zoom 100   # or edge, acrobat
+pdfxray render file.pdf 0 -o wide.png --screen 2560x1440 --zoom fit-width        # pdfxray's rounding
 pdfxray validate file.pdf --profile ua1      # --install downloads veraPDF if missing
 pdfxray reading-order file.pdf 0 --from paint
 pdfxray tag-boxes file.pdf 0

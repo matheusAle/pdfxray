@@ -446,7 +446,7 @@ fn shift_click_in_the_hit_stack_compares_two_boxes() {
                 .any(|k| name.starts_with(k))
         })
         .collect();
-    let zoom = f64::from(harness.state().state.canvas.zoom);
+    let screen = harness.state().state.on_screen();
     assert_eq!(
         rows,
         [
@@ -455,7 +455,7 @@ fn shift_click_in_the_hit_stack_compares_two_boxes() {
             "Overlap area: 320 × 220 pt".to_owned(),
             format!(
                 "On screen: {}",
-                pdfxray_app::inspector::measure::on_screen_text(220.0, zoom)
+                pdfxray_app::inspector::measure::on_screen_text(220.0, &screen)
             ),
         ]
     );

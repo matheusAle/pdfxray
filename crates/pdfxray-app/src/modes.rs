@@ -15,8 +15,8 @@ use pdfxray_render::xray::{
     OUTSIDE_CROP, TAG_PALETTE, TAGGED, UNTAGGED, UNTAGGED_TAG, WHITE_ON_WHITE,
 };
 use pdfxray_render::{
-    ColorBy, ContentFilter, RenderSpec, XrayOptions, alpha_heatmap_overlays, clip_overlays, ops_for_all,
-    page_transform, xray_overlays,
+    ColorBy, ContentFilter, Emulation, RenderSpec, XrayOptions, alpha_heatmap_overlays, clip_overlays,
+    ops_for_all, page_dimensions, page_transform, xray_overlays,
 };
 
 use crate::components::Icon;
@@ -354,14 +354,43 @@ impl ViewTool {
     }
 }
 
+/// What the pixels of a bitmap are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pixels {
+    /// The canvas's: its zoom on this display, in sixteenths of a pixel per point.
+    Canvas(ScaleKey),
+    /// The device pixels of an emulated screen, rounded as its viewer rounds. The canvas zoom
+    /// magnifies them; it does not change them.
+    Emulated(Emulation),
+}
+
+impl Pixels {
+    /// Whether they are an emulated screen's: shown crisp when magnified, so each one can be seen.
+    pub const fn emulated(self) -> bool {
+        matches!(self, Self::Emulated(_))
+    }
+
+    /// Pixels per point for `page` of `doc`, and the viewer whose rounding draws it.
+    fn scale(self, doc: &Document, page: PageIx) -> (f32, Option<pdfxray_render::Viewer>) {
+        match self {
+            Self::Canvas(key) => (key.scale(), None),
+            Self::Emulated(emulation) => {
+                // A page that cannot be measured cannot be drawn either: the render says why.
+                let scale = page_dimensions(doc, page).map_or(1.0, |size| emulation.scale_for(size));
+                (scale, emulation.viewer)
+            }
+        }
+    }
+}
+
 /// One bitmap to render. Two requests that are equal produce the same pixels, so it is the key
 /// of the bitmap cache.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderRequest {
     /// Page to draw.
     pub page: PageIx,
-    /// Bitmap scale.
-    pub scale: ScaleKey,
+    /// Which pixels: the canvas's or an emulated screen's.
+    pub pixels: Pixels,
     /// Which operators paint.
     pub content: ContentFilter,
     /// X-ray outlines, if on.
@@ -376,7 +405,7 @@ impl RenderRequest {
     /// The render specification: overlays are x-ray first, then the heat map, then the clip.
     /// A page that cannot be drawn gets none; the render reports why.
     pub fn spec(&self, doc: &Document) -> RenderSpec {
-        let scale = self.scale.scale();
+        let (scale, viewer) = self.pixels.scale(doc, self.page);
         let mut overlays = Vec::new();
         if let Ok(to_pixel) = page_transform(doc, self.page, scale) {
             if let Some(options) = self.xray {
@@ -392,6 +421,7 @@ impl RenderRequest {
         RenderSpec {
             overlays,
             content: self.content.clone(),
+            viewer,
             ..RenderSpec::new(scale)
         }
     }
@@ -587,13 +617,14 @@ impl AppState {
         }
     }
 
-    /// What the canvas needs rendered for `page` at `scale`, or `None` without a document.
+    /// What the canvas needs rendered for `page` at `scale`, or `None` without a document. On an
+    /// emulated screen the pixels are that screen's, whatever `scale` is.
     pub fn render_request(&self, page: PageIx, scale: ScaleKey) -> Option<RenderRequest> {
         let doc = &self.document.as_ref()?.doc;
         let view = &self.canvas.view;
         Some(RenderRequest {
             page,
-            scale,
+            pixels: self.emulation().map_or(Pixels::Canvas(scale), Pixels::Emulated),
             content: view.content_filter(doc, page),
             xray: view.xray.then_some(XrayOptions {
                 color_by: view.color_by,
@@ -711,7 +742,12 @@ mod tests {
         let doc = fixture("graphics-state");
         let request = RenderRequest {
             page: 0,
-            scale: crate::view::render_scale(1.0, 1.0, egui::vec2(612.0, 792.0), 8192),
+            pixels: Pixels::Canvas(crate::view::render_scale(
+                1.0,
+                1.0,
+                egui::vec2(612.0, 792.0),
+                8192,
+            )),
             content: ContentFilter::UpTo(10),
             xray: Some(XrayOptions::default()),
             clip_op: Some(59),

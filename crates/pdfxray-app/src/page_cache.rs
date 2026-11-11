@@ -17,7 +17,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
-use egui::{ColorImage, Context, TextureHandle, TextureOptions};
+use egui::{ColorImage, Context, TextureFilter, TextureHandle, TextureOptions};
 use pdfxray_core::numeric::usize_from_u32;
 use pdfxray_core::{Document, PageIx};
 use pdfxray_render::{RenderError, RenderedPage, Transform, render_page};
@@ -58,6 +58,16 @@ pub(crate) enum RenderFailure {
     /// The renderer refused the page.
     #[error(transparent)]
     Render(#[from] RenderError),
+    /// The bitmap is larger than the GPU takes: an emulated screen at a large zoom.
+    #[error("a {width} × {height} pixel bitmap is larger than the {max} pixels a side the GPU takes")]
+    TooLarge {
+        /// Bitmap width.
+        width: u32,
+        /// Bitmap height.
+        height: u32,
+        /// The GPU's largest texture side.
+        max: usize,
+    },
 }
 
 /// A render result; failures are cached too so a broken page is not retried every frame.
@@ -136,6 +146,16 @@ fn newest_per_page(batch: Vec<RenderRequest>) -> Vec<RenderRequest> {
 
 fn render(ctx: &Context, doc: &Document, request: &RenderRequest) -> CacheResult {
     let rendered = render_page(doc, request.page, &request.spec(doc))?;
+    // The canvas keeps its own bitmaps within the limit; an emulated screen sets its own size.
+    let max = ctx.input(|i| i.max_texture_side);
+    let fits = |side: u32| usize::try_from(side).is_ok_and(|side| side <= max);
+    if !(fits(rendered.width) && fits(rendered.height)) {
+        return Err(RenderFailure::TooLarge {
+            width: rendered.width,
+            height: rendered.height,
+            max,
+        });
+    }
     Ok(upload(ctx, request, rendered))
 }
 
@@ -148,11 +168,20 @@ fn upload(ctx: &Context, request: &RenderRequest, rendered: RenderedPage) -> Cac
     } = rendered;
     let digest = pixel_digest(&rgba);
     let image = ColorImage::from_rgba_unmultiplied([usize_from_u32(width), usize_from_u32(height)], &rgba);
+    // An emulated screen's pixels stay square when the canvas magnifies them.
+    let options = if request.pixels.emulated() {
+        TextureOptions {
+            magnification: TextureFilter::Nearest,
+            ..TextureOptions::LINEAR
+        }
+    } else {
+        TextureOptions::LINEAR
+    };
     CachedPage {
         texture: ctx.load_texture(
-            format!("page-{}-{}", request.page, request.scale.scale()),
+            format!("page-{}-{:?}", request.page, request.pixels),
             image,
-            TextureOptions::LINEAR,
+            options,
         ),
         size: (width, height),
         page_to_pixel,
@@ -285,13 +314,14 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::modes::Pixels;
     use crate::test_support::{fixture, wait_until};
     use crate::view::render_scale;
 
     fn request(page: PageIx, scale: f32) -> RenderRequest {
         RenderRequest {
             page,
-            scale: render_scale(scale, 1.0, egui::vec2(100.0, 100.0), u32::MAX),
+            pixels: Pixels::Canvas(render_scale(scale, 1.0, egui::vec2(100.0, 100.0), u32::MAX)),
             content: ContentFilter::All,
             xray: None,
             clip_op: None,
@@ -305,7 +335,10 @@ mod tests {
 
         let pages: Vec<(PageIx, f32)> = newest_per_page(batch)
             .iter()
-            .map(|r| (r.page, r.scale.scale()))
+            .map(|r| match r.pixels {
+                Pixels::Canvas(key) => (r.page, key.scale()),
+                Pixels::Emulated(_) => (r.page, 0.0),
+            })
             .collect();
 
         assert_eq!(pages, [(0, 2.0), (1, 1.0), (2, 1.0)]);

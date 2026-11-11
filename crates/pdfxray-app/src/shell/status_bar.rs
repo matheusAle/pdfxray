@@ -189,6 +189,10 @@ fn right(ui: &mut Ui, state: &mut AppState) {
             state.unit = unit;
         }
     });
+    // Only pages are drawn on a display: not an encrypted or a damaged file's screen.
+    if state.document.is_some() && state.screen() == Screen::Workspace {
+        super::display::item(ui, state);
+    }
 }
 
 fn diagnostics(ui: &mut Ui, state: &mut AppState) {
@@ -197,16 +201,38 @@ fn diagnostics(ui: &mut Ui, state: &mut AppState) {
         .as_ref()
         .map_or(0, |loaded| loaded.info.diagnostics.len());
     let text = format!("{count} diagnostics");
+    let ink = |hovered: bool| match (count > 0, hovered) {
+        (true, _) => tokens::WARN,
+        (false, true) => tokens::TEXT_2,
+        (false, false) => tokens::TEXT_3,
+    };
+    let response = button(ui, "diagnostics", Icon::Warning, &text, &text, ink);
+    if response.clicked() {
+        state.drawer.show_tab(DrawerTab::Diagnostics);
+        state.explainer = false;
+    }
+}
+
+/// A clickable item of the bar, named `name`: `icon` and `text` in the ink `ink` gives for its
+/// hover, a pill behind it on hover and a focus ring, over the bar's whole height.
+pub(super) fn button(
+    ui: &mut Ui,
+    id: &str,
+    icon: Icon,
+    text: &str,
+    name: &str,
+    ink: impl Fn(bool) -> Color32,
+) -> Response {
     let font = fonts::mono(tokens::mono::SMALL);
-    let galley = ui.painter().layout_no_wrap(text.clone(), font, tokens::TEXT);
+    let galley = ui.painter().layout_no_wrap(text.to_owned(), font, tokens::TEXT);
     let (rect, _) = ui.allocate_exact_size(
         vec2(ICON + ICON_GAP + galley.size().x, galley.size().y),
         Sense::hover(),
     );
     // The target is the bar's whole height, and a little wider than the text.
     let target = Rect::from_x_y_ranges(rect.x_range().expand(HIT_PAD), ui.max_rect().y_range());
-    let response = ui.interact(target, ui.make_persistent_id("diagnostics"), Sense::click());
-    response.widget_info(|| WidgetInfo::labeled(Role::Button, true, text.clone()));
+    let response = ui.interact(target, ui.make_persistent_id(id), Sense::click());
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, true, name));
     if response.hovered() {
         ui.painter().rect_filled(
             target.shrink2(vec2(0.0, HIT_INSET)),
@@ -214,18 +240,14 @@ fn diagnostics(ui: &mut Ui, state: &mut AppState) {
             tokens::NEUTRAL_HOVER,
         );
     }
-    let ink = match (count > 0, response.hovered()) {
-        (true, _) => tokens::WARN,
-        (false, true) => tokens::TEXT_2,
-        (false, false) => tokens::TEXT_3,
-    };
+    let ink = ink(response.hovered());
     focus::ring(
         ui,
         &response,
         target.shrink2(vec2(0.0, HIT_INSET)),
         tokens::RADIUS_SM,
     );
-    Icon::Warning.paint(
+    icon.paint(
         ui,
         egui::Rect::from_center_size(
             egui::pos2(rect.min.x + ICON / 2.0, rect.center().y),
@@ -239,11 +261,7 @@ fn diagnostics(ui: &mut Ui, state: &mut AppState) {
         galley,
         ink,
     );
-    if response.clicked() {
-        state.drawer.show_tab(DrawerTab::Diagnostics);
-        state.explainer = false;
-    }
-    response.on_hover_cursor(egui::CursorIcon::PointingHand);
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 /// What the hover card says about veraPDF, and the colour of the dot in front of it.

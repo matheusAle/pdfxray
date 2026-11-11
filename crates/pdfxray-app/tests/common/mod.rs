@@ -387,7 +387,7 @@ pub(crate) fn expected_digest(
     overlays: impl FnOnce(&pdfxray_core::Document, &pdfxray_render::Transform) -> Vec<pdfxray_render::Overlay>,
 ) -> u64 {
     let doc = pdfxray_core::Document::open(fixture_path(fixture)).unwrap();
-    let scale = harness.state().state.shown_request().unwrap().scale.scale();
+    let scale = harness.state().state.shown_request().unwrap().spec(&doc).scale;
     let at = pdfxray_render::page_transform(&doc, 0, scale).unwrap();
     let spec = pdfxray_render::RenderSpec {
         overlays: overlays(&doc, &at),

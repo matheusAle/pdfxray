@@ -72,6 +72,8 @@ pub enum Icon {
     ChevronUp,
     /// Save a file: *Save image…*.
     Download,
+    /// A screen: the emulated display.
+    Monitor,
     /// Previous page.
     ChevronLeft,
     /// A document.
@@ -126,7 +128,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, for galleries and tests.
-    pub const ALL: [Self; 53] = [
+    pub const ALL: [Self; 54] = [
         Self::Tags,
         Self::Content,
         Self::Artifacts,
@@ -155,6 +157,7 @@ impl Icon {
         Self::ChevronDown,
         Self::ChevronUp,
         Self::Download,
+        Self::Monitor,
         Self::ChevronLeft,
         Self::File,
         Self::Open,
@@ -212,6 +215,7 @@ impl Icon {
             Self::ChevronDown => Lucide::ChevronDown,
             Self::ChevronUp => Lucide::ChevronUp,
             Self::Download => Lucide::Download,
+            Self::Monitor => Lucide::Monitor,
             Self::ChevronLeft => Lucide::ChevronLeft,
             Self::File => Lucide::FileText,
             Self::Open => Lucide::FolderOpen,

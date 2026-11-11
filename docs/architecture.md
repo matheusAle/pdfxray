@@ -21,9 +21,9 @@ pdfxray-fixtures (tests only)        xtask (dev tasks)
 |-------|----------------|
 | `pdfxray-raw` | Lossless lexer and object parser with byte spans; xref tables/streams, hybrid files, object streams, `/Prev` revision chain; stream filters; 40+ raw diagnostics. Never repairs. |
 | `pdfxray-core` | `Document`: object index, page tree with box provenance, content capture, structure tree, resources, diagnostics, veraPDF mapping. Exposes `info / tree / node / hit / hit_rect / bbox / breadcrumb / marked_content / captured`. |
-| `pdfxray-render` | hayro rasterisation into a page's own pixel grid or a given one, page↔pixel transform, overlays (one `vello_cpu` compositor), the annotation layer (tag boxes, chips, reading-order badges and path, a diff's status boxes and legend, laid out and measured once for the app and the export), the visual diff (side by side, overlay, mask over one composite bitmap), X-ray, clip/alpha views, isolate/hide (of one node or a set)/stepper filtering, optional PDFium reference renderer and image diff, PNG/JPEG output. |
+| `pdfxray-render` | hayro rasterisation into a page's own pixel grid or a given one, page↔pixel transform, overlays (one `vello_cpu` compositor), the annotation layer (tag boxes, chips, reading-order badges and path, a diff's status boxes and legend, laid out and measured once for the app and the export), the visual diff (side by side, overlay, mask over one composite bitmap), X-ray, clip/alpha views, isolate/hide (of one node or a set)/stepper filtering, Windows viewer and screen emulation, optional PDFium reference renderer and image diff, PNG/JPEG output. |
 | `pdfxray-verapdf` | Finds or installs veraPDF (pinned, SHA-256 checked), runs it as a separate Java process, parses its XML report, parses context paths into locators. |
-| `pdfxray-cli` | `pdfxray` binary: JSON over the core API; `render` writes PNG/JPEG, alone or compared `--against` a file or a `--reference` engine. |
+| `pdfxray-cli` | `pdfxray` binary: JSON over the core API; `render` writes PNG/JPEG, alone, as a Windows viewer draws it on a given screen (`--emulate`, `--dpi`, `--screen`, `--zoom`), or compared `--against` a file or a `--reference` engine. |
 | `pdfxray-app` | egui desktop app. |
 | `pdfxray-macos` | The macOS integration that needs Objective-C: the application delegate that receives files from Finder and the Dock, and the system's recent documents. No-op stubs elsewhere. |
 | `pdfxray-fixtures` | Deterministic generator of small PDFs, each with machine-readable expected facts. |
@@ -99,6 +99,17 @@ modified copy of the file: an in-memory incremental update that replaces the pag
 `/Contents` (and affected Form XObjects) with filtered streams. Painting operators outside the
 allowed set become no-ops (`n`, invisible text render mode, dropped `Do`/`sh`/inline images);
 all state operators are kept so positions stay exact. The original bytes are never modified.
+
+## Viewer emulation
+
+`pdfxray_render::emulate` draws a page on another screen's device pixels (`zoom × DPI / 72`
+per point) and places geometry on them the way a Windows viewer does, after
+`docs/pdf-rendering-rounding-windows.md`: PDFium's rules for Chrome and Edge, Adobe AGM's for
+Acrobat. That has to happen between the interpreter and the rasteriser, which hayro keeps
+private, so the workspace carries hayro 0.8.0 in `vendor/hayro` with one patch
+(`[patch.crates-io]`; see its `PATCHES.md`): a `PixelRules` trait whose methods get each fill,
+stroke, clip, glyph run and image in device space before it is rasterised. Without rules,
+hayro draws exactly as upstream.
 
 ## The annotation layer
 

@@ -212,3 +212,98 @@ fn jpeg_output_follows_the_extension() {
     // Smoke: a JPEG has no alpha; every pixel comes back opaque.
     assert!(img.pixels().all(|p| p.0[3] == 255));
 }
+
+/// `pdfxray render <args> -o <out>`'s report.
+#[expect(
+    clippy::unwrap_used,
+    reason = "test helper: a report that is not JSON must fail the test loudly"
+)]
+fn render_report(name: &str, extra: &[&str], out: &PathBuf) -> serde_json::Value {
+    let stdout = Command::new(env!("CARGO_BIN_EXE_pdfxray"))
+        .arg("render")
+        .arg(fixture(name))
+        .args(extra)
+        .arg("-o")
+        .arg(out)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    serde_json::from_slice(&stdout).unwrap()
+}
+
+#[test]
+fn emulate_draws_the_page_on_the_device_pixels_of_the_emulated_screen() {
+    // The page is 200 × 100 pt. At 150 % on a 120 DPI screen a point is 2.5 device pixels.
+    let out = out_path("render-emulated.png");
+
+    let report = render_report(
+        "minimal-one-page",
+        &["0", "--emulate", "acrobat", "--dpi", "120", "--zoom", "150"],
+        &out,
+    );
+
+    assert_eq!(
+        report["emulation"],
+        serde_json::json!({
+            "viewer": "Acrobat",
+            "engine": "Adobe AGM",
+            "screen": [1920, 1080],
+            "dpi": 120,
+            "scale_factor": 1.25,
+            "zoom": "150%",
+            "zoom_percent": 150.0,
+            "pixels_per_point": 2.5,
+        })
+    );
+    assert_eq!(
+        (report["width"].as_u64(), report["height"].as_u64()),
+        (Some(500), Some(250))
+    );
+    assert_eq!(
+        image::open(&out).map(|i| (i.width(), i.height())).ok(),
+        Some((500, 250))
+    );
+    // A screen without a viewer: pdfxray's own rounding on it. Fit width on a 1000 px screen at
+    // 144 DPI is 250 %, so the page is the screen's width.
+    let fitted = render_report(
+        "minimal-one-page",
+        &["0", "--dpi", "144", "--screen", "1000x800", "--zoom", "fit-width"],
+        &out_path("render-fit-width.png"),
+    );
+    assert_eq!(fitted["width"].as_u64(), Some(1000));
+    assert_eq!(fitted["emulation"]["viewer"], serde_json::Value::Null);
+    assert_eq!(fitted["emulation"]["zoom"], "fit width");
+    assert_eq!(fitted["emulation"]["zoom_percent"], 250.0);
+    // Smoke: without the flags the report has no emulation.
+    let plain = render_report("minimal-one-page", &["0"], &out_path("render-plain.png"));
+    assert_eq!(plain.get("emulation"), None);
+}
+
+#[test]
+fn emulation_refuses_a_scale_a_comparison_and_values_out_of_range() {
+    let refused = |extra: &[&str], says: &str| {
+        Command::new(env!("CARGO_BIN_EXE_pdfxray"))
+            .arg("render")
+            .arg(fixture("minimal-one-page"))
+            .arg("0")
+            .args(extra)
+            .arg("-o")
+            .arg(out_path("render-refused.png"))
+            .assert()
+            .failure()
+            .stderr(contains(says));
+    };
+
+    refused(&["--scale", "3", "--dpi", "120"], "cannot be used with");
+    refused(
+        &["--emulate", "chrome", "--reference", "pdfium"],
+        "cannot be used with",
+    );
+    refused(&["--screen", "1920"], "write it as WIDTHxHEIGHT, e.g. 1920x1080");
+    refused(&["--zoom", "0"], "`0` is not a zoom");
+    refused(&["--dpi", "20"], "48..=480");
+    // Smoke: a viewer clap does not know.
+    refused(&["--emulate", "safari"], "possible values: chrome, edge, acrobat");
+}

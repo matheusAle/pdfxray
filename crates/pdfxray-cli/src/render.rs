@@ -1,6 +1,9 @@
 //! `pdfxray render`: a page as PNG or JPEG, with the debug overlays and the View menu's
 //! annotations, and one orthogonal axis: what to compare the page against, another file
 //! (`--against`) or a reference engine (`--reference`), shown side by side, overlaid or as a mask.
+//!
+//! A single page can also be drawn as a Windows viewer shows it (`--emulate`) on a given screen
+//! (`--dpi`, `--screen`, `--zoom`): at that screen's device pixels, rounded as the viewer rounds.
 
 use std::collections::{BTreeSet, HashMap};
 use std::io::Write;
@@ -16,13 +19,17 @@ use pdfxray_render::annotate::{self, ChangeShow, Grid, Legend, Palette, Scene, T
 use pdfxray_render::composite::{self, Comparator, Composite, Delta, Fit, Mode, Registration, Request};
 use pdfxray_render::pdfium::PdfiumRenderer;
 use pdfxray_render::{
-    ColorBy, ContentFilter, Overlay, RenderSpec, Transform, XrayOptions, alpha_heatmap_overlays,
-    clip_overlays, ops_for, page_transform, render_page, write_image, xray_overlays,
+    ColorBy, ContentFilter, Display, Emulation, Overlay, RenderSpec, Transform, Viewer, ViewerZoom,
+    XrayOptions, alpha_heatmap_overlays, clip_overlays, ops_for, page_dimensions, page_transform,
+    render_page, write_image, xray_overlays,
 };
 use serde_json::{Value, json};
 
 use crate::visual::{ScoreView, VisualArgs};
 use crate::{PresetArg, open, write_json};
+
+/// The flags of an emulated screen and viewer: they draw one page, not a comparison.
+const EMULATION: [&str; 4] = ["emulate", "dpi", "screen", "zoom"];
 
 /// The debug overlays draw over one page; a comparison draws two.
 const ONE_PAGE: [&str; 9] = [
@@ -47,9 +54,25 @@ pub struct RenderArgs {
     /// Output image; `.png`, `.jpg` or `.jpeg`.
     #[arg(short, long)]
     output: PathBuf,
-    /// Pixels per point.
-    #[arg(long, default_value_t = 2.0)]
+    /// Pixels per point. An emulated screen sets its own (`--dpi`, `--zoom`).
+    #[arg(long, default_value_t = 2.0, conflicts_with_all = EMULATION)]
     scale: f32,
+
+    /// Draw the page as this Windows viewer rounds it onto device pixels: Chrome and Edge
+    /// (`PDFium`) or Acrobat. On the screen of `--dpi`, `--screen` and `--zoom`.
+    #[arg(long, value_enum, conflicts_with_all = ["against", "reference"])]
+    emulate: Option<ViewerArg>,
+    /// The emulated screen's density in DPI: 96 is Windows' 100 % scaling, 120 is 125 %, 144 is
+    /// 150 %. Default 96.
+    #[arg(long, value_parser = clap::value_parser!(u32).range(MIN_DPI..=MAX_DPI), conflicts_with_all = ["against", "reference"])]
+    dpi: Option<u32>,
+    /// The emulated screen's size in device pixels, `WIDTHxHEIGHT`, for the fit zooms. Default
+    /// 1920x1080.
+    #[arg(long, value_parser = parse_screen, conflicts_with_all = ["against", "reference"])]
+    screen: Option<(u32, u32)>,
+    /// The emulated viewer's zoom: a percentage (`125`), `fit-width` or `fit-page`. Default 100.
+    #[arg(long, value_parser = parse_zoom, conflicts_with_all = ["against", "reference"])]
+    zoom: Option<ViewerZoom>,
     /// Outline every defined page box.
     #[arg(long)]
     boxes: bool,
@@ -168,6 +191,102 @@ pub(crate) enum OrderFrom {
     Speech,
 }
 
+/// `--emulate` viewers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum ViewerArg {
+    /// Google Chrome: `PDFium`.
+    Chrome,
+    /// Microsoft Edge: Chromium's viewer, `PDFium`.
+    Edge,
+    /// Adobe Acrobat and Reader: Adobe's AGM.
+    Acrobat,
+}
+
+impl From<ViewerArg> for Viewer {
+    fn from(v: ViewerArg) -> Self {
+        match v {
+            ViewerArg::Chrome => Self::Chrome,
+            ViewerArg::Edge => Self::Edge,
+            ViewerArg::Acrobat => Self::Acrobat,
+        }
+    }
+}
+
+/// The lowest `--dpi`: half of Windows' 100 %.
+const MIN_DPI: i64 = 48;
+/// The highest `--dpi`: 500 % scaling.
+const MAX_DPI: i64 = 480;
+/// The highest `--zoom` percentage, as viewers allow.
+const MAX_ZOOM_PERCENT: u32 = 6400;
+/// The longest side `--screen` takes, in device pixels.
+const MAX_SCREEN_SIDE: u32 = 16_384;
+
+/// `--screen`: `WIDTHxHEIGHT` in device pixels.
+fn parse_screen(text: &str) -> Result<(u32, u32), String> {
+    let wrong = || format!("`{text}` is not a screen size: write it as WIDTHxHEIGHT, e.g. 1920x1080");
+    let (w, h) = text.split_once(['x', 'X', '×']).ok_or_else(wrong)?;
+    let side = |v: &str| {
+        v.trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|n| (1..=MAX_SCREEN_SIDE).contains(n))
+    };
+    match (side(w), side(h)) {
+        (Some(w), Some(h)) => Ok((w, h)),
+        _ => Err(format!("{}; each side is 1 to {MAX_SCREEN_SIDE} pixels", wrong())),
+    }
+}
+
+/// `--zoom`: a percentage, `fit-width` or `fit-page`.
+fn parse_zoom(text: &str) -> Result<ViewerZoom, String> {
+    match text {
+        "fit-width" => Ok(ViewerZoom::FitWidth),
+        "fit-page" => Ok(ViewerZoom::FitPage),
+        _ => text
+            .trim_end_matches('%')
+            .parse::<u32>()
+            .ok()
+            .filter(|p| (1..=MAX_ZOOM_PERCENT).contains(p))
+            .map(ViewerZoom::Percent)
+            .ok_or_else(|| {
+                format!("`{text}` is not a zoom: write a percentage from 1 to {MAX_ZOOM_PERCENT}, fit-width or fit-page")
+            }),
+    }
+}
+
+/// The emulated screen and viewer the flags ask for, if any.
+fn emulation(args: &RenderArgs) -> Option<Emulation> {
+    if args.emulate.is_none() && args.dpi.is_none() && args.screen.is_none() && args.zoom.is_none() {
+        return None;
+    }
+    let defaults = Display::default();
+    let (width, height) = args.screen.unwrap_or((defaults.width, defaults.height));
+    Some(Emulation {
+        viewer: args.emulate.map(Viewer::from),
+        display: Display {
+            width,
+            height,
+            dpi: args.dpi.unwrap_or(defaults.dpi),
+        },
+        zoom: args.zoom.unwrap_or_default(),
+    })
+}
+
+/// The `emulation` part of the report: the screen, the zoom it gives this page and the scale
+/// that follows.
+fn emulation_report(emulation: &Emulation, page: (f32, f32), scale: f32) -> Value {
+    json!({
+        "viewer": emulation.viewer.map(Viewer::name),
+        "engine": emulation.viewer.map(|v| v.engine().name()),
+        "screen": [emulation.display.width, emulation.display.height],
+        "dpi": emulation.display.dpi,
+        "scale_factor": emulation.display.scale_factor(),
+        "zoom": emulation.zoom.to_string(),
+        "zoom_percent": emulation.zoom_for(page) * 100.0,
+        "pixels_per_point": scale,
+    })
+}
+
 /// `--reference` engines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum EngineArg {
@@ -247,10 +366,14 @@ pub(crate) fn run(args: &RenderArgs, pretty: bool, out: &mut impl Write) -> anyh
 /// One page with its debug overlays and annotations.
 fn single(args: &RenderArgs, doc: &Document) -> anyhow::Result<Value> {
     let page = args.page;
-    let to_pixel = page_transform(doc, page, args.scale).with_context(|| format!("rendering page {page}"))?;
-    let mut spec = RenderSpec::new(args.scale);
+    let emulation = emulation(args);
+    let size = page_dimensions(doc, page).with_context(|| format!("rendering page {page}"))?;
+    let scale = emulation.map_or(args.scale, |e| e.scale_for(size));
+    let to_pixel = page_transform(doc, page, scale).with_context(|| format!("rendering page {page}"))?;
+    let mut spec = RenderSpec::new(scale);
+    spec.viewer = emulation.and_then(|e| e.viewer);
     spec.overlays = debug_overlays(args, doc, &to_pixel)?;
-    let grid = Grid::page(doc, page, args.scale, args.scale)?;
+    let grid = Grid::page(doc, page, scale, scale)?;
     let scenes = [tag_scene(args, doc, page)];
     spec.overlays.extend(annotate::overlays(&annotate::layout(
         &grid,
@@ -261,7 +384,11 @@ fn single(args: &RenderArgs, doc: &Document) -> anyhow::Result<Value> {
     spec.content = content_filter(args, doc)?;
     let rendered = render_page(doc, page, &spec).with_context(|| format!("rendering page {page}"))?;
     write_image(&rendered, &args.output).with_context(|| format!("writing {}", args.output.display()))?;
-    Ok(json!({ "output": args.output, "width": rendered.width, "height": rendered.height }))
+    let mut report = json!({ "output": args.output, "width": rendered.width, "height": rendered.height });
+    if let Some(emulation) = &emulation {
+        report["emulation"] = emulation_report(emulation, size, scale);
+    }
+    Ok(report)
 }
 
 /// The page boxes, highlights, x-ray, clip and heat map asked for, placed with `to_pixel`.

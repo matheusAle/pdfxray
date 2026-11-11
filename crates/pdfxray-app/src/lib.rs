@@ -17,6 +17,7 @@
 //! * [`roles`]: the colour of each tag role, shared by the tree, the canvas overlay and the legend.
 //! * [`view`], [`units`], [`modes`]: zoom maths, units, and the debug render modes (bitmaps are
 //!   rendered on a background thread); object previews have a thread of their own.
+//!   [`emulation`]: pages drawn on another screen's pixels, rounded as a Windows viewer rounds.
 //! * [`instances`]: one window per process, and which window a file opens in; [`commands`]: the
 //!   menu bar's commands; [`platform`]: what the operating system sends (files to open, menu
 //!   clicks) and the macOS menu bar; [`brand`]: the logo, the window icon and the About facts.
@@ -28,6 +29,7 @@ pub mod commands;
 pub mod components;
 mod diff_frames;
 pub mod drawer;
+pub mod emulation;
 pub mod findings;
 pub mod image_save;
 pub mod inspector;

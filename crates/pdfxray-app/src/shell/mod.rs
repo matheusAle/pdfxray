@@ -2,6 +2,7 @@
 //! bar. Each region is a host that draws one panel from [`crate::AppState`]; the shell only
 //! decides where they go.
 
+pub mod display;
 mod keys;
 pub(crate) mod layout;
 mod rail;

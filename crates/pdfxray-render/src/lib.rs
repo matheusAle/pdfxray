@@ -24,6 +24,7 @@
 pub mod annotate;
 pub mod composite;
 mod diff;
+pub mod emulate;
 mod filter;
 mod overlay;
 #[cfg(feature = "pdfium")]
@@ -49,6 +50,7 @@ use pdfxray_core::numeric::{u32_from_f32_trunc, usize_from_u32};
 use pdfxray_core::{Document, EngineError, PageIx, Point};
 
 pub use diff::{Diff, diff};
+pub use emulate::{Display, Emulation, Viewer, ViewerZoom};
 pub use filter::{ContentFilter, ops_for, ops_for_all};
 pub use overlay::{Edge, Ink, Line, Overlay};
 pub use preview::{
@@ -77,6 +79,9 @@ pub struct RenderSpec {
     pub content: ContentFilter,
     /// The bitmap to draw into; `None` is the page's own, `trunc(W * scale)` pixels wide.
     pub grid: Option<PixelGrid>,
+    /// The viewer whose pixel rounding the page is drawn with; `None` is pdfxray's own. The
+    /// scale is the caller's: see [`Emulation::scale_for`].
+    pub viewer: Option<Viewer>,
 }
 
 impl RenderSpec {
@@ -88,6 +93,7 @@ impl RenderSpec {
             overlays: Vec::new(),
             content: ContentFilter::All,
             grid: None,
+            viewer: None,
         }
     }
 }
@@ -287,14 +293,25 @@ fn rasterise_cached<'a>(
     let side = |v: u32| u16::try_from(v).map_err(|_| RenderError::BadSize { width, height });
     let mut ctx = RenderContext::new(side(width)?, side(height)?);
     let forward = Affine::new(page_to_pixel.coeffs());
-    hayro::render_into(
-        engine_page,
-        cache,
-        settings,
-        &RenderSettings::default(),
-        &mut ctx,
-        forward,
-    );
+    match spec.viewer {
+        Some(viewer) => hayro::render_into_with(
+            engine_page,
+            cache,
+            settings,
+            &RenderSettings::default(),
+            &mut ctx,
+            forward,
+            viewer.rules(),
+        ),
+        None => hayro::render_into(
+            engine_page,
+            cache,
+            settings,
+            &RenderSettings::default(),
+            &mut ctx,
+            forward,
+        ),
+    }
     ctx.flush();
     let mut pixmap = Pixmap::new(ctx.width(), ctx.height());
     ctx.render_with(

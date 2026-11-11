@@ -653,7 +653,7 @@ fn the_clip_toggle_outlines_the_clip_of_the_selected_operator() {
     assert_eq!(request.clip_op, Some(59));
     let doc = Document::open(fixture_path("graphics-state")).unwrap();
     assert_eq!(request.spec(&doc).overlays.len(), 1);
-    let at = pdfxray_render::page_transform(&doc, 0, request.scale.scale()).unwrap();
+    let at = pdfxray_render::page_transform(&doc, 0, request.spec(&doc).scale).unwrap();
     assert_eq!(request.spec(&doc).overlays, clip_overlays(&doc, 0, 59, &at));
     assert_eq!(
         digest(&harness),
