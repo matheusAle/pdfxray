@@ -18,7 +18,8 @@ user before you install anything.
 
 `diff`, and `render`'s annotation and comparison flags (`--tags`, `--labels`, `--artifacts`,
 `--nesting`, `--reading-order`, `--against`, `--reference`, `--mode`), need pdfxray 0.4 or
-later. On an older version, `pdfxray <command> --help` shows what yours has.
+later; `render`'s Windows viewer emulation (`--emulate`, `--dpi`, `--screen`, `--zoom`) needs
+0.5. On an older version, `pdfxray <command> --help` shows what yours has.
 
 ## How it works
 
@@ -46,7 +47,7 @@ later. On an older version, `pdfxray <command> --help` shows what yours has.
 | `reading-order`, `tag-boxes` | The order a page is read in; every element's box | [tags.md](references/tags.md) |
 | `speech` | What a screen reader announces, item by item | [tags.md](references/tags.md) |
 | `table` | A table's grid and each cell's header cells, with the rule that found them | [tags.md](references/tags.md) |
-| `render` | A page as PNG or JPEG, with highlights, x-ray, tag boxes, reading order, or compared with another file | [render.md](references/render.md) |
+| `render` | A page as PNG or JPEG, with highlights, x-ray, tag boxes, reading order, compared with another file, or as Chrome, Edge or Acrobat on Windows draws it | [render.md](references/render.md) |
 | `diff` | What changed between two PDFs, matched by content and position, never by object number | [diff.md](references/diff.md) |
 | `validate` | veraPDF findings (PDF/UA, WCAG 2.2, PDF/A…) mapped to node ids | [validate.md](references/validate.md) |
 

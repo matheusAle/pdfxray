@@ -70,3 +70,39 @@ Against a reference engine, to check that pdfxray draws the page like PDFium:
 48, is the per-channel difference that still counts as equal). It needs a PDFium library:
 `--pdfium <file or dir>`, `PDFXRAY_PDFIUM`, or the pdfxray data directory. `--against` and
 `--reference` cannot be combined, and neither works with the flags of the first table above.
+
+## As a Windows viewer draws it (pdfxray 0.5 or later)
+
+Draw the page on a Windows screen's device pixels, rounded the way a given viewer rounds what
+lands between two pixels:
+
+```sh
+pdfxray render f.pdf 0 --emulate acrobat --dpi 120 --zoom 100 -o acrobat.png
+pdfxray render f.pdf 0 --emulate chrome --dpi 120 --zoom 100 -o chrome.png
+```
+
+* `--emulate chrome|edge|acrobat`: the viewer. Chrome and Edge draw with PDFium: each glyph
+  starts on a whole pixel, a rectangular clip grows out to whole pixels, an upright image covers
+  a whole number of pixels; nothing else is snapped. Acrobat snaps coordinates within 0.0001 px
+  of a pixel, lets fills overlap 0.01 px, makes every stroke a whole number of pixels wide (at
+  least 1) with its edges on pixel boundaries, and rounds each glyph advance, so a long text run
+  can drift.
+* `--dpi <N>`: the screen's density, 48 to 480 (default 96, Windows' 100 % scaling; 120 is
+  125 %, 144 is 150 %).
+* `--screen <W>x<H>`: its size in device pixels (default `1920x1080`), for the fit zooms.
+* `--zoom <PERCENT>|fit-width|fit-page`: the viewer's zoom (default 100). The fit zooms take the
+  whole screen as the page area.
+
+Any of these sets the scale to `zoom × DPI / 72` device pixels per point, so they cannot be
+combined with `--scale`; without `--emulate`, the page is drawn on that screen with pdfxray's own
+rounding. They draw one page: not with `--against` or `--reference`. The debug overlays and
+annotations still work. The JSON adds `emulation`:
+
+```json
+{ "viewer": "Acrobat", "engine": "Adobe AGM", "screen": [1920, 1080], "dpi": 120,
+  "scale_factor": 1.25, "zoom": "100%", "zoom_percent": 100.0, "pixels_per_point": 1.6666666 }
+```
+
+Anti-aliasing, font hinting and Acrobat's resolution thresholds are not emulated: compare
+rendered images for where things land (a hairline gap, a 1 px vs 2 px line, text drift), not for
+the exact grey of an edge.

@@ -78,3 +78,19 @@ Read `compliant`, not the exit status.
 content, structure elements, page boxes. Then `pdfxray node f.pdf <id>` on the one you care
 about. An operator's node has its geometry, graphics state and text state; a glyph's node
 has its font and Unicode.
+
+## Why does it look different in Chrome or Acrobat?
+
+A hairline gap between two fills, a line one pixel wide in one viewer and two in another, or
+text that drifts along a line usually comes from where each viewer puts what lands between two
+device pixels. Draw the page as each one does, on the user's screen, and compare:
+
+```sh
+pdfxray render f.pdf 0 --emulate chrome --dpi 120 --zoom 100 -o chrome.png
+pdfxray render f.pdf 0 --emulate acrobat --dpi 120 --zoom 100 -o acrobat.png
+```
+
+Open both and look at the spot. Then `pdfxray hit f.pdf 0 <x> <y>` and `pdfxray node` on the
+operator there for its exact coordinates and line width: a coordinate a fraction of a pixel off
+the grid at that scale (`zoom × DPI / 72` px per point) is the usual cause.
+
