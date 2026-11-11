@@ -6,7 +6,7 @@ default-members = ["crates/*"]
 exclude = ["vendor"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
@@ -15,12 +15,12 @@ authors = ["pdfxray contributors"]
 
 [workspace.dependencies]
 # internal
-pdfxray-raw = { path = "crates/pdfxray-raw", version = "0.4.0" }
-pdfxray-core = { path = "crates/pdfxray-core", version = "0.4.0" }
-pdfxray-render = { path = "crates/pdfxray-render", version = "0.4.0" }
-pdfxray-verapdf = { path = "crates/pdfxray-verapdf", version = "0.4.0" }
-pdfxray-fixtures = { path = "crates/pdfxray-fixtures", version = "0.4.0" }
-pdfxray-macos = { path = "crates/pdfxray-macos", version = "0.4.0" }
+pdfxray-raw = { path = "crates/pdfxray-raw", version = "0.5.0" }
+pdfxray-core = { path = "crates/pdfxray-core", version = "0.5.0" }
+pdfxray-render = { path = "crates/pdfxray-render", version = "0.5.0" }
+pdfxray-verapdf = { path = "crates/pdfxray-verapdf", version = "0.5.0" }
+pdfxray-fixtures = { path = "crates/pdfxray-fixtures", version = "0.5.0" }
+pdfxray-macos = { path = "crates/pdfxray-macos", version = "0.5.0" }
 
 # pdf
 hayro = "0.8"

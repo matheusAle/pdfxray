@@ -6,8 +6,16 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-11
+
 ### Added
 
+- **See a page as a Windows viewer draws it.** The display item in the status bar emulates a
+  Windows screen (its size, scaling or DPI, and the viewer's zoom) and the way Chrome, Edge or
+  Acrobat round what lands between two pixels: glyph positions, clips, images, thin strokes.
+  Zoom in to see each device pixel. Measure's *On screen* counts that screen's pixels.
+- `pdfxray render` takes the same: `--emulate chrome|edge|acrobat`, `--dpi`, `--screen` and
+  `--zoom` (a percentage, `fit-width` or `fit-page`), and reports them in its JSON.
 - **Paint order while comparing.** The comparison's toolbar has Paint order (`P`): it steps one
   side at a time, painting that side's page up to the step and the other whole, side by side,
   overlaid or as a mask. An A | B switch in the Paint order tab picks the side.
@@ -23,12 +31,6 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 - **Save image…** writes an image of the document to a PNG at its own size, with its
   transparency: from the image's preview card, the Inspector, or the right-click menu of the
   image or of the `Do` that paints it.
-- **See a page as a Windows viewer draws it.** The display item in the status bar emulates a
-  Windows screen (its size, scaling or DPI, and the viewer's zoom) and the way Chrome, Edge or
-  Acrobat round what lands between two pixels: glyph positions, clips, images, thin strokes.
-  Zoom in to see each device pixel. Measure's *On screen* counts that screen's pixels.
-- `pdfxray render` takes the same: `--emulate chrome|edge|acrobat`, `--dpi`, `--screen` and
-  `--zoom` (a percentage, `fit-width` or `fit-page`), and reports them in its JSON.
 
 ### Changed
 
