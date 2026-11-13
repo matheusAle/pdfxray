@@ -6,6 +6,8 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-13
+
 ### Added
 
 - **Paint order as each viewer paints.** Emulating Acrobat, form fields are painted after every
