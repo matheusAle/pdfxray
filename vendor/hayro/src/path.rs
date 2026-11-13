@@ -1,4 +1,8 @@
 use crate::rules::{DeviceStroke, in_device};
+
+/// The coverage above which an aliased pixel is painted (pdfxray patch): half of it, as a
+/// sample at the pixel's centre would decide.
+const ALIASING_THRESHOLD: u8 = 127;
 use crate::{Renderer, convert_fill_rule};
 use hayro_interpret::{DrawMode, DrawProps, FillRule, StrokeProps};
 use kurbo::{Affine, BezPath, Point, Rect, Shape};
@@ -35,6 +39,16 @@ impl Renderer<'_> {
             dash_pattern: stroke_props.dash_array.iter().map(|n| *n as f64).collect(),
             dash_offset: stroke_props.dash_offset as f64,
         }
+    }
+
+    /// Whether `props` draw a shape the rules alias (pdfxray patch): opaque, a solid colour,
+    /// normal blending, no soft mask, outside any transparency group.
+    fn aliased(&self, props: &DrawProps<'_>) -> bool {
+        self.rules().is_some_and(|rules| rules.alias_opaque_paths())
+            && self.group_depth == 0
+            && props.soft_mask.is_none()
+            && props.blend_mode == hayro_interpret::BlendMode::Normal
+            && matches!(&props.paint, hayro_interpret::Paint::Color(c) if c.to_rgba().to_rgba8()[3] == 255)
     }
 
     /// The fill's overlap (pdfxray patch): `path`, just filled with the current paint and
@@ -150,7 +164,14 @@ impl Renderer<'_> {
         if let Some(clip_path) = clip_path.as_ref() {
             self.push_clip_path_inner(clip_path, FillRule::NonZero);
         }
+        let aliased = !is_text && self.aliased(&props);
+        if aliased {
+            self.ctx.set_aliasing_threshold(Some(ALIASING_THRESHOLD));
+        }
         self.ctx.stroke_path(path);
+        if aliased {
+            self.ctx.set_aliasing_threshold(None);
+        }
         if clip_path.is_some() {
             self.ctx.pop_clip();
         }
@@ -173,8 +194,15 @@ impl Renderer<'_> {
             self.push_clip_path_inner(clip_path, fill_rule);
         }
 
+        let aliased = self.aliased(&props);
+        if aliased {
+            self.ctx.set_aliasing_threshold(Some(ALIASING_THRESHOLD));
+        }
         self.ctx.fill_path(path);
         self.grow_fill(path);
+        if aliased {
+            self.ctx.set_aliasing_threshold(None);
+        }
 
         if clip_path.is_some() {
             self.ctx.pop_clip();

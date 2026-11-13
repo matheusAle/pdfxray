@@ -6,6 +6,14 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 
 ## [Unreleased]
 
+### Added
+
+- **Paint order as each viewer paints.** Emulating Acrobat, form fields are painted after every
+  other annotation, as Acrobat does whatever order the page lists them in. With its *2D
+  graphics acceleration* (on as Acrobat starts, a switch in the display popover, `--no-gpu` on
+  the command line), opaque shapes that meet in the middle of a pixel leave no seam, as on
+  Acrobat's GPU path; off, every shape is painted in turn as on its GDI path and in Chrome.
+
 ## [0.6.0] - 2026-11-11
 
 ### Added

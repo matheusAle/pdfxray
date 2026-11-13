@@ -860,11 +860,232 @@ This was fixed but is worth noting for emulation accuracy.
 
 ---
 
-## 7. Emulation Parameters
+
+## 7. Content Stream Parsing and Paint Order
+
+### 7.1 The PDF Painter's Model
+
+The PDF specification (ISO 32000) defines a **strict sequential painter's
+model**: objects in a content stream are painted in the order they appear, each
+new object on top of everything already there. There is no z-ordering attribute
+and no draw-order property — position in the byte stream is the only ordering
+mechanism.
+
+Key rules from the spec:
+
+- **Fill-and-stroke** (`B`/`B*`) is a single atomic operation: fill first,
+  stroke on top, no visible seam between them.
+- **q/Q** (save/restore) affect the graphics state stack but do not change
+  paint order. Objects painted between q and Q are still in sequence; Q only
+  restores the CTM, color, clip, etc.
+- **Annotations** are painted after all page content. Their stacking follows
+  the page's `/Annots` array order (first entry = bottommost).
+
+### 7.2 Chromium / PDFium: Immediate-Mode Sequential Rendering
+
+PDFium uses a **two-phase immediate-mode pipeline**: parse into a flat display
+list, then paint it in order. There is no scene graph, no render tree, and no
+reordering at any point.
+
+#### Phase 1: Parse → Display List
+
+`CPDF_StreamContentParser` tokenizes the content stream and dispatches each
+operator through a handler lookup table. Each paint operator creates a page
+object and appends it to a `std::deque<CPDF_PageObject>`:
+
+- Path operators (`m`, `l`, `c`, `re`) only accumulate points. The path object
+  is created and appended when a **paint operator** runs (`f`, `S`, `B`). The
+  object exists in the list at the position of its paint operator, not its
+  first move-to.
+- Text operators (`Tj`, `TJ`) each create a separate `TextObject`.
+- Image `Do` creates an `ImageObject`.
+- Form `Do` triggers recursive parsing of the form's content stream into a
+  **nested display list** inside the `FormObject`, then appends the form object
+  to the parent deque at the `Do` position.
+- `q`/`Q` push/pop the parser's running graphics state. They do not create page
+  objects or affect the display list.
+
+Multiple content streams (page `/Contents` as array) are concatenated before
+parsing. Each object records which stream it came from, but they all go into
+one flat deque.
+
+#### Phase 2: Render → Paint
+
+`CPDF_RenderStatus::RenderObjectList` walks the deque with a plain forward
+loop:
+
+```
+for each object in deque:
+    skip if null, inactive, or outside clip rect
+    check OCG visibility — skip if hidden
+    RenderSingleObject(object)
+```
+
+There is no sorting, no batching, no z-ordering. Each object is painted
+immediately when reached. Dispatch by type:
+
+- Path → `ProcessPath`
+- Text → `ProcessText`
+- Image → `ProcessImage`
+- Form → `ProcessForm` (creates child `RenderStatus`, recursively calls
+  `RenderObjectList` on the form's nested deque)
+- Shading → `ProcessShading`
+
+Transparent objects render through an offscreen bitmap that is composited back,
+but this does not change the paint order.
+
+**Progressive rendering**: a stop-object mechanism lets Chromium show partial
+page results while images decode. The iterator resumes at the exact object
+where it paused — no reordering.
+
+**Recursion limit**: nested forms and patterns are guarded by
+`kRenderMaxRecursionDepth = 64`. Beyond that, objects are silently skipped.
+
+**Annotations**: painted as a separate layer after page content. The render
+context stores layers in a `std::vector` — page content is layer 0,
+annotations are subsequent layers. Each layer gets its own device save/restore
+bracket.
+
+**OCG visibility**: evaluated at render time, not parse time. Hidden objects
+remain in the display list but are skipped during rendering.
+
+### 7.3 Adobe Acrobat: Retained-Mode Graphic Tree with GPU Batching
+
+Adobe builds a **retained-mode graphic tree** (scene graph) from the content
+stream before rendering. This is architecturally different from PDFium.
+
+#### The Graphic Tree
+
+The tree has two node types:
+
+- **Graphic Leafs** — individual shapes, paths, text, images
+- **Graphic Groups** — containers carrying attributes like transparency,
+  clipping, blend modes
+
+Three leaf variants exist (confirmed from binary symbols):
+
+| Class | Description |
+|---|---|
+| `ExtendedGraphicLeafOneMatrix` | Leaf with a single transform matrix |
+| `ExtendedGraphicLeafOneMatrixAlpha` | Leaf with a matrix and alpha value |
+| `ExtendedGraphicLeafBatchMatrix` | Multiple objects sharing a transform, batched for GPU |
+
+Tree traversal uses `AGMGraphicIteratorAscend` and
+`AGMGraphicIteratorDescend`. Depth-first traversal of the tree corresponds to
+the content stream's back-to-front paint order.
+
+#### CPU Reduction Phase
+
+Before GPU rendering, a CPU pass transforms the tree to reduce draw calls:
+
+1. **Batch by rules**: objects are grouped by criteria (e.g. "opaque
+   constant-colored paths"). Transparent or gradient objects are excluded from
+   batching.
+2. **Group by type**: within each batch, same-type objects (e.g. all
+   rectangles) are collected.
+3. **Representative tessellation**: the first object in each group is
+   tessellated to triangles. A metadata buffer stores affine transforms and
+   **depth (Z) values** for the rest.
+4. **Leaf removal**: other objects' leaves are removed from the tree, leaving
+   one representative per group.
+
+#### Paint Order Reordering
+
+**Batching can change the rendering order** from the content stream. To
+maintain visual correctness after reordering, each object carries a Z-depth
+value. The GPU performs depth tests: at any pixel, occluded portions of
+lower-priority objects are discarded.
+
+This is a 2D Z-buffer — conceptually the same as 3D rendering, applied to PDF
+content for correctness after paint-order changes.
+
+**Important**: this reordering only affects opaque, constant-colored objects
+that can be depth-tested without transparency artifacts. Transparent objects,
+gradient fills, and blended objects are **not reordered** — they are rendered
+in strict stream order through the transparency group compositing path.
+
+#### GPU Transparency Group Compositing
+
+Three patented methods handle transparency groups on GPU:
+
+1. **Texture atlas method**: frame buffer contents are copied to a texture
+   atlas sub-image, the group renders into the cleared area, then the result
+   composites back. Nested groups recurse (save parent, render inner, merge).
+
+2. **Single frame buffer method**: background saved to texture, foreground
+   rendered in-place, then merged. Avoids GPU context switching.
+
+3. **Knockout via depth buffer**: each object in a knockout group gets a
+   Z-value. The depth test ensures only the highest-priority object contributes
+   at each pixel, with sub-pixel coverage at MSAA sample level.
+
+#### GDI Fallback Path
+
+When GPU acceleration is off (preference toggle or unsupported hardware), AGM
+falls back to `WinGDIPort` / `GDIBitmapDeviceController`. In this path, the
+graphic tree is traversed **sequentially without reordering** — closer to
+PDFium's behavior, but still operating on the retained tree structure.
+
+#### Progressive Rendering
+
+Acrobat renders progressively in bands or tiles. The graphic tree is built
+fully first, then rendered section by section. Adobe's PDF Print Engine
+documentation confirms tiled parallel processing.
+
+### 7.4 Comparison: Parsing and Paint Order
+
+| Aspect | Adobe Acrobat | Chromium / PDFium |
+|---|---|---|
+| **Architecture** | Retained-mode graphic tree (scene graph) | Immediate-mode flat deque |
+| **Intermediate representation** | Tree with leaf and group nodes | `std::deque<CPDF_PageObject>` |
+| **Parse → render decoupling** | Yes — tree built first, rendered separately | Minimal — objects in deque, rendered in forward pass |
+| **Object reordering** | Yes — GPU batching reorders opaques, Z-depth resolves correctness | Never — strict content stream order |
+| **Object batching** | Yes — same-type opaques grouped for GPU instancing | No — each object rendered individually |
+| **Transparent object order** | Strict stream order (not batched/reordered) | Strict stream order |
+| **Form XObjects** | Parsed into sub-tree, rendered as group node | Parsed into nested deque, rendered inline at `Do` position |
+| **Transparency groups** | Tree groups with GPU texture atlas compositing | Offscreen bitmap, composited back at stream position |
+| **Annotations** | Painted after page content; `/Annots` array order; widgets last | Painted as separate layer after page content; `/Annots` array order |
+| **OCG visibility** | Checked at render time | Checked at render time |
+| **q/Q operators** | Push/pop state; no effect on tree structure or paint order | Push/pop state; no effect on deque or paint order |
+| **Progressive rendering** | Tree built fully, then rendered in bands/tiles | Stop-object + pausable image rendering |
+| **Recursion limit** | Not observable | 64 levels |
+| **GDI fallback order** | Sequential tree traversal (no reordering) | N/A — always sequential |
+
+### 7.5 Implications for Emulation
+
+1. **Both engines paint in content-stream order for transparent objects.** The
+   reordering in Adobe only applies to opaque, constant-colored shapes on the
+   GPU path. For transparency, blend modes, and gradients, both engines are
+   strictly sequential.
+
+2. **The display list is the stream.** PDFium's deque is a 1:1 mapping of paint
+   operators. Adobe's tree is structurally richer but traverses to the same
+   logical order.
+
+3. **Adobe's GPU batching changes pixel-level results for opaques.** Z-buffer
+   depth testing resolves overlaps, but anti-aliased edges of batched objects
+   may composite differently than they would in strict sequential order. This
+   can produce subtle differences in edge pixels between Adobe's GPU path and
+   its GDI fallback (or vs PDFium).
+
+4. **Form XObjects are inlined in both.** A `Do` triggers rendering of the
+   form's content between whatever came before and after in the parent stream.
+
+5. **Annotations are a separate pass in both.** All page content first, then
+   annotations. Widget annotations (form fields) render last in Adobe, giving
+   them the highest z-order.
+
+6. **OCG filtering is render-time in both.** The object list/tree contains all
+   objects; hidden ones are skipped during rendering.
+
+---
+
+
+## 8. Emulation Parameters
 
 To emulate each viewer's rendering, the following parameters are needed:
 
-### 7.1 Adobe Acrobat Emulation
+### 8.1 Adobe Acrobat Emulation
 
 ```
 # Coordinate pipeline
@@ -899,7 +1120,7 @@ knockout_groups: fully_supported (depth_buffer + algebraic)
 blend_execution: cpu_integer + dx9_gpu_shaders
 ```
 
-### 7.2 Chromium/PDFium Emulation
+### 8.2 Chromium/PDFium Emulation
 
 ```
 # Coordinate pipeline

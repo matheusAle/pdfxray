@@ -40,6 +40,9 @@ pub const ENHANCE_LABEL: &str = "Enhance thin lines";
 /// Acrobat's *Line Weights* preference (Ctrl+5).
 pub const LINE_WEIGHTS_LABEL: &str = "Line weights";
 
+/// Acrobat's *Use 2D graphics acceleration* preference.
+pub const GPU_LABEL: &str = "2D graphics acceleration";
+
 /// What the popover says while comparing, whose pages are drawn on this Mac's pixels.
 pub const COMPARING_NOTE: &str = "A comparison is drawn on this Mac's pixels.";
 
@@ -185,6 +188,12 @@ fn acrobat(ui: &mut Ui, prefs: &mut AcrobatPrefs) {
     tooltip::text(
         weights,
         "Strokes at their own width (Ctrl+5); off, every stroke is 1 px",
+    );
+    let gpu = switch(ui, &mut prefs.gpu, GPU_LABEL);
+    tooltip::text(
+        gpu,
+        "The GPU path: opaque shapes resolved on a multisampled grid, so shapes that share an \
+         edge leave no seam. Off, the GDI path paints every shape in order",
     );
 }
 

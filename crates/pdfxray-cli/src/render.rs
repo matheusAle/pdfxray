@@ -80,6 +80,11 @@ pub struct RenderArgs {
     /// With `--emulate acrobat`: Acrobat's *Line Weights* off (Ctrl+5): every stroke 1 px.
     #[arg(long)]
     no_line_weights: bool,
+    /// With `--emulate acrobat`: Acrobat's *Use 2D graphics acceleration* off, its GDI path:
+    /// every shape painted in order, anti-aliased, instead of opaque shapes resolved on a
+    /// multisampled grid.
+    #[arg(long)]
+    no_gpu: bool,
     /// Outline every defined page box.
     #[arg(long)]
     boxes: bool,
@@ -279,6 +284,7 @@ fn emulation(args: &RenderArgs) -> Option<Emulation> {
         acrobat: AcrobatPrefs {
             enhance_thin_lines: !args.no_enhance_thin_lines,
             line_weights: !args.no_line_weights,
+            gpu: !args.no_gpu,
         },
     })
 }
@@ -300,6 +306,7 @@ fn emulation_report(emulation: &Emulation, page: (f32, f32), scale: f32) -> Valu
         report["acrobat"] = json!({
             "enhance_thin_lines": emulation.acrobat.enhance_thin_lines,
             "line_weights": emulation.acrobat.line_weights,
+            "gpu": emulation.acrobat.gpu,
         });
     }
     report
@@ -356,9 +363,11 @@ pub(crate) fn run(args: &RenderArgs, pretty: bool, out: &mut impl Write) -> anyh
     if args.mode.is_some() && args.against.is_none() && args.reference.is_none() {
         return Err(anyhow!("--mode needs --against <file> or --reference <engine>"));
     }
-    if (args.no_enhance_thin_lines || args.no_line_weights) && args.emulate != Some(ViewerArg::Acrobat) {
+    if (args.no_enhance_thin_lines || args.no_line_weights || args.no_gpu)
+        && args.emulate != Some(ViewerArg::Acrobat)
+    {
         return Err(anyhow!(
-            "--no-enhance-thin-lines and --no-line-weights are Acrobat's preferences: they need --emulate acrobat"
+            "--no-enhance-thin-lines, --no-line-weights and --no-gpu are Acrobat's preferences: they need --emulate acrobat"
         ));
     }
     if args.tolerance.is_some() && args.reference.is_none() {

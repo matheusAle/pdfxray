@@ -104,6 +104,8 @@ pub(crate) struct Renderer<'a> {
     pub(crate) in_type3_glyph: bool,
     // pdfxray patch: a glyph outline is being filled, which the rules leave alone.
     pub(crate) drawing_glyph: bool,
+    // pdfxray patch: how many transparency groups are open around what is drawn now.
+    pub(crate) group_depth: u32,
 }
 
 impl<'r> Renderer<'r> {
@@ -115,6 +117,7 @@ impl<'r> Renderer<'r> {
             soft_mask_cache: FxHashMap::default(),
             in_type3_glyph: false,
             drawing_glyph: false,
+            group_depth: 0,
         }
     }
 
@@ -164,6 +167,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
         mask: Option<SoftMask<'a>>,
         blend_mode: BlendMode,
     ) {
+        self.group_depth += 1;
         Self::push_transparency_group(self, opacity, mask, blend_mode);
     }
 
@@ -172,6 +176,7 @@ impl<'a, 'r> Device<'a> for Renderer<'r> {
     }
 
     fn pop_transparency_group(&mut self) {
+        self.group_depth = self.group_depth.saturating_sub(1);
         Self::pop_transparency_group(self);
     }
 

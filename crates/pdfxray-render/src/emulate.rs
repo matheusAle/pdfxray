@@ -17,11 +17,25 @@
 //!   millionth becomes 0.1 px).
 //! * **Acrobat** draws with Adobe's AGM. A coordinate within 0.0001 px of a whole pixel snaps to
 //!   it (`SnapToPureTolerance`). Fills reach 0.01 px past their edges (`PixelOverlap`). Stroke
-//!   adjustment puts a straight stroke's edges on the nearest pixel boundaries, at least a pixel
-//!   apart, so a thin line is 1 px inside a pixel row and 2 px when it straddles two. A text run starts on
-//!   the pixel grid and each glyph advance is rounded, unless it would round to zero. Its Page
-//!   Display preferences ([`AcrobatPrefs`]): *Enhance thin lines* draws a stroke under 1 pt as a
-//!   solid 1 px black line, and with *Line Weights* off every stroke is 1 px.
+//!   adjustment puts a straight stroke's edges on the nearest pixel boundaries, at least a
+//!   pixel apart, so a thin line is 1 px inside a pixel row and 2 px when it straddles two. A
+//!   text run starts on the pixel grid and each glyph advance is rounded, unless it would round
+//!   to zero. Its Page Display preferences ([`AcrobatPrefs`]): *Enhance thin lines* draws a
+//!   stroke under 1 pt as a solid 1 px black line, and with *Line Weights* off every stroke is
+//!   1 px.
+//!
+//! Paint order (the document's section 7). Both engines paint the content stream in its order,
+//! as pdfxray does, then the annotations. `PDFium` paints the annotations in `/Annots` order;
+//! Acrobat paints form fields (widget annotations) after every other annotation, which the
+//! emulation does by drawing a copy of the page whose `/Annots` lists them last. Acrobat's GPU
+//! path (*Use 2D graphics acceleration*, on as it starts) batches opaque, solid-colour shapes
+//! and resolves their overlaps on a multisampled depth buffer instead of compositing them one
+//! after the other: emulated by drawing the page [`GPU_SAMPLES`] times larger with those shapes
+//! aliased (each sample covered or not) and averaging it down, the rules still placing geometry
+//! on whole device pixels. Shapes that share an edge then leave no seam, where painting in order
+//! lets the background show through the half-covered pixels between them. Translucent shapes,
+//! blended ones, soft-masked ones, anything inside a transparency group, and text stay painted
+//! in order, as on its GDI path (the preference off).
 //!
 //! Both hint upright text to the pixel grid (`crate::hinting`): Acrobat with the font's own
 //! hints, as `CoolType` does, `PDFium` with the autohinter, as its `FreeType` does. A font skrifa
@@ -31,8 +45,9 @@
 //! it is the viewer's own code: Acrobat's discrete resolution table and its feature thresholds
 //! (dash conversion among them), integer rasteriser precision, `CoolType`'s own hinter and its
 //! dynamic anti-aliasing (`ClearType`-like subpixel text among it), anti-aliasing and
-//! blending arithmetic (every viewer here is drawn with pdfxray's), knockout groups, GPU or GDI
-//! compositing, `PDFium`'s endpoint snapping under the `SA` flag (hayro does not read it), its
+//! blending arithmetic (every viewer here is drawn with pdfxray's), knockout groups, the GPU's
+//! colour-managed shaders and the seams where its output meets GDI's, `PDFium`'s 64-level
+//! nesting limit (hayro stops at 50), `PDFium`'s endpoint snapping under the `SA` flag (hayro does not read it), its
 //! knockout of a path's semi-transparent stroke over its own fill, and its legacy truncating
 //! rectangles.
 
@@ -179,14 +194,34 @@ pub struct AcrobatPrefs {
     pub enhance_thin_lines: bool,
     /// *Line Weights* (Ctrl+5): strokes at their own width; off, every stroke is 1 px.
     pub line_weights: bool,
+    /// *Use 2D graphics acceleration*: the GPU path, which batches opaque, solid-colour shapes
+    /// and resolves their overlaps on a multisampled depth buffer, so shapes that share an edge
+    /// leave no seam. Off, the GDI path paints every shape in order, as `PDFium` does.
+    pub gpu: bool,
 }
 
 impl Default for AcrobatPrefs {
-    /// Both on, as Acrobat starts.
+    /// All on, as Acrobat starts on a machine with a GPU.
     fn default() -> Self {
         Self {
             enhance_thin_lines: true,
             line_weights: true,
+            gpu: true,
+        }
+    }
+}
+
+/// How many samples a side Acrobat's GPU path is emulated with: 3 × 3 per device pixel, near the
+/// 8 of the multisampling it uses.
+pub const GPU_SAMPLES: u32 = 3;
+
+impl Viewer {
+    /// The samples a side of each device pixel `viewer` draws opaque shapes with: more than one
+    /// on Acrobat's GPU path, one otherwise.
+    pub(crate) const fn samples(self, acrobat: AcrobatPrefs) -> u32 {
+        match self.engine() {
+            Engine::Adobe if acrobat.gpu => GPU_SAMPLES,
+            Engine::Adobe | Engine::Pdfium => 1,
         }
     }
 }
@@ -238,6 +273,25 @@ pub const ADOBE_SNAP_TOLERANCE: f64 = 0.0001;
 /// How far Acrobat lets a fill reach past its edge, in device pixels (`PixelOverlap`).
 pub const ADOBE_PIXEL_OVERLAP: f64 = 0.01;
 
+/// Whether `page` lists a widget annotation (a form field) before another annotation in its
+/// `/Annots`: Acrobat then paints them in another order than the array's, form fields last.
+pub(crate) fn widgets_out_of_place(page: &hayro::hayro_syntax::page::Page<'_>) -> bool {
+    use hayro::hayro_syntax::object::dict::keys::{ANNOTS, SUBTYPE};
+    use hayro::hayro_syntax::object::{Array, Dict, Name};
+    let Some(annots) = page.raw().get::<Array<'_>>(ANNOTS) else {
+        return false;
+    };
+    let widgets: Vec<bool> = annots
+        .iter::<Dict<'_>>()
+        .map(|annot| {
+            annot
+                .get::<Name<'_>>(SUBTYPE)
+                .is_some_and(|s| s.as_ref() == b"Widget")
+        })
+        .collect();
+    widgets.windows(2).any(|pair| pair[0] && !pair[1])
+}
+
 /// The rules of a viewer, as [`Viewer::rules`] gives them.
 pub(crate) enum Rules {
     /// Chrome's and Edge's.
@@ -286,6 +340,91 @@ impl PixelRules for Rules {
 
     fn glyph_outline(&self, glyph: &OutlineGlyph, device: Affine) -> Option<BezPath> {
         self.get().glyph_outline(glyph, device)
+    }
+
+    fn alias_opaque_paths(&self) -> bool {
+        self.get().alias_opaque_paths()
+    }
+}
+
+/// `inner`'s rules on a page drawn `factor` times larger than the device, so each device pixel
+/// is `factor` × `factor` samples: geometry is handed to `inner` at device size, so it snaps and
+/// rounds to whole device pixels, and comes back at sample size.
+pub(crate) struct Supersampled<'a> {
+    pub(crate) inner: &'a dyn PixelRules,
+    pub(crate) factor: f64,
+}
+
+impl Supersampled<'_> {
+    fn on_device(&self, path: &mut BezPath, adjust: impl FnOnce(&mut BezPath)) {
+        *path = Affine::scale(1.0 / self.factor) * path.clone();
+        adjust(path);
+        *path = Affine::scale(self.factor) * path.clone();
+    }
+}
+
+impl PixelRules for Supersampled<'_> {
+    fn active(&self) -> bool {
+        self.inner.active()
+    }
+
+    fn fill(&self, path: &mut BezPath) {
+        self.on_device(path, |device| self.inner.fill(device));
+    }
+
+    fn fill_overlap(&self) -> f64 {
+        self.inner.fill_overlap() * self.factor
+    }
+
+    fn thin_fill_alpha(&self) -> Option<f32> {
+        self.inner.thin_fill_alpha()
+    }
+
+    fn stroke(&self, path: &mut BezPath, stroke: &mut DeviceStroke) {
+        let k = self.factor;
+        stroke.width /= k;
+        stroke.dash_offset /= k;
+        for dash in &mut stroke.dashes {
+            *dash /= k;
+        }
+        self.on_device(path, |device| self.inner.stroke(device, stroke));
+        stroke.width *= k;
+        stroke.dash_offset *= k;
+        for dash in &mut stroke.dashes {
+            *dash *= k;
+        }
+    }
+
+    fn alias_opaque_paths(&self) -> bool {
+        self.inner.alias_opaque_paths()
+    }
+
+    fn clip(&self, path: &mut BezPath) {
+        self.on_device(path, |device| self.inner.clip(device));
+    }
+
+    fn glyph_origins(&self, origins: &mut [Point]) {
+        let k = self.factor;
+        for origin in origins.iter_mut() {
+            *origin = Point::new(origin.x / k, origin.y / k);
+        }
+        self.inner.glyph_origins(origins);
+        for origin in origins.iter_mut() {
+            *origin = Point::new(origin.x * k, origin.y * k);
+        }
+    }
+
+    fn glyph_outline(&self, glyph: &OutlineGlyph, device: Affine) -> Option<BezPath> {
+        self.inner
+            .glyph_outline(glyph, Affine::scale(1.0 / self.factor) * device)
+    }
+
+    fn image(&self, transform: Affine, width: u32, height: u32) -> Affine {
+        let k = self.factor;
+        Affine::scale(k)
+            * self
+                .inner
+                .image(Affine::scale(1.0 / k) * transform, width, height)
     }
 }
 
@@ -361,6 +500,10 @@ impl AdobeRules {
 impl PixelRules for AdobeRules {
     fn glyph_outline(&self, glyph: &OutlineGlyph, device: Affine) -> Option<BezPath> {
         self.hinter.outline(glyph, device)
+    }
+
+    fn alias_opaque_paths(&self) -> bool {
+        self.prefs.gpu
     }
 
     fn fill(&self, path: &mut BezPath) {
@@ -811,6 +954,7 @@ mod tests {
         AdobeRules::new(AcrobatPrefs {
             enhance_thin_lines: false,
             line_weights: true,
+            ..AcrobatPrefs::default()
         })
     }
 
@@ -877,6 +1021,7 @@ mod tests {
         let no_weights = AdobeRules::new(AcrobatPrefs {
             enhance_thin_lines: false,
             line_weights: false,
+            ..AcrobatPrefs::default()
         });
         assert_eq!(
             adjusted(&no_weights, 4.5, device_stroke(4.0, 3.0)),

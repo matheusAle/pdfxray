@@ -255,7 +255,7 @@ fn emulate_draws_the_page_on_the_device_pixels_of_the_emulated_screen() {
             "zoom": "150%",
             "zoom_percent": 150.0,
             "pixels_per_point": 2.5,
-            "acrobat": { "enhance_thin_lines": true, "line_weights": true },
+            "acrobat": { "enhance_thin_lines": true, "line_weights": true, "gpu": true },
         })
     );
     assert_eq!(
@@ -286,12 +286,13 @@ fn emulate_draws_the_page_on_the_device_pixels_of_the_emulated_screen() {
             "acrobat",
             "--no-enhance-thin-lines",
             "--no-line-weights",
+            "--no-gpu",
         ],
         &out_path("render-acrobat-plain.png"),
     );
     assert_eq!(
         plain["emulation"]["acrobat"],
-        serde_json::json!({ "enhance_thin_lines": false, "line_weights": false })
+        serde_json::json!({ "enhance_thin_lines": false, "line_weights": false, "gpu": false })
     );
     // Chrome has no such preferences to report.
     let chrome = render_report(
@@ -332,6 +333,7 @@ fn emulation_refuses_a_scale_a_comparison_and_values_out_of_range() {
         &["--emulate", "chrome", "--no-line-weights"],
         "they need --emulate acrobat",
     );
+    refused(&["--emulate", "edge", "--no-gpu"], "they need --emulate acrobat");
     // Smoke: a viewer clap does not know.
     refused(&["--emulate", "safari"], "possible values: chrome, edge, acrobat");
 }

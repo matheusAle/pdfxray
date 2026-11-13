@@ -201,7 +201,13 @@ where it puts it:
   2 px when it straddles two, so line weights jump as the zoom changes. When Acrobat is the
   viewer, its two Page Display preferences show under it: **Enhance thin lines** (on as Acrobat
   starts) draws every stroke under 1 pt as a solid 1 px black line, and with **Line weights**
-  off (Ctrl+5 in Acrobat) every stroke is 1 px whatever its width.
+  off (Ctrl+5 in Acrobat) every stroke is 1 px whatever its width. Acrobat also paints form
+  fields after every other annotation, whatever order the page lists them in, and with **2D
+  graphics acceleration** (on as Acrobat starts) it draws opaque, solid-colour shapes on the
+  GPU, resolving their overlaps sample by sample: two shapes that meet in the middle of a pixel
+  leave no lighter seam between them, as they do when every shape is painted in turn (Chrome,
+  pdfxray, or Acrobat with the preference off). Translucent shapes and text are painted in turn
+  either way.
 
 The canvas zoom only magnifies those pixels, and while emulating it moves in whole steps of
 them so every one shows the same size, crisp: ⌘0 (or a click on the zoom readout) is 1×, one
@@ -220,7 +226,8 @@ and Edge the autohinter. An embedded TrueType or OpenType font is hinted; a bare
 font, and turned or squeezed text, are drawn unhinted.
 
 Not emulated: Acrobat's resolution table and the thresholds where its rendering changes (dash
-conversion among them), Acrobat's own font engine (its hinting is approximated with the font's
+conversion among them), the seams where its GPU and GDI output meet, PDFium's nesting limit (64
+levels of forms; pdfxray stops at 50), Acrobat's own font engine (its hinting is approximated with the font's
 hints, and its subpixel text smoothing is not reproduced), anti-aliasing and blending arithmetic
 (every viewer is drawn as pdfxray draws), knockout groups, GPU compositing, PDFium's endpoint snapping when a PDF
 asks for stroke adjustment (the `SA` flag is not read), and PDFium's knockout of a path's
@@ -434,7 +441,7 @@ pdfxray render file.pdf 0 -o page.png --boxes --xray kind --highlight mc:0:3
 pdfxray render file.pdf 0 -o step.png --step 120
 pdfxray render file.pdf 0 -o only.png --isolate struct:12:0
 pdfxray render file.pdf 0 -o chrome.png --emulate chrome --dpi 120 --zoom 100   # or edge, acrobat
-pdfxray render file.pdf 0 -o acro.png --emulate acrobat --no-enhance-thin-lines --no-line-weights
+pdfxray render file.pdf 0 -o acro.png --emulate acrobat --no-enhance-thin-lines --no-line-weights --no-gpu
 pdfxray render file.pdf 0 -o wide.png --screen 2560x1440 --zoom fit-width        # pdfxray's rounding
 pdfxray validate file.pdf --profile ua1      # --install downloads veraPDF if missing
 pdfxray reading-order file.pdf 0 --from paint

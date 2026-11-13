@@ -19,7 +19,8 @@ fn page(content: &str) -> Document {
     w.object(
         3,
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R \
-         /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >> >>",
+         /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> \
+         /ExtGState << /Half << /ca 0.5 >> >> >> >>",
     );
     w.stream(4, "", content.as_bytes());
     w.object(5, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
@@ -238,6 +239,7 @@ fn acrobat_enhances_thin_lines_to_black_and_without_line_weights_thins_every_str
         AcrobatPrefs {
             enhance_thin_lines: false,
             line_weights: true,
+            ..AcrobatPrefs::default()
         },
     );
     let no_weights = acrobat_with(
@@ -245,6 +247,7 @@ fn acrobat_enhances_thin_lines_to_black_and_without_line_weights_thins_every_str
         AcrobatPrefs {
             enhance_thin_lines: false,
             line_weights: false,
+            ..AcrobatPrefs::default()
         },
     );
 
@@ -350,4 +353,89 @@ fn acrobat_and_chrome_hint_upright_text_so_its_stems_land_on_whole_pixels() {
         (acrobat_turned - own_turned).abs() < 0.05,
         "{acrobat_turned:.3} vs {own_turned:.3}"
     );
+}
+
+#[test]
+fn acrobat_on_the_gpu_leaves_no_seam_between_opaque_fills_that_share_an_edge() {
+    // Two black squares meeting at x 50.5: each covers half of pixel column 50.
+    let opaque = page("0 g 20 20 30.5 60 re f 50.5 20 30 60 re f");
+    // The same at half opacity: not batched on the GPU, painted in order.
+    let translucent = page("/Half gs 0 g 20 20 30.5 60 re f 50.5 20 30 60 re f");
+    let gdi = AcrobatPrefs {
+        gpu: false,
+        ..AcrobatPrefs::default()
+    };
+
+    let seam = |page: &RenderedPage| grey(page, 50, 50);
+
+    // Painted one after the other, each half-covered pixel lets a quarter of the white through.
+    let own = seam(&draw(&opaque, None));
+    assert!((50..=80).contains(&own), "{own}");
+    assert_eq!(seam(&draw(&opaque, Some(Viewer::Chrome))), own);
+    // Acrobat's GDI path paints in order too (its 0.01 px overlap barely shows).
+    let on_gdi = seam(&acrobat_with(&opaque, gdi));
+    assert!(on_gdi.abs_diff(own) <= 3, "{on_gdi} vs {own}");
+    // On the GPU the two squares resolve sample by sample: the column is solid.
+    assert_eq!(seam(&acrobat_with(&opaque, AcrobatPrefs::default())), 0);
+    // Smoke: translucent shapes keep the seam on the GPU too, and the squares' insides match.
+    let half_gpu = acrobat_with(&translucent, AcrobatPrefs::default());
+    assert!(seam(&half_gpu) > grey(&half_gpu, 40, 50), "a lighter seam stays");
+    assert_eq!(grey(&acrobat_with(&opaque, AcrobatPrefs::default()), 40, 50), 0);
+}
+
+/// A blank page whose `/Annots` lists a red form field, then a blue square over the same spot.
+fn widget_then_square() -> Document {
+    let mut w = PdfWriter::new(PdfVersion::V1_7);
+    w.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    w.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    w.object(
+        3,
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Annots [5 0 R 6 0 R] >>",
+    );
+    w.stream(4, "", b"");
+    w.object(
+        5,
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /T (field) /Rect [20 20 80 80] /F 4 /AP << /N 7 0 R >> >>",
+    );
+    w.object(
+        6,
+        "<< /Type /Annot /Subtype /Square /Rect [20 20 80 80] /F 4 /AP << /N 8 0 R >> >>",
+    );
+    w.stream(
+        7,
+        "/Type /XObject /Subtype /Form /BBox [0 0 60 60]",
+        b"1 0 0 rg 0 0 60 60 re f",
+    );
+    w.stream(
+        8,
+        "/Type /XObject /Subtype /Form /BBox [0 0 60 60]",
+        b"0 0 1 rg 0 0 60 60 re f",
+    );
+    w.finish_table(&Trailer::new(1)).unwrap();
+    Document::from_bytes("annots", w.into_output().unwrap().bytes).unwrap()
+}
+
+#[test]
+fn acrobat_paints_form_fields_after_every_other_annotation() {
+    let doc = widget_then_square();
+
+    let own = draw(&doc, None);
+    let chrome = draw(&doc, Some(Viewer::Chrome));
+    let acrobat = draw(&doc, Some(Viewer::Acrobat));
+
+    // pdfxray and PDFium paint `/Annots` in its order: the square, last, is on top.
+    assert_eq!(rgb(&own, 50, 50), [0, 0, 255]);
+    assert_eq!(rgb(&chrome, 50, 50), [0, 0, 255]);
+    // Acrobat paints the form field last.
+    assert_eq!(rgb(&acrobat, 50, 50), [255, 0, 0]);
+    // Smoke: on GDI as on the GPU, and the page outside them is blank.
+    let gdi = acrobat_with(
+        &doc,
+        AcrobatPrefs {
+            gpu: false,
+            ..AcrobatPrefs::default()
+        },
+    );
+    assert_eq!(rgb(&gdi, 50, 50), [255, 0, 0]);
+    assert_eq!(rgb(&acrobat, 5, 5), [255, 255, 255]);
 }

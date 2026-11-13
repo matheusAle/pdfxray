@@ -82,7 +82,7 @@ pub fn rounding_text(viewer: Option<Viewer>) -> &'static str {
         Some(pdfxray_render::emulate::Engine::Adobe) => {
             "Adobe AGM: coordinates within 0.0001 px snap to the pixel, fills overlap 0.01 px, \
              stroke edges go on pixel boundaries (a thin line is 1 or 2 px), text advances are \
-             rounded."
+             rounded, form fields are painted last."
         }
         None => "pdfxray's own rounding, on the screen's device pixels.",
     }

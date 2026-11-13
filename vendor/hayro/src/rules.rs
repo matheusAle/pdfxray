@@ -36,6 +36,14 @@ pub trait PixelRules {
     /// arrives as the PDF asks, before upstream's minimum of one pixel: the rules set their own.
     fn stroke(&self, _path: &mut BezPath, _stroke: &mut DeviceStroke) {}
 
+    /// Whether an opaque, solid-colour fill or stroke outside any transparency group is drawn
+    /// without anti-aliasing: each pixel painted or not by its coverage. A viewer that resolves
+    /// such shapes on a supersampled grid is emulated by drawing the page larger this way and
+    /// averaging it down.
+    fn alias_opaque_paths(&self) -> bool {
+        false
+    }
+
     /// A clip path about to be pushed.
     fn clip(&self, _path: &mut BezPath) {}
 

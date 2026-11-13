@@ -43,6 +43,18 @@ use crate::update::{Update, stream_body};
 ///
 /// The original bytes are an exact prefix of the result.
 pub fn filtered_pdf(doc: &Document, page: PageIx, filter: &ContentFilter) -> Result<Vec<u8>, RewriteError> {
+    page_copy(doc, page, filter, false)
+}
+
+/// [`filtered_pdf`], and with `widgets_last` the page's `/Annots` reordered so its widget
+/// annotations (form fields) come after every other annotation, keeping their order otherwise:
+/// the order Acrobat paints them in.
+pub(crate) fn page_copy(
+    doc: &Document,
+    page: PageIx,
+    filter: &ContentFilter,
+    widgets_last: bool,
+) -> Result<Vec<u8>, RewriteError> {
     let raw = RawDocument::parse(Arc::new(doc.bytes().to_vec()))
         .map_err(|_| RewriteError::Unreadable("the file has no PDF header"))?;
     if raw.encryption().is_some() {
@@ -86,13 +98,22 @@ pub fn filtered_pdf(doc: &Document, page: PageIx, filter: &ContentFilter) -> Res
 
     let contents = rewriter.update.alloc();
     rewriter.update.put(contents, stream_body("", &content));
+    let annots = widgets_last
+        .then(|| annots_widgets_last(&raw, page_dict))
+        .flatten();
     let mut dict = String::from("<<");
     for (key, value) in &page_dict.entries {
         let name = key.value.as_bytes();
-        if name == b"Contents" || (name == b"Resources" && !extras.is_empty()) {
+        if name == b"Contents"
+            || (name == b"Resources" && !extras.is_empty())
+            || (name == b"Annots" && annots.is_some())
+        {
             continue;
         }
         let _ = write!(dict, " {} {}", key.value, value.value);
+    }
+    if let Some(annots) = &annots {
+        let _ = write!(dict, " /Annots {annots}");
     }
     if !extras.is_empty() {
         let _ = write!(
@@ -105,6 +126,44 @@ pub fn filtered_pdf(doc: &Document, page: PageIx, filter: &ContentFilter) -> Res
     rewriter.update.put(page_ref, dict.into_bytes());
 
     rewriter.update.finish(&raw, doc.bytes())
+}
+
+/// The page's `/Annots`, its widget annotations moved after the others (each group keeping its
+/// order), written as a direct array; `None` when there is no such array or the order would not
+/// change.
+fn annots_widgets_last(raw: &RawDocument, page: &Dict) -> Option<String> {
+    let annots = page.get(b"Annots")?;
+    let resolved;
+    let items: &[pdfxray_raw::Spanned<Object>] = match &annots.value {
+        Object::Array(items) => items,
+        other => {
+            resolved = raw.object(other.as_ref_obj()?)?;
+            resolved.value.value.as_array()?
+        }
+    };
+    let is_widget = |item: &Object| {
+        let dict = match item.as_ref_obj() {
+            Some(r) => raw.object(r)?.value.value.as_dict().cloned(),
+            None => item.as_dict().cloned(),
+        }?;
+        Some(dict.get_name(b"Subtype")?.as_bytes() == b"Widget")
+    };
+    let widgets: Vec<bool> = items
+        .iter()
+        .map(|item| is_widget(&item.value).unwrap_or(false))
+        .collect();
+    // Already in order: no widget before a non-widget.
+    if !widgets.windows(2).any(|pair| pair[0] && !pair[1]) {
+        return None;
+    }
+    let ordered = items
+        .iter()
+        .zip(&widgets)
+        .filter(|(_, widget)| !**widget)
+        .chain(items.iter().zip(&widgets).filter(|(_, widget)| **widget))
+        .map(|(item, _)| item.value.to_string())
+        .collect::<Vec<_>>();
+    Some(format!("[{}]", ordered.join(" ")))
 }
 
 /// One stream after rewriting.

@@ -100,6 +100,7 @@ impl RenderSpec {
             acrobat: AcrobatPrefs {
                 enhance_thin_lines: true,
                 line_weights: true,
+                gpu: true,
             },
         }
     }
@@ -252,10 +253,15 @@ pub fn render_page(doc: &Document, page: PageIx, spec: &RenderSpec) -> Result<Re
         return Err(RenderError::InvalidScale);
     }
     let original = engine_page(doc, page)?;
-    if spec.content == ContentFilter::All {
+    // Acrobat paints form fields after every other annotation, whatever `/Annots` says.
+    let widgets_last = spec
+        .viewer
+        .is_some_and(|viewer| viewer.engine() == emulate::Engine::Adobe)
+        && emulate::widgets_out_of_place(original);
+    if spec.content == ContentFilter::All && !widgets_last {
         return rasterise(original, spec, &InterpreterSettings::default());
     }
-    let copy = filtered_pdf(doc, page, &spec.content)?;
+    let copy = rewrite::page_copy(doc, page, &spec.content, widgets_last)?;
     let pdf = hayro::hayro_syntax::Pdf::new(Arc::new(copy)).map_err(|_| RewriteError::Rejected)?;
     let engine_page = pdf
         .pages()
@@ -296,20 +302,41 @@ fn rasterise_cached<'a>(
             (width, height, moved)
         }
     };
+    // A viewer that multisamples opaque shapes (Acrobat's GPU path) is drawn that many times
+    // larger, its opaque shapes aliased, and averaged down; when that would be too large a
+    // bitmap, it is drawn as the GDI path draws.
+    let samples = spec
+        .viewer
+        .map_or(1, |viewer| viewer.samples(spec.acrobat))
+        .max(1);
+    let samples = if width.saturating_mul(samples) <= MAX_SIDE && height.saturating_mul(samples) <= MAX_SIDE {
+        samples
+    } else {
+        1
+    };
     // Both sides are at most `MAX_SIDE`, which fits `u16`.
     let side = |v: u32| u16::try_from(v).map_err(|_| RenderError::BadSize { width, height });
-    let mut ctx = RenderContext::new(side(width)?, side(height)?);
-    let forward = Affine::new(page_to_pixel.coeffs());
+    let mut ctx = RenderContext::new(side(width * samples)?, side(height * samples)?);
+    let k = f64::from(samples);
+    let forward = Affine::scale(k) * Affine::new(page_to_pixel.coeffs());
     match spec.viewer {
-        Some(viewer) => hayro::render_into_with(
-            engine_page,
-            cache,
-            settings,
-            &RenderSettings::default(),
-            &mut ctx,
-            forward,
-            &viewer.rules(spec.acrobat),
-        ),
+        Some(viewer) => {
+            let rules = viewer.rules(spec.acrobat);
+            let supersampled = emulate::Supersampled {
+                inner: &rules,
+                factor: k,
+            };
+            let rules: &dyn hayro::PixelRules = if samples > 1 { &supersampled } else { &rules };
+            hayro::render_into_with(
+                engine_page,
+                cache,
+                settings,
+                &RenderSettings::default(),
+                &mut ctx,
+                forward,
+                rules,
+            );
+        }
         None => hayro::render_into(
             engine_page,
             cache,
@@ -329,6 +356,9 @@ fn rasterise_cached<'a>(
             ..RasterizerSettings::default()
         },
     );
+    if samples > 1 {
+        pixmap = average_down(&pixmap, samples, (side(width)?, side(height)?));
+    }
     overlay::paint(&mut pixmap, &spec.overlays);
     let rgba = pixmap.take_rgba8(ImageAlphaType::Alpha);
 
@@ -338,6 +368,36 @@ fn rasterise_cached<'a>(
         rgba,
         page_to_pixel,
     })
+}
+
+/// `pixmap` drawn `samples` times larger than `size`, each `samples` × `samples` block averaged
+/// into one pixel (premultiplied, so edges blend as coverage does).
+fn average_down(pixmap: &Pixmap, samples: u32, size: (u16, u16)) -> Pixmap {
+    let (width, height) = size;
+    let mut out = Pixmap::new(width, height);
+    let n = usize_from_u32(samples);
+    let source_width = usize::from(pixmap.width());
+    let data = pixmap.data();
+    let count = u32::try_from(n * n).unwrap_or(1);
+    for (i, px) in out.data_mut().iter_mut().enumerate() {
+        let (x, y) = (i % usize::from(width), i / usize::from(width));
+        let mut sum = [0_u32; 4];
+        for dy in 0..n {
+            let row = (y * n + dy) * source_width + x * n;
+            for sample in &data[row..row + n] {
+                sum[0] += u32::from(sample.r);
+                sum[1] += u32::from(sample.g);
+                sum[2] += u32::from(sample.b);
+                sum[3] += u32::from(sample.a);
+            }
+        }
+        let mean = |v: u32| u8::try_from((v + count / 2) / count).unwrap_or(u8::MAX);
+        px.r = mean(sum[0]);
+        px.g = mean(sum[1]);
+        px.b = mean(sum[2]);
+        px.a = mean(sum[3]);
+    }
+    out
 }
 
 /// Bitmap size and page-to-pixel transform of a page drawn at `scale`.

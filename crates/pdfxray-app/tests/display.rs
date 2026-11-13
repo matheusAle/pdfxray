@@ -15,7 +15,7 @@ use pdfxray_app::PdfxrayApp;
 use pdfxray_app::emulation::OFF_TEXT;
 use pdfxray_app::modes::Pixels;
 use pdfxray_app::shell::display::{
-    COMPARING_NOTE, DISPLAY_LABEL, EMULATE_LABEL, ENHANCE_LABEL, LINE_WEIGHTS_LABEL, item_text,
+    COMPARING_NOTE, DISPLAY_LABEL, EMULATE_LABEL, ENHANCE_LABEL, GPU_LABEL, LINE_WEIGHTS_LABEL, item_text,
 };
 use pdfxray_core::Document;
 use pdfxray_render::{AcrobatPrefs, Display, Emulation, RenderSpec, Viewer, ViewerZoom, render_page};
@@ -113,12 +113,16 @@ fn the_display_item_draws_the_page_on_an_emulated_windows_screen() {
     assert!(common::is_selected(
         &harness.get_by_role_and_label(Role::Switch, ENHANCE_LABEL)
     ));
+    assert!(common::is_selected(
+        &harness.get_by_role_and_label(Role::Switch, GPU_LABEL)
+    ));
     click(&mut harness, Role::Switch, ENHANCE_LABEL);
     wait_for_render(&mut harness);
     let acrobat = Emulation {
         acrobat: AcrobatPrefs {
             enhance_thin_lines: false,
             line_weights: true,
+            ..AcrobatPrefs::default()
         },
         ..acrobat
     };
