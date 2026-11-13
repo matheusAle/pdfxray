@@ -30,7 +30,7 @@
   <link rel="apple-touch-icon" href="img/brand/apple-touch-icon.png?v=11">
   <link rel="preload" href="fonts/Inter-Regular.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="preload" href="fonts/Inter-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="styles.css?v=17">
+  <link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
   <a class="skip" href="#top">Skip to content</a>
@@ -458,19 +458,21 @@
       <div class="section-head reveal">
         <p class="eyebrow"><span class="dot"></span>Windows viewers and screens</p>
         <h2 id="emu-h">See it the way Windows draws it.</h2>
-        <p class="sub">Why is a rule crisp in Acrobat and grey in Chrome? Why does a line of text end a few pixels early? pdfxray draws the page on the Windows screen you pick, then rounds what lands between two pixels the way Chrome, Edge or Acrobat does: glyphs, clips, images and thin lines, with text hinted as each viewer hints it. Zoom in whole steps and every device pixel is there to inspect.</p>
+        <p class="sub">Why is a rule crisp in Acrobat and grey in Chrome? Why does a line of text end a few pixels early? pdfxray draws the page on the Windows screen you pick, then rounds what lands between two pixels the way Chrome, Edge or Acrobat does: glyphs, clips, images, thin lines and the seams between shapes, with text hinted as each viewer hints it. Zoom in whole steps and every device pixel is there to inspect.</p>
       </div>
       <div class="emu-demo reveal">
         <figure class="emu-view">
           <div class="emu-stage">
-            <img id="emu-img" src="img/emu/acrobat-120.png?v=2" alt="Part of a test page drawn as Acrobat on a 125 % screen, magnified so each device pixel shows" width="100" height="60" decoding="async">
+            <img id="emu-img" src="img/emu/acrobat-120.png?v=3" alt="Part of a test page drawn as Acrobat on a 125 % screen, magnified so each device pixel shows" width="120" height="100" decoding="async">
             <span class="emu-mark m1" aria-hidden="true">1</span>
             <span class="emu-mark m2" aria-hidden="true">2</span>
+            <span class="emu-mark m3" aria-hidden="true">3</span>
           </div>
-          <figcaption>Device pixels, magnified. Real output of <code>pdfxray render --emulate</code> on a 60 × 36 pt piece of a test page.</figcaption>
+          <figcaption>Device pixels, magnified. Real output of <code>pdfxray render --emulate</code> on a 72 × 60 pt piece of a test page.</figcaption>
           <dl class="emu-facts">
-            <div><dt><span class="emu-n" aria-hidden="true">1</span>A 0.4 pt rule</dt><dd id="emu-rule">One solid black pixel row: with Enhance thin lines on, as Acrobat starts, a stroke under 1 pt is a 1 px black line.</dd></div>
-            <div><dt><span class="emu-n" aria-hidden="true">2</span>A run of 54 narrow glyphs</dt><dd id="emu-run">Ends 16 px later than in Chrome: each advance is rounded, and the error adds up.</dd></div>
+            <div><dt><span class="emu-n" aria-hidden="true">1</span>Two fills that meet mid-pixel</dt><dd id="emu-seam">No seam: with 2D graphics acceleration on, as Acrobat starts, opaque shapes are resolved together on the GPU.</dd></div>
+            <div><dt><span class="emu-n" aria-hidden="true">2</span>A 0.4 pt rule</dt><dd id="emu-rule">One solid black pixel row: with Enhance thin lines on, as Acrobat starts, a stroke under 1 pt is a 1 px black line.</dd></div>
+            <div><dt><span class="emu-n" aria-hidden="true">3</span>A run of 54 narrow glyphs</dt><dd id="emu-run">Ends 16 px later than in Chrome: each advance is rounded, and the error adds up.</dd></div>
           </dl>
         </figure>
         <div class="emu-pop" role="group" aria-label="Emulated screen">
@@ -479,6 +481,7 @@
             <div class="seg" role="radiogroup" aria-labelledby="emu-vk" data-emu="viewer">
               <button type="button" role="radio" aria-checked="false" data-v="pdfxray">pdfxray</button><button type="button" role="radio" aria-checked="false" data-v="chrome">Chrome</button><button type="button" role="radio" aria-checked="false" data-v="edge">Edge</button><button type="button" role="radio" aria-checked="true" data-v="acrobat">Acrobat</button>
             </div></div>
+          <div class="emu-row emu-acro"><span class="emu-k"></span><button type="button" class="emu-gpu" role="switch" aria-checked="true"><span class="sw on" aria-hidden="true"><i></i></span>2D graphics acceleration</button></div>
           <div class="emu-row"><span class="emu-k">Screen</span><span class="emu-chip">1920 × 1080 px</span></div>
           <div class="emu-row"><span class="emu-k" id="emu-sk">Scaling</span>
             <div class="seg" role="radiogroup" aria-labelledby="emu-sk" data-emu="dpi">
@@ -492,11 +495,13 @@
       </div>
       <div class="emu-foot reveal">
         <pre class="snippet"><code><span class="p">$</span> pdfxray render report.pdf 0 --emulate acrobat --dpi 120 --zoom 100 -o page.png</code></pre>
-        <p class="fine">It shows where things land on the pixel grid, not a pixel-identical screenshot of those apps. Not emulated: Acrobat’s resolution thresholds and its own font engine (its hinting is approximated with the font’s hints; subpixel text smoothing is not reproduced), anti-aliasing and blending (still pdfxray’s), knockout groups and GPU compositing. Comparisons are drawn on the Mac’s pixels. In the app it’s the display item in the status bar; Measure’s <em>On screen</em> counts the emulated pixels.</p>
+        <p class="fine">It shows where things land on the pixel grid, not a pixel-identical screenshot of those apps. Not emulated: Acrobat’s resolution thresholds, the seams where its GPU and GDI output meet, and its own font engine (its hinting is approximated with the font’s hints; subpixel text smoothing is not reproduced), anti-aliasing and blending (still pdfxray’s), knockout groups and GPU compositing. Comparisons are drawn on the Mac’s pixels. In the app it’s the display item in the status bar; Measure’s <em>On screen</em> counts the emulated pixels.</p>
       </div>
       <div class="emu-new reveal">
-        <p class="kicker">New in 0.6</p>
+        <p class="kicker">New in 0.7 and 0.6</p>
         <ul>
+          <li><b>Acrobat’s GPU path.</b> With 2D graphics acceleration on, shapes that meet mid-pixel leave no seam; off, they do, as in Chrome.</li>
+          <li><b>Form fields painted last.</b> As Acrobat, form fields are drawn after every other annotation, whatever the page’s order.</li>
           <li><b>Both files, stepped together.</b> A comparison’s paint order has a track per file; Moves picks A, Both or B, and they turn the page together.</li>
           <li><b>Thin lines, as each viewer draws them.</b> PDFium draws no stroke under 1 px; Acrobat’s are 1 or 2 px, with Enhance thin lines and Line weights.</li>
           <li><b>Text hinted per viewer.</b> Small text stays sharp, its stems fitted to the emulated pixels.</li>
@@ -716,6 +721,6 @@
   </footer>
 
   <p class="sr-only" id="live" aria-live="polite"></p>
-  <script src="main.js?v=15" defer></script>
+  <script src="main.js?v=16" defer></script>
 </body>
 </html>

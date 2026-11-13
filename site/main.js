@@ -232,7 +232,8 @@
       pdfium: 'PDFium: each glyph starts on a whole pixel, rectangular clips grow out to whole pixels, upright images cover a whole number of pixels, and no stroke is drawn under 1 device px. No snapping, no fill overlap, no stroke adjustment.',
       acrobat: 'Adobe’s engine: coordinates within 0.0001 px snap to the pixel, fills overlap 0.01 px, stroke edges go to pixel boundaries (a thin line is 1 or 2 px), and each glyph advance is rounded, so long runs drift.',
     };
-    const state = { viewer: 'acrobat', dpi: '120' };
+    const state = { viewer: 'acrobat', dpi: '120', gpu: true };
+    const gpuBtn = emu.querySelector('.emu-gpu');
     const $ = (id) => document.getElementById(id);
     const render = () => {
       const { viewer, dpi } = state;
@@ -240,7 +241,13 @@
       const eng = viewer === 'acrobat' ? 'acrobat' : 'pdfium';
       const pct = { 96: 100, 120: 125, 144: 150 }[dpi];
       const img = $('emu-img');
-      img.src = `img/emu/${viewer}-${dpi}.png?v=${viewer === 'acrobat' && dpi === '120' ? 2 : 1}`;
+      const file = viewer === 'acrobat' && !state.gpu ? 'acrobatgdi' : viewer;
+      img.src = `img/emu/${file}-${dpi}.png?v=3`;
+      emu.querySelector('.emu-acro').hidden = viewer !== 'acrobat';
+      gpuBtn.setAttribute('aria-checked', state.gpu);
+      $('emu-seam').textContent = eng === 'acrobat'
+        ? (state.gpu ? 'No seam: with 2D graphics acceleration on, as Acrobat starts, opaque shapes are resolved together on the GPU.' : 'A lighter seam, as in Chrome: with 2D graphics acceleration off, Acrobat paints each shape in turn.')
+        : 'A lighter seam column: each shape is painted in turn, so the pixel they share is covered twice at partial strength. Acrobat’s GPU path leaves none.';
       img.alt = `Part of a test page drawn as ${NAME[viewer]} on a ${pct} % screen, magnified so each device pixel shows`;
       $('emu-read').textContent = `${(dpi / 72).toFixed(3)} device px per pt · page ${m.size} px`;
       $('emu-why').textContent = WHY[viewer === 'pdfxray' ? 'pdfxray' : eng];
@@ -266,6 +273,7 @@
     const stop = () => { touched = true; emu.querySelector('.emu-facts').setAttribute('aria-live', 'polite'); };
     emu.addEventListener('pointerenter', stop);
     emu.addEventListener('focusin', stop);
+    gpuBtn.addEventListener('click', () => { stop(); state.gpu = !state.gpu; render(); });
     for (const g of emu.querySelectorAll('[data-emu]')) {
       const btns = [...g.querySelectorAll('button')];
       btns.forEach((b, i) => {
@@ -279,7 +287,7 @@
         });
       });
     }
-    for (const v of ['pdfxray', 'chrome', 'edge', 'acrobat']) for (const d of [96, 120, 144]) { const im = new Image(); im.src = `img/emu/${v}-${d}.png?v=${v === 'acrobat' && d === 120 ? 2 : 1}`; }
+    for (const v of ['pdfxray', 'chrome', 'edge', 'acrobat', 'acrobatgdi']) for (const d of [96, 120, 144]) { const im = new Image(); im.src = `img/emu/${v}-${d}.png?v=3`; }
     render();
     // While on screen and untouched, flip between Chrome and Acrobat so the difference shows itself.
     if (!reduce) {

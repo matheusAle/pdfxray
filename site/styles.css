@@ -819,11 +819,12 @@ kbd {
 .emu-demo { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 28px; align-items: start; }
 .emu-view { margin: 0; display: grid; gap: 14px; }
 .emu-stage { position: relative; border-radius: 14px; overflow: hidden; background: #fff; border: 1px solid var(--hair-2); box-shadow: 0 40px 100px #000000C0; }
-.emu-stage img { display: block; width: 100%; height: auto; aspect-ratio: 5 / 3; image-rendering: pixelated; }
+.emu-stage img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 5; image-rendering: pixelated; }
 .emu-mark, .emu-n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #061218; font: 700 11px var(--mono); }
 .emu-mark { position: absolute; right: 12px; translate: 0 -50%; box-shadow: 0 0 0 3px #FFFFFFE6; }
-.emu-mark.m1 { top: 15%; }
-.emu-mark.m2 { top: 83%; }
+.emu-mark.m1 { right: auto; left: 14.6%; top: 43%; translate: -50% 0; }
+.emu-mark.m2 { top: 49%; }
+.emu-mark.m3 { top: 88%; }
 .emu-view figcaption { font-size: 13px; color: var(--text-3); }
 .emu-view figcaption code { font-size: 12px; color: var(--text-2); }
 .emu-facts { margin: 0; display: grid; gap: 12px; }
@@ -846,6 +847,10 @@ kbd {
 .emu-chip { justify-self: start; padding: 4px 9px; border-radius: 6px; background: #FFFFFF0A; font: 12px var(--mono); color: var(--text-2); }
 .emu-read { margin: 4px 0 0; font: 12.5px/1.5 var(--mono); color: var(--text); }
 .emu-rule { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.emu-gpu { display: inline-flex; align-items: center; gap: 8px; justify-self: start; padding: 2px 0; border: 0; background: none; color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer; }
+.emu-gpu[aria-checked="false"] .sw { background: #323842; }
+.emu-gpu[aria-checked="false"] .sw i { left: 2px; }
+.emu-acro[hidden] { display: none; }
 .emu-status { margin: 0; padding-top: 10px; border-top: 1px solid var(--hair); font: 11.5px var(--mono); color: var(--accent); }
 .emu-foot { display: grid; gap: 10px; margin-top: 36px; max-width: 860px; }
 .emu-foot .snippet { overflow-x: auto; }
