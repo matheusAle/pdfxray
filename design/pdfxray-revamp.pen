@@ -58345,7 +58345,7 @@
                       "fill": "#6B7380",
                       "textGrowth": "fixed-width",
                       "width": 560,
-                      "content": "v0.7.0 · macOS 11+ · Apple Silicon · 19 MB · notarized",
+                      "content": "v0.8.0 · macOS 11+ · Apple Silicon · 19 MB · notarized",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 11.5,
                       "fontWeight": "normal"
@@ -61761,7 +61761,7 @@
                       "fill": "#6B7380",
                       "textGrowth": "fixed-width",
                       "width": 560,
-                      "content": "v0.7.0 · macOS 11+ · Apple Silicon · 19 MB · notarized",
+                      "content": "v0.8.0 · macOS 11+ · Apple Silicon · 19 MB · notarized",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 11.5,
                       "fontWeight": "normal"
@@ -71685,7 +71685,7 @@
                       "fill": "#6B7380",
                       "textGrowth": "fixed-width",
                       "width": 358,
-                      "content": "v0.7.0 · macOS 11+ · Apple Silicon · 19 MB · notarized",
+                      "content": "v0.8.0 · macOS 11+ · Apple Silicon · 19 MB · notarized",
                       "fontFamily": "JetBrains Mono",
                       "fontSize": 10.5,
                       "fontWeight": "normal"
@@ -84733,6 +84733,59 @@
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
                               "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "O4jad",
+                      "name": "Pairing (Matched · By number)",
+                      "fill": "#0B0D10",
+                      "cornerRadius": 7,
+                      "stroke": "#FFFFFF0F",
+                      "strokeWidth": 1,
+                      "gap": 2,
+                      "padding": 2,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "adwLo",
+                          "fill": "#FFFFFF14",
+                          "cornerRadius": 5,
+                          "padding": [
+                            4,
+                            9
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "nbUU2",
+                              "fill": "#E7EAEE",
+                              "content": "Matched",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IbUkX",
+                          "cornerRadius": 5,
+                          "padding": [
+                            4,
+                            9
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Cxg3M",
+                              "fill": "#A2AAB6",
+                              "content": "By number",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 12
                             }
                           ]
                         }
