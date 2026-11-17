@@ -6,6 +6,8 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-17
+
 ### Added
 
 - **Compare any two files.** Pages can be paired by number (*Matched · By number* on the
