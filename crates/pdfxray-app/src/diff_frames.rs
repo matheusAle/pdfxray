@@ -310,6 +310,13 @@ fn draw(ctx: &Context, a: &Document, b: &Document, key: PictureKey) -> Outcome {
         }
         (None, None) => return Err(Refusal::Render("no page on either side".to_owned())),
     };
+    // A picture larger than the GPU takes is refused, not uploaded (which would panic).
+    let max = ctx.input(|i| i.max_texture_side);
+    if usize_from_u32(width.max(height)) > max {
+        return Err(Refusal::Render(format!(
+            "the picture is {width} × {height} pixels, more than the {max} a side the GPU takes: zoom out"
+        )));
+    }
     let digest = pixel_digest(&rgba);
     let image = ColorImage::from_rgba_unmultiplied([usize_from_u32(width), usize_from_u32(height)], &rgba);
     Ok(Picture {

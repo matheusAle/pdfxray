@@ -37,11 +37,13 @@ use pdfxray_render::{Overlay, PixelPoint, Transform, page_dimensions};
 use super::tag_overlay::{paint, px_rect, ui_rect};
 use super::{RENDERING_TEXT, message, paint_order};
 use crate::center::toolbar;
-use crate::components::segmented::{Segment, segmented, segmented_mini};
+use crate::components::segmented::{
+    Segment, segmented, segmented_mini, segmented_mini_width, segmented_width,
+};
 use crate::components::{Icon, ToolButton, focus, tooltip};
 use crate::diff_frames::{PictureKey, Placed, Refusal, Shown};
 use crate::modes::ViewTool;
-use crate::state::diff::{low_confidence, page_pair_label, pair_summary, status_word};
+use crate::state::diff::{PagePairing, low_confidence, page_pair_label, pair_summary, status_word};
 use crate::state::selection::hit_entries;
 use crate::state::{AppState, HitStack};
 use crate::theme::{fonts, tokens};
@@ -70,6 +72,13 @@ pub const NEXT_PAGE_LABEL: &str = "Next page pair";
 
 /// Name of the toolbar toggle of the paint-order stepper.
 pub const PAINT_ORDER_LABEL: &str = "Paint order";
+
+/// The segments of the switch of where page pairs come from.
+pub const PAGE_PAIRING_LABELS: [&str; 2] = ["Matched", "By number"];
+
+/// What that switch does, in its tooltip.
+pub const PAGE_PAIRING_HINT: &str = "How pages are paired: by what they hold (Matched), or page 1 \
+     with page 1 whatever they hold (By number), to overlay two files that share nothing";
 
 /// Height of the line over the picture that names the stepped side.
 const SIDES_LINE_H: f32 = 18.0;
@@ -143,17 +152,27 @@ pub fn ui(ui: &mut Ui, state: &mut AppState) {
 /// The comparison's toolbar: mode, active side, page pair, zoom, the way out.
 fn bar(ui: &mut Ui, state: &mut AppState) {
     ui.horizontal_centered(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
+        ui.spacing_mut().item_spacing.x = BAR_SPACING;
         let stepper = state.canvas.view.stepper;
         let can_step = ViewTool::PaintOrder.available(state);
+        let room = ui.available_width();
+        let zoom_text = zoom_text(state.canvas.zoom);
+        let fit = state.diff.as_ref().map_or(BarFit::Full, |diff| {
+            BarFit::ALL
+                .into_iter()
+                .find(|fit| bar_width(ui, diff, &zoom_text, *fit) <= room)
+                .unwrap_or(BarFit::Icons)
+        });
         if let Some(diff) = state.diff.as_mut() {
-            let toggle = mode_controls(ui, diff, stepper, can_step);
+            let toggle = mode_controls(ui, diff, stepper, can_step, fit);
             if toggle {
                 ViewTool::PaintOrder.toggle(state);
             }
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if ToolButton::new(END_LABEL).compact(true).show(ui).clicked() {
+            let end = end_button(fit).show(ui);
+            let end = tooltip::text(end, END_LABEL);
+            if end.clicked() {
                 state.end_diff();
                 return;
             }
@@ -162,7 +181,7 @@ fn bar(ui: &mut Ui, state: &mut AppState) {
                 .icon_only(true)
                 .show(ui);
             ui.label(
-                RichText::new(format!("{:.0} %", state.canvas.zoom * 100.0))
+                RichText::new(&zoom_text)
                     .font(fonts::mono(tokens::mono::SMALL))
                     .color(tokens::TEXT_2),
             );
@@ -180,6 +199,88 @@ fn bar(ui: &mut Ui, state: &mut AppState) {
     });
 }
 
+/// Space between the items of the comparison's toolbar.
+const BAR_SPACING: f32 = 8.0;
+
+/// How much of the comparison's toolbar the width allows: the names go before controls
+/// overlap, each keeping its name for assistive tech and in its tooltip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BarFit {
+    /// Everything with its name.
+    Full,
+    /// *Paint order* is its icon.
+    PaintIcon,
+    /// *End comparison* is its icon too.
+    Icons,
+}
+
+impl BarFit {
+    const ALL: [Self; 3] = [Self::Full, Self::PaintIcon, Self::Icons];
+}
+
+/// The zoom as the toolbar reads it, e.g. `176 %`.
+fn zoom_text(zoom: f32) -> String {
+    format!("{:.0} %", zoom * 100.0)
+}
+
+/// The *Paint order* toggle, its icon alone when the toolbar is narrow.
+fn paint_order_button(stepper: bool, fit: BarFit) -> ToolButton<'static> {
+    ToolButton::new(PAINT_ORDER_LABEL)
+        .icon(Icon::PaintOrder)
+        .icon_only(fit != BarFit::Full)
+        .active(stepper)
+        .compact(true)
+}
+
+/// The *End comparison* button, its icon alone when the toolbar is narrowest.
+fn end_button(fit: BarFit) -> ToolButton<'static> {
+    let button = ToolButton::new(END_LABEL).compact(true);
+    if fit == BarFit::Icons {
+        button.icon(Icon::Close).icon_only(true)
+    } else {
+        button
+    }
+}
+
+/// The segments of the switch of where page pairs come from.
+fn pairing_segments() -> [Segment<'static, PagePairing>; 2] {
+    [
+        Segment::new(PagePairing::Matched, PAGE_PAIRING_LABELS[0]),
+        Segment::new(PagePairing::ByNumber, PAGE_PAIRING_LABELS[1]),
+    ]
+}
+
+/// The width the toolbar takes at `fit`: the modes (and the overlay's side), *Paint order*, the
+/// page pairing, the page pair and its arrows, then the zoom and *End comparison*, with the
+/// space between them.
+fn bar_width(ui: &Ui, diff: &crate::state::DiffSession, zoom_text: &str, fit: BarFit) -> f32 {
+    let text = |s: &str| {
+        ui.painter()
+            .layout_no_wrap(s.to_owned(), fonts::mono(tokens::mono::SMALL), tokens::TEXT)
+            .size()
+            .x
+    };
+    let modes = segmented_width(ui, &MODES.map(|(mode, label)| Segment::new(mode, label)));
+    let side = if diff.mode.shares_grid() {
+        segmented_mini_width(ui, &[Segment::new(Side::A, "A"), Segment::new(Side::B, "B")]) + BAR_SPACING
+    } else {
+        0.0
+    };
+    let pages = diff.pages().map_or(0.0, |(a, b)| text(&page_pair_label(a, b)));
+    let square = tokens::CONTROL_H;
+    let items = modes
+        + side
+        + paint_order_button(false, fit).width(ui)
+        + segmented_mini_width(ui, &pairing_segments())
+        + square * 2.0
+        + pages
+        + end_button(fit).width(ui)
+        + square * 2.0
+        + text(zoom_text);
+    // Nine gaps between ten items, and the gap between the two groups.
+    items + BAR_SPACING * 10.0
+}
+
 /// Why the modes cannot compare the page pair `(a, b)`: a page only one side has. `None` when
 /// both sides have a page.
 pub fn nothing_to_compare(a: Option<PageIx>, b: Option<PageIx>) -> Option<String> {
@@ -190,7 +291,8 @@ pub fn nothing_to_compare(a: Option<PageIx>, b: Option<PageIx>) -> Option<String
     };
     Some(format!(
         "Page {} of {side} has no page in {other} it corresponds to, so there is nothing to \
-         compare it with: it is shown alone.",
+         compare it with: it is shown alone. By number pairs it with page {} of {other}.",
+        page + 1,
         page + 1
     ))
 }
@@ -198,7 +300,13 @@ pub fn nothing_to_compare(a: Option<PageIx>, b: Option<PageIx>) -> Option<String
 /// The mode, the active side while overlaid, and the page pair with its arrows. On a page only
 /// one side has, the modes are disabled and say why: side by side, overlaid and masked, one
 /// page shows the same, and enabled buttons that change nothing would pretend otherwise.
-fn mode_controls(ui: &mut Ui, diff: &mut crate::state::DiffSession, stepper: bool, can_step: bool) -> bool {
+fn mode_controls(
+    ui: &mut Ui,
+    diff: &mut crate::state::DiffSession,
+    stepper: bool,
+    can_step: bool,
+    fit: BarFit,
+) -> bool {
     let alone = diff.pages().and_then(|(a, b)| nothing_to_compare(a, b));
     let modes = ui.add_enabled_ui(alone.is_none(), |ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
@@ -221,16 +329,20 @@ fn mode_controls(ui: &mut Ui, diff: &mut crate::state::DiffSession, stepper: boo
     // Neutral when on, like every view tool: the accent is for the step itself.
     let paint_order = ui
         .add_enabled_ui(can_step || stepper, |ui| {
-            ToolButton::new(PAINT_ORDER_LABEL)
-                .icon(Icon::PaintOrder)
-                .active(stepper)
-                .compact(true)
-                .show(ui)
+            paint_order_button(stepper, fit).show(ui)
         })
         .inner;
     let toggled = paint_order.clicked();
     tooltip::with_shortcut(paint_order, ViewTool::PaintOrder.hint(), "P");
-    let count = diff.pairing().map_or(0, |p| p.pages.len());
+    let mut pairing = diff.page_pairing;
+    let switch = ui
+        .scope(|ui| segmented_mini(ui, &mut pairing, &pairing_segments()))
+        .response;
+    if pairing != diff.page_pairing {
+        diff.set_page_pairing(pairing);
+    }
+    tooltip::text(switch, PAGE_PAIRING_HINT);
+    let count = diff.page_list().len();
     let previous = ToolButton::new(PREVIOUS_PAGE_LABEL)
         .icon(Icon::ChevronLeft)
         .icon_only(true)
@@ -324,18 +436,36 @@ fn picture(ui: &mut Ui, state: &mut AppState, (a, b): (Option<PageIx>, Option<Pa
         return;
     };
     let doc_b = Arc::clone(&diff.b.doc);
-    let dims = match (a, b) {
-        (Some(page), _) => page_dimensions(&doc_a, page),
-        (None, Some(page)) => page_dimensions(&doc_b, page),
-        (None, None) => return,
+    if a.is_none() && b.is_none() {
+        return;
     }
-    .map_or(Vec2::splat(612.0), |(w, h)| vec2(w, h));
-    let wide = if diff.mode == Mode::SideBySide { 2.0 } else { 1.0 };
+    // The picture holds both pages: as wide as both side by side, as tall as the taller, and
+    // as large as the larger overlaid, so pages of very different sizes still fit the GPU.
+    let size_of = |doc: &pdfxray_core::Document, page: Option<PageIx>| {
+        page.and_then(|page| page_dimensions(doc, page).ok())
+            .map_or(Vec2::ZERO, |(w, h)| vec2(w, h))
+    };
+    let (dims_a, dims_b) = (size_of(&doc_a, a), size_of(&doc_b, b));
+    let dims = if diff.mode == Mode::SideBySide {
+        vec2(dims_a.x + composite::GUTTER + dims_b.x, dims_a.y.max(dims_b.y))
+    } else {
+        dims_a.max(dims_b)
+    };
+    let dims = if dims == Vec2::ZERO {
+        Vec2::splat(612.0)
+    } else {
+        dims
+    };
+    let max_side = ctx
+        .input(|i| i.max_texture_side)
+        .try_into()
+        .unwrap_or(MAX_SIDE)
+        .min(MAX_SIDE);
     let key = PictureKey {
         a,
         b,
         mode: diff.mode,
-        scale: render_scale(state.canvas.zoom, ppp, vec2(dims.x * wide, dims.y), MAX_SIDE),
+        scale: render_scale(state.canvas.zoom, ppp, dims, max_side),
         fit: diff.fit,
         steps,
     };

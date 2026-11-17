@@ -685,6 +685,72 @@ fn digest_shown(harness: &Harness<'_, PdfxrayApp>) -> u64 {
 }
 
 #[test]
+fn two_files_that_share_nothing_are_compared_page_by_page_by_number() {
+    use pdfxray_app::center::canvas::diff::{PAGE_PAIRING_LABELS, PAINT_ORDER_LABEL, stepped_label};
+    use pdfxray_app::state::diff::{PagePairing, UNRELATED_NOTE};
+
+    // A one-page letter and a page of shapes: nothing in common.
+    let (a, b) = (
+        common::fixture_path("minimal-one-page"),
+        common::fixture_path("graphics-state"),
+    );
+    let mut harness = launched(&a, &b);
+
+    // Matched by content they would each stand alone; by number, page 1 meets page 1.
+    let s = state(&harness);
+    let diff = s.diff.as_ref().unwrap();
+    assert_eq!(diff.page_pairing, PagePairing::ByNumber);
+    assert_eq!(diff.pages(), Some((Some(0), Some(0))));
+    assert_eq!(s.status, UNRELATED_NOTE);
+    let (shown_a, shown_b, _, _) = diff.shown_picture().unwrap();
+    assert_eq!(
+        (shown_a, shown_b),
+        (Some(0), Some(0)),
+        "both drawn on one picture"
+    );
+
+    // Overlaid, once B is scaled to A's page: the pages differ in size, and nothing is scaled
+    // without asking.
+    the(&harness, Region::Center, Role::Button, "Overlay").click();
+    harness.run_steps(4);
+    the(&harness, Region::Center, Role::Button, SCALE_B_LABEL).click();
+    settle(&mut harness);
+    let shown = state(&harness).diff.as_ref().unwrap().shown_picture().unwrap();
+    assert_eq!((shown.0, shown.1, shown.2), (Some(0), Some(0), Mode::Overlay));
+
+    // Paint order steps both files, each cut at its own step.
+    the(&harness, Region::Center, Role::Button, PAINT_ORDER_LABEL).click();
+    settle(&mut harness);
+    harness.key_press(egui::Key::Home);
+    settle(&mut harness);
+    let s = state(&harness);
+    let page_ops = |side| s.last_op_of(side, 0).unwrap() + 1;
+    let texts = painted_texts(&harness);
+    assert!(
+        texts.contains(&stepped_label(Side::A, 0, page_ops(Side::A))),
+        "{texts:?}"
+    );
+    assert!(
+        texts.contains(&stepped_label(Side::B, 0, page_ops(Side::B))),
+        "{texts:?}"
+    );
+
+    // Matched again: each page by itself, the switch read as chosen.
+    the(&harness, Region::Center, Role::Button, PAGE_PAIRING_LABELS[0]).click();
+    settle(&mut harness);
+    let diff = state(&harness).diff.as_ref().unwrap();
+    assert_eq!(diff.page_pairing, PagePairing::Matched);
+    assert_eq!(diff.pages(), Some((Some(0), None)), "A's page, alone");
+    // Smoke: and back by number, on A's page.
+    the(&harness, Region::Center, Role::Button, PAGE_PAIRING_LABELS[1]).click();
+    settle(&mut harness);
+    assert_eq!(
+        state(&harness).diff.as_ref().unwrap().pages(),
+        Some((Some(0), Some(0)))
+    );
+}
+
+#[test]
 fn both_files_turn_the_page_together_forward_and_back() {
     use pdfxray_app::center::canvas::diff::PAINT_ORDER_LABEL;
     use pdfxray_app::stepper::Stepping;

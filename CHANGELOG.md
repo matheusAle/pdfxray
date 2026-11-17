@@ -6,6 +6,20 @@ use pdfxray. A release cannot be published without one (see `docs/releasing.md`)
 
 ## [Unreleased]
 
+### Added
+
+- **Compare any two files.** Pages can be paired by number (*Matched · By number* on the
+  comparison's toolbar) instead of by what they hold, so two files that share nothing are shown
+  side by side, overlaid, masked and stepped through in paint order like two versions of one.
+  Two files that share no page are compared by number from the start.
+
+### Fixed
+
+- Comparing a small page with a much larger one no longer asks for a picture larger than the GPU
+  takes (which stopped the comparison from drawing): the picture is sized for both pages.
+- The comparison's toolbar no longer runs its controls into each other in a narrow window:
+  *Paint order*, then *End comparison*, fold to their icons.
+
 ## [0.7.0] - 2026-11-13
 
 ### Added

@@ -195,7 +195,7 @@ pub const TINT_A: [u8; 4] = [0xC0, 0x26, 0xD3, 255];
 /// B's ink colour in [`Mode::Overlay`].
 pub const TINT_B: [u8; 4] = [0x08, 0x91, 0xB2, 255];
 /// The space between the pages side by side, in pixels per unit of scale.
-const GUTTER: f32 = 24.0;
+pub const GUTTER: f32 = 24.0;
 /// The colour of that space and of the bitmap below the shorter page.
 const BACKDROP: [u8; 4] = [0xD5, 0xD9, 0xDE, 255];
 /// How far two page sizes may differ, points, and still be drawn into one grid unscaled.

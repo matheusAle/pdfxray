@@ -390,6 +390,13 @@ matched on weak evidence (no unique anchor, a box alone, a degraded page) says *
 Pick a row and the canvas goes to its page and the inspector shows both sides of the pair: their
 paths, what moved, every field and row that changed, and what the match rests on.
 
+Pages are paired by what they hold (**Matched**, on the comparison's toolbar): a page the other
+file has nothing like is shown alone. **By number** pairs page 1 of A with page 1 of B, page 2
+with page 2, whatever they hold, so two different files can be shown side by side, overlaid,
+masked and stepped through in paint order like two versions of one. Two files that share no page
+at all are compared by number from the start; the status bar says so. Pages of different sizes
+are overlaid once you choose *Scale B to A*, as for any comparison.
+
 The canvas shows the two pages side by side, overlaid (A's ink and B's in two colours, multiplied)
 or as a mask of the pixels that differ: green where B adds ink, red where it removes some. Only
 changed elements are outlined; ⇧T outlines the unchanged ones too, L names them, R numbers the

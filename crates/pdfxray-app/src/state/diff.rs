@@ -74,6 +74,18 @@ pub enum ChangeRow {
     Unplaced,
 }
 
+/// Where a comparison's page pairs come from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PagePairing {
+    /// The pages the pairing matched by what they hold; a page the other file has nothing like is
+    /// shown alone.
+    #[default]
+    Matched,
+    /// Page n of A with page n of B, whatever they hold: two files that share nothing are still
+    /// shown side by side, overlaid and masked.
+    ByNumber,
+}
+
 /// A comparison of the open document (A) with `b`.
 pub struct DiffSession {
     /// The B side.
@@ -93,7 +105,12 @@ pub struct DiffSession {
     pub(crate) b_step: Option<OpPosition>,
     /// The Changes list shows unchanged pairs too.
     pub show_unchanged: bool,
-    /// The page pair on the canvas: an index into [`Pairing::pages`].
+    /// Where the page pairs come from. Two files that share no page are compared by number
+    /// unless the user picks otherwise.
+    pub page_pairing: PagePairing,
+    /// The user picked [`Self::page_pairing`]: it is no longer chosen for them.
+    page_pairing_chosen: bool,
+    /// The page pair on the canvas: an index into [`Self::page_list`].
     pub page: usize,
     /// The selected pair, an index into [`Pairing::pairs`].
     selected: Option<usize>,
@@ -144,6 +161,8 @@ impl DiffSession {
             stepping: Stepping::default(),
             b_step: None,
             show_unchanged: false,
+            page_pairing: PagePairing::default(),
+            page_pairing_chosen: false,
             page: 0,
             selected: None,
             holding: None,
@@ -257,17 +276,71 @@ impl DiffSession {
         }
     }
 
-    /// Shows the page pair that holds page `page` of `side`, when the pairing has one.
+    /// Shows the page pair that holds page `page` of `side`, when there is one.
     pub fn show_page_of(&mut self, side: Side, page: PageIx) {
-        let found = self.pairing().and_then(|pairing| {
-            pairing.pages.iter().position(|m| match side {
-                Side::A => m.a == Some(page),
-                Side::B => m.b == Some(page),
-            })
+        let found = self.page_list().iter().position(|(a, b)| match side {
+            Side::A => *a == Some(page),
+            Side::B => *b == Some(page),
         });
         if let Some(index) = found {
             self.page = index;
         }
+    }
+
+    /// The page pairs the canvas steps through, A's page and B's, as [`Self::page_pairing`]
+    /// says: the pairing's matches, or page n of each file together. Empty while pairing.
+    pub fn page_list(&self) -> Vec<(Option<PageIx>, Option<PageIx>)> {
+        let Some(pairing) = self.pairing() else {
+            return Vec::new();
+        };
+        match self.page_pairing {
+            PagePairing::Matched => pairing.pages.iter().map(|m| (m.a, m.b)).collect(),
+            PagePairing::ByNumber => {
+                // Every page of either file is in some match: the counts are the highest + 1.
+                let count = |side: fn(&pdfxray_core::diff::PageMatch) -> Option<PageIx>| {
+                    pairing
+                        .pages
+                        .iter()
+                        .filter_map(side)
+                        .max()
+                        .map_or(0, |last| last + 1)
+                };
+                let (a, b) = (count(|m| m.a), count(|m| m.b));
+                (0..a.max(b))
+                    .map(|n| ((n < a).then_some(n), (n < b).then_some(n)))
+                    .collect()
+            }
+        }
+    }
+
+    /// Takes page pairs from `pairing` from now on, the user's choice, keeping the page of A (or
+    /// B) on the canvas.
+    pub fn set_page_pairing(&mut self, pairing: PagePairing) {
+        self.page_pairing_chosen = true;
+        if self.page_pairing == pairing {
+            return;
+        }
+        let shown = self.pages();
+        self.page_pairing = pairing;
+        self.page = shown
+            .and_then(|(a, b)| {
+                self.page_list()
+                    .iter()
+                    .position(|(la, lb)| (a.is_some() && *la == a) || (b.is_some() && *lb == b))
+            })
+            .unwrap_or(0);
+    }
+
+    /// Where page pair `matched` of [`Pairing::pages`] is in [`Self::page_list`]: itself when
+    /// pages are matched, the pair by number holding its page of A (or B) otherwise.
+    fn list_index_of(&self, matched: usize) -> Option<usize> {
+        if self.page_pairing == PagePairing::Matched {
+            return Some(matched);
+        }
+        let m = self.pairing()?.pages.get(matched)?;
+        self.page_list()
+            .iter()
+            .position(|(a, b)| (m.a.is_some() && *a == m.a) || (m.b.is_some() && *b == m.b))
     }
 
     /// The selected pair.
@@ -285,10 +358,10 @@ impl DiffSession {
         self.holding
     }
 
-    /// The pages of A and B on the canvas: either may be missing (a page only one side has).
+    /// The pages of A and B on the canvas: either may be missing (a page only one side has, or
+    /// past the last page of the shorter file by number).
     pub fn pages(&self) -> Option<(Option<PageIx>, Option<PageIx>)> {
-        let m = self.pairing()?.pages.get(self.page)?;
-        Some((m.a, m.b))
+        self.page_list().get(self.page).copied()
     }
 
     /// What the Changes row `id` stands for.
@@ -381,7 +454,7 @@ impl DiffSession {
         };
         self.selected = Some(index);
         self.holding = Self::page_of(&pairing, pair);
-        if let Some(page) = self.holding {
+        if let Some(page) = self.holding.and_then(|h| self.list_index_of(h)) {
             self.page = page;
         }
     }
@@ -409,7 +482,9 @@ impl DiffSession {
                 ChangeRow::Page(page) | ChangeRow::Residue(page) => {
                     self.selected = None;
                     self.holding = Some(page);
-                    self.page = page;
+                    if let Some(shown) = self.list_index_of(page) {
+                        self.page = shown;
+                    }
                 }
                 ChangeRow::Unplaced => (self.selected, self.holding) = (None, None),
             }
@@ -431,7 +506,7 @@ impl DiffSession {
                 Side::B => m.b == Some(on),
             })
         });
-        if let Some(page) = self.holding {
+        if let Some(page) = self.holding.and_then(|h| self.list_index_of(h)) {
             self.page = page;
         }
     }
@@ -460,6 +535,15 @@ fn start_pairing(a: &Arc<Document>, b: &Arc<Document>) -> PairingState {
 
 /// The page pair of the first change: a pair that is not the same, or a page whose painted
 /// content outside the tags differs, whichever comes first in A's page order.
+/// What the status bar says when two files share no page and are compared by number.
+pub const UNRELATED_NOTE: &str =
+    "The two files share no page: their pages are compared by number, page 1 with page 1";
+
+/// Whether no page of A corresponds to a page of B: two unrelated files.
+fn shares_no_page(pairing: &Pairing) -> bool {
+    !pairing.pages.iter().any(|m| m.a.is_some() && m.b.is_some())
+}
+
 fn first_change(pairing: &Pairing) -> Option<usize> {
     let pair = pairing
         .pairs
@@ -809,11 +893,26 @@ impl AppState {
         if let PairingState::Running { done, .. } = &diff.pairing {
             match done.try_recv() {
                 Ok(Ok(pairing)) => {
-                    // The canvas opens on the first page pair with a change.
-                    if let Some(page) = first_change(&pairing) {
-                        diff.page = page;
-                    }
+                    // Two files that share no page are compared page by page, by number, so
+                    // they can still be overlaid: unless the user picked how.
+                    let unrelated = shares_no_page(&pairing);
+                    let first = first_change(&pairing);
                     diff.pairing = PairingState::Ready(Arc::new(pairing));
+                    if !diff.page_pairing_chosen {
+                        diff.page_pairing = if unrelated {
+                            PagePairing::ByNumber
+                        } else {
+                            PagePairing::Matched
+                        };
+                    }
+                    // The canvas opens on the first page pair with a change.
+                    diff.page = match diff.page_pairing {
+                        PagePairing::ByNumber => 0,
+                        PagePairing::Matched => first.unwrap_or(0),
+                    };
+                    if unrelated && diff.page_pairing == PagePairing::ByNumber {
+                        UNRELATED_NOTE.clone_into(&mut self.status);
+                    }
                 }
                 Ok(Err(why)) => diff.pairing = PairingState::Failed(why),
                 Err(TryRecvError::Empty) => ctx.request_repaint_after(POLL),
